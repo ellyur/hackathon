@@ -5,7 +5,7 @@ if (!process.env["SESSION_SECRET"]) {
 }
 
 const SECRET = process.env["SESSION_SECRET"];
-const EXPIRES_IN = "7d";
+const EXPIRES_IN = "8h";
 
 export interface JwtPayload {
   userId: string;

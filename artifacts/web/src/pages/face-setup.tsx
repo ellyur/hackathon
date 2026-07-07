@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import * as faceapi from 'face-api.js';
+// face-api.js is heavy and can throw during module evaluation in some environments.
+// Load it lazily inside startEnrollment so the page always renders.
+type FaceApiModule = typeof import('face-api.js');
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -38,9 +40,63 @@ export function FaceSetupPage() {
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
+  // saveEnrollment must be declared BEFORE startDetection (useCallback dep evaluation order)
+  const saveEnrollment = useCallback((descriptor: number[]) => {
+    stopCamera();
+    setStep('saving');
+    saveDescriptor.mutate(
+      { data: { descriptor } },
+      {
+        onSuccess: () => {
+          setStep('done');
+          refetch();
+          toast({ title: 'Face enrolled', description: 'Your face has been saved. You can now use it to time in.' });
+        },
+        onError: (err) => {
+          setError(err instanceof Error ? err.message : 'Failed to save face data.');
+          setStep('error');
+        },
+      },
+    );
+  }, [stopCamera, saveDescriptor, refetch, toast]);
+
+  const startDetection = useCallback((faceapi: FaceApiModule) => {
+    confirmingRef.current = false;
+    intervalRef.current = setInterval(async () => {
+      if (confirmingRef.current) return;
+      if (!videoRef.current || videoRef.current.readyState < 2) return;
+      try {
+        const detection = await faceapi
+          .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
+          .withFaceLandmarks(true)
+          .withFaceDescriptor();
+
+        if (detection) {
+          if (confirmingRef.current) return;
+          confirmingRef.current = true;
+          clearInterval(intervalRef.current!);
+          intervalRef.current = null;
+          setStep('face-detected');
+          setTimeout(() => saveEnrollment(Array.from(detection.descriptor)), 800);
+        }
+      } catch {
+        // keep trying
+      }
+    }, 400);
+  }, [saveEnrollment]);
+
   const startEnrollment = useCallback(async () => {
     setError(null);
     setStep('loading-models');
+
+    let faceapi: FaceApiModule;
+    try {
+      faceapi = await import('face-api.js');
+    } catch {
+      setError('Failed to load face detection library. Please refresh the page and try again.');
+      setStep('error');
+      return;
+    }
 
     if (!modelsLoaded) {
       try {
@@ -69,7 +125,7 @@ export function FaceSetupPage() {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           videoRef.current.play();
-          startDetection();
+          startDetection(faceapi);
         }
       }, 300);
     } catch (err) {
@@ -83,51 +139,7 @@ export function FaceSetupPage() {
       }
       setStep('error');
     }
-  }, [modelsLoaded]);
-
-  const startDetection = useCallback(() => {
-    confirmingRef.current = false;
-    intervalRef.current = setInterval(async () => {
-      if (confirmingRef.current) return;
-      if (!videoRef.current || videoRef.current.readyState < 2) return;
-      try {
-        const detection = await faceapi
-          .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
-          .withFaceLandmarks(true)
-          .withFaceDescriptor();
-
-        if (detection) {
-          if (confirmingRef.current) return;
-          confirmingRef.current = true;
-          clearInterval(intervalRef.current!);
-          intervalRef.current = null;
-          setStep('face-detected');
-          setTimeout(() => saveEnrollment(Array.from(detection.descriptor)), 800);
-        }
-      } catch {
-        // keep trying
-      }
-    }, 400);
-  }, []);
-
-  const saveEnrollment = useCallback((descriptor: number[]) => {
-    stopCamera();
-    setStep('saving');
-    saveDescriptor.mutate(
-      { data: { descriptor } },
-      {
-        onSuccess: () => {
-          setStep('done');
-          refetch();
-          toast({ title: 'Face enrolled', description: 'Your face has been saved. You can now use it to time in.' });
-        },
-        onError: (err) => {
-          setError(err instanceof Error ? err.message : 'Failed to save face data.');
-          setStep('error');
-        },
-      },
-    );
-  }, [stopCamera, saveDescriptor, refetch, toast]);
+  }, [modelsLoaded, startDetection]);
 
   const reset = useCallback(() => {
     stopCamera();
