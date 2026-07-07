@@ -18,6 +18,8 @@ import { TimeInSimulatorPage } from '@/pages/time-in';
 import { MasterSchedulePage } from '@/pages/master-schedule';
 import { AttendanceRosterPage } from '@/pages/attendance-roster';
 import { AdminUsersPage } from '@/pages/admin-users';
+import { MySchedulePage } from '@/pages/my-schedule';
+import { FaceSetupPage } from '@/pages/face-setup';
 
 const queryClient = new QueryClient();
 
@@ -49,8 +51,9 @@ function Router() {
               <Route path="/settings/profile"><PlaceholderPage title="Profile Settings" /></Route>
 
               {/* Student */}
-              <Route path="/schedule"><PlaceholderPage title="My Schedule" /></Route>
+              <Route path="/schedule" component={MySchedulePage} />
               <Route path="/schedule/:id" component={TimeInSimulatorPage} />
+              <Route path="/profile/face-setup" component={FaceSetupPage} />
               <Route path="/passport" component={ClinicalPassportPage} />
               <Route path="/passport/submit" component={SubmitCasePage} />
               <Route path="/attendance"><PlaceholderPage title="Attendance History" /></Route>

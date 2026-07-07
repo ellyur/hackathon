@@ -43,6 +43,8 @@ export * from './dutyApplicationStatus';
 export * from './dutySlot';
 export * from './dutySlotInput';
 export * from './dutySlotStatus';
+export * from './faceDescriptorInput';
+export * from './faceDescriptorResponse';
 export * from './getRecommendationExplanationParams';
 export * from './getRecommendationsParams';
 export * from './healthStatus';

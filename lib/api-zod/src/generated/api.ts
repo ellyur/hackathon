@@ -508,6 +508,28 @@ export const GetStudentAttendanceResponse = zod.array(GetStudentAttendanceRespon
 
 
 /**
+ * @summary Get the current student's enrolled face descriptor
+ */
+export const GetMyFaceDescriptorResponse = zod.object({
+  "enrolled": zod.boolean(),
+  "descriptor": zod.array(zod.number()).nullish()
+})
+
+
+/**
+ * @summary Enroll or update the current student's face descriptor
+ */
+export const SaveMyFaceDescriptorBody = zod.object({
+  "descriptor": zod.array(zod.number())
+})
+
+export const SaveMyFaceDescriptorResponse = zod.object({
+  "enrolled": zod.boolean(),
+  "descriptor": zod.array(zod.number()).nullish()
+})
+
+
+/**
  * @summary Get student total duty hours
  */
 export const GetStudentHoursParams = zod.object({

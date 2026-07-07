@@ -4,14 +4,15 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { MapPin, ScanFace, Map as MapIcon, Fingerprint, CheckCircle2, AlertCircle, Camera, RefreshCw, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useRoute } from 'wouter';
+import { useRoute, Link } from 'wouter';
 import * as faceapi from 'face-api.js';
-import { useGetSchedule, useRecordTimeIn } from '@workspace/api-client-react';
+import { useGetSchedule, useRecordTimeIn, useGetMyFaceDescriptor } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
 
 const MODELS_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
+const FACE_MATCH_THRESHOLD = 0.55; // euclidean distance; lower = stricter
 
-type Step = 'idle' | 'gps-checking' | 'gps-ok' | 'gps-error' | 'face-loading' | 'face-scanning' | 'face-ok' | 'face-error' | 'submitting' | 'done' | 'submit-error';
+type Step = 'idle' | 'gps-checking' | 'gps-ok' | 'gps-error' | 'face-loading' | 'face-scanning' | 'face-ok' | 'face-error' | 'face-no-match' | 'submitting' | 'done' | 'submit-error';
 
 interface GpsResult {
   distance: number;
@@ -41,6 +42,10 @@ export function TimeInSimulatorPage() {
     query: { enabled: !!scheduleId, staleTime: 60_000 } as any,
   });
 
+  const { data: faceData, isLoading: faceLoading } = useGetMyFaceDescriptor({
+    query: { staleTime: 60_000 } as never,
+  });
+
   const recordTimeIn = useRecordTimeIn();
 
   const [step, setStep] = useState<Step>('idle');
@@ -55,12 +60,18 @@ export function TimeInSimulatorPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const confirmingRef = useRef(false); // guard: prevent duplicate confirmations
 
   const hospitalRadius = (schedule as { attendanceRadius?: number } | undefined)?.attendanceRadius
     ?? (schedule as { hospital?: { attendanceRadius?: number } } | undefined)?.hospital?.attendanceRadius
     ?? 150;
   const hospitalLat = (schedule as { hospital?: { latitude?: number } } | undefined)?.hospital?.latitude ?? 0;
   const hospitalLng = (schedule as { hospital?: { longitude?: number } } | undefined)?.hospital?.longitude ?? 0;
+
+  const isEnrolled = faceData?.enrolled === true;
+  const enrolledDescriptor = faceData?.descriptor
+    ? new Float32Array(faceData.descriptor as number[])
+    : null;
 
   // ── GPS verification ──────────────────────────────────────────────────────
   const verifyGps = useCallback(() => {
@@ -121,7 +132,11 @@ export function TimeInSimulatorPage() {
 
     if (!modelsLoaded) {
       try {
-        await faceapi.nets.tinyFaceDetector.loadFromUri(MODELS_URL);
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODELS_URL),
+          faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODELS_URL),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODELS_URL),
+        ]);
         setModelsLoaded(true);
       } catch {
         setFaceError('Failed to load face detection models. Check your internet connection.');
@@ -158,22 +173,29 @@ export function TimeInSimulatorPage() {
   }, [modelsLoaded]);
 
   const startDetection = useCallback(() => {
+    confirmingRef.current = false;
     detectionIntervalRef.current = setInterval(async () => {
+      if (confirmingRef.current) return;
       if (!videoRef.current || videoRef.current.readyState < 2) return;
       try {
-        const detection = await faceapi.detectSingleFace(
-          videoRef.current,
-          new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }),
-        );
-        if (detection) {
+        const result = await faceapi
+          .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
+          .withFaceLandmarks(true)
+          .withFaceDescriptor();
+
+        if (result) {
+          if (confirmingRef.current) return;
+          confirmingRef.current = true;
+          clearInterval(detectionIntervalRef.current!);
+          detectionIntervalRef.current = null;
           setFaceDetected(true);
-          setTimeout(() => confirmFace(), 800);
+          setTimeout(() => confirmFace(result.descriptor), 800);
         }
       } catch {
         // silent — keep trying
       }
-    }, 300);
-  }, []);
+    }, 400);
+  }, [enrolledDescriptor]);
 
   const stopCamera = useCallback(() => {
     if (detectionIntervalRef.current) {
@@ -189,12 +211,23 @@ export function TimeInSimulatorPage() {
     }
   }, []);
 
-  const confirmFace = useCallback(() => {
+  const confirmFace = useCallback((detectedDescriptor: Float32Array) => {
     stopCamera();
-    // Submit to backend
+
+    // Compare against enrolled descriptor
+    if (enrolledDescriptor) {
+      const distance = faceapi.euclideanDistance(detectedDescriptor, enrolledDescriptor);
+      if (distance > FACE_MATCH_THRESHOLD) {
+        setFaceDetected(false);
+        setFaceError(`Face did not match your enrolled profile (distance: ${distance.toFixed(3)}). Please try again or re-enroll your face.`);
+        setStep('face-no-match');
+        return;
+      }
+    }
+
     setStep('submitting');
     setSubmitError(null);
-  }, [stopCamera]);
+  }, [stopCamera, enrolledDescriptor]);
 
   // Submit when step transitions to 'submitting'
   useEffect(() => {
@@ -228,6 +261,7 @@ export function TimeInSimulatorPage() {
 
   const reset = useCallback(() => {
     stopCamera();
+    confirmingRef.current = false;
     setStep('idle');
     setGpsResult(null);
     setGpsError(null);
@@ -239,10 +273,30 @@ export function TimeInSimulatorPage() {
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
-  if (scheduleLoading) {
+  if (scheduleLoading || faceLoading) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground gap-2">
-        <Loader2 className="w-5 h-5 animate-spin" /> Loading schedule…
+        <Loader2 className="w-5 h-5 animate-spin" /> Loading…
+      </div>
+    );
+  }
+
+  // Face not enrolled — block time-in
+  if (!isEnrolled) {
+    return (
+      <div className="max-w-lg mx-auto mt-16 text-center space-y-6">
+        <div className="w-20 h-20 rounded-full bg-amber-100 flex items-center justify-center mx-auto">
+          <ScanFace className="w-10 h-10 text-amber-600" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold">Face Not Enrolled</h2>
+          <p className="text-muted-foreground mt-2">
+            You need to enroll your face before you can time in. This is a one-time setup that takes less than a minute.
+          </p>
+        </div>
+        <Button size="lg" asChild>
+          <Link href="/profile/face-setup">Set Up Face Recognition</Link>
+        </Button>
       </div>
     );
   }
@@ -320,7 +374,7 @@ export function TimeInSimulatorPage() {
                     status={
                       ['idle', 'gps-checking', 'gps-ok', 'gps-error'].includes(step) ? 'pending'
                       : ['face-loading', 'face-scanning'].includes(step) ? 'active'
-                      : step === 'face-error' ? 'error'
+                      : (step === 'face-error' || step === 'face-no-match') ? 'error'
                       : 'done'
                     }
                   />
@@ -400,7 +454,7 @@ export function TimeInSimulatorPage() {
                 {step === 'face-scanning' && (
                   <div className="w-full space-y-3">
                     <p className="text-sm font-medium">
-                      {faceDetected ? '✅ Face detected — confirming…' : 'Look directly at the camera'}
+                      {faceDetected ? '✅ Face detected — verifying…' : 'Look directly at the camera'}
                     </p>
                     <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black border-2 border-primary">
                       <video
@@ -423,7 +477,7 @@ export function TimeInSimulatorPage() {
                     </div>
                     <p className="text-xs text-muted-foreground">
                       <ScanFace className="w-3 h-3 inline mr-1" />
-                      Face detection running on-device — no images are uploaded
+                      Face verification runs on-device — no images are uploaded
                     </p>
                   </div>
                 )}
@@ -455,20 +509,29 @@ export function TimeInSimulatorPage() {
                   </>
                 )}
 
-                {step === 'face-error' && (
+                {(step === 'face-error' || step === 'face-no-match') && (
                   <>
                     <AlertCircle className="w-12 h-12 text-destructive" />
                     <div>
-                      <h3 className="font-semibold text-lg text-destructive">Camera Failed</h3>
+                      <h3 className="font-semibold text-lg text-destructive">
+                        {step === 'face-no-match' ? 'Face Did Not Match' : 'Camera Failed'}
+                      </h3>
                       {faceError && (
                         <Alert variant="destructive" className="mt-2 text-left">
                           <AlertDescription className="text-xs">{faceError}</AlertDescription>
                         </Alert>
                       )}
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => startFaceScan()} className="gap-2">
-                      <RefreshCw className="w-4 h-4" /> Retry Camera
-                    </Button>
+                    <div className="flex gap-2 flex-wrap justify-center">
+                      <Button variant="outline" size="sm" onClick={() => startFaceScan()} className="gap-2">
+                        <RefreshCw className="w-4 h-4" /> Try Again
+                      </Button>
+                      {step === 'face-no-match' && (
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href="/profile/face-setup">Re-enroll Face</Link>
+                        </Button>
+                      )}
+                    </div>
                   </>
                 )}
 

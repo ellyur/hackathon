@@ -1,4 +1,4 @@
-import { pgTable, text, boolean, timestamp, integer, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, boolean, timestamp, integer, pgEnum, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -26,6 +26,7 @@ export const studentProfilesTable = pgTable("student_profiles", {
   program: text("program").notNull().default("BSN"),
   academicYear: text("academic_year").notNull(),
   totalHoursRequired: integer("total_hours_required").notNull().default(500),
+  faceDescriptor: json("face_descriptor").$type<number[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

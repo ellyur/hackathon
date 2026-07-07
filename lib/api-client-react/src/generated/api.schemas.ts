@@ -502,6 +502,15 @@ export interface DutySlot {
   approvedCount?: number;
 }
 
+export interface FaceDescriptorResponse {
+  enrolled: boolean;
+  descriptor?: number[] | null;
+}
+
+export interface FaceDescriptorInput {
+  descriptor: number[];
+}
+
 export interface DutySlotInput {
   hospitalId: string;
   departmentId: string;

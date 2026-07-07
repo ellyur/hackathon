@@ -267,6 +267,42 @@ paths:
                 items:
                   $ref: "#/components/schemas/AttendanceRecord"
 
+  /students/me/face-descriptor:
+    get:
+      operationId: getMyFaceDescriptor
+      tags: [students]
+      summary: Get the current student's enrolled face descriptor
+      responses:
+        "200":
+          description: Face descriptor enrollment status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FaceDescriptorResponse"
+        "401":
+          description: Not authenticated
+    post:
+      operationId: saveMyFaceDescriptor
+      tags: [students]
+      summary: Enroll or update the current student's face descriptor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FaceDescriptorInput"
+      responses:
+        "200":
+          description: Descriptor saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FaceDescriptorResponse"
+        "400":
+          description: Invalid descriptor
+        "401":
+          description: Not authenticated
+
   /students/{id}/hours:
     get:
       operationId: getStudentHours
@@ -1934,6 +1970,27 @@ components:
           type: integer
         approvedCount:
           type: integer
+
+    FaceDescriptorResponse:
+      type: object
+      required: [enrolled]
+      properties:
+        enrolled:
+          type: boolean
+        descriptor:
+          type: array
+          items:
+            type: number
+          nullable: true
+
+    FaceDescriptorInput:
+      type: object
+      required: [descriptor]
+      properties:
+        descriptor:
+          type: array
+          items:
+            type: number
 
     DutySlotInput:
       type: object

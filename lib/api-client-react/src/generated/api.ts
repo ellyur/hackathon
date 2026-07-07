@@ -44,6 +44,8 @@ import type {
   DutyApplication,
   DutySlot,
   DutySlotInput,
+  FaceDescriptorInput,
+  FaceDescriptorResponse,
   GetRecommendationExplanationParams,
   GetRecommendationsParams,
   HealthStatus,
@@ -1003,6 +1005,153 @@ export function useGetStudentAttendance<TData = Awaited<ReturnType<typeof getStu
 
 
 
+
+export const getGetMyFaceDescriptorUrl = () => {
+
+
+
+
+  return `/api/students/me/face-descriptor`
+}
+
+/**
+ * @summary Get the current student's enrolled face descriptor
+ */
+export const getMyFaceDescriptor = async ( options?: RequestInit): Promise<FaceDescriptorResponse> => {
+
+  return customFetch<FaceDescriptorResponse>(getGetMyFaceDescriptorUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMyFaceDescriptorQueryKey = () => {
+    return [
+    `/api/students/me/face-descriptor`
+    ] as const;
+    }
+
+
+export const getGetMyFaceDescriptorQueryOptions = <TData = Awaited<ReturnType<typeof getMyFaceDescriptor>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyFaceDescriptor>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMyFaceDescriptorQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyFaceDescriptor>>> = ({ signal }) => getMyFaceDescriptor({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMyFaceDescriptor>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMyFaceDescriptorQueryResult = NonNullable<Awaited<ReturnType<typeof getMyFaceDescriptor>>>
+export type GetMyFaceDescriptorQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get the current student's enrolled face descriptor
+ */
+
+export function useGetMyFaceDescriptor<TData = Awaited<ReturnType<typeof getMyFaceDescriptor>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyFaceDescriptor>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMyFaceDescriptorQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveMyFaceDescriptorUrl = () => {
+
+
+
+
+  return `/api/students/me/face-descriptor`
+}
+
+/**
+ * @summary Enroll or update the current student's face descriptor
+ */
+export const saveMyFaceDescriptor = async (faceDescriptorInput: FaceDescriptorInput, options?: RequestInit): Promise<FaceDescriptorResponse> => {
+
+  return customFetch<FaceDescriptorResponse>(getSaveMyFaceDescriptorUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(faceDescriptorInput)
+  }
+);}
+
+
+
+
+export const getSaveMyFaceDescriptorMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveMyFaceDescriptor>>, TError,{data: BodyType<FaceDescriptorInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveMyFaceDescriptor>>, TError,{data: BodyType<FaceDescriptorInput>}, TContext> => {
+
+const mutationKey = ['saveMyFaceDescriptor'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveMyFaceDescriptor>>, {data: BodyType<FaceDescriptorInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  saveMyFaceDescriptor(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveMyFaceDescriptorMutationResult = NonNullable<Awaited<ReturnType<typeof saveMyFaceDescriptor>>>
+    export type SaveMyFaceDescriptorMutationBody = BodyType<FaceDescriptorInput>
+    export type SaveMyFaceDescriptorMutationError = ErrorType<void>
+
+    /**
+ * @summary Enroll or update the current student's face descriptor
+ */
+export const useSaveMyFaceDescriptor = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveMyFaceDescriptor>>, TError,{data: BodyType<FaceDescriptorInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveMyFaceDescriptor>>,
+        TError,
+        {data: BodyType<FaceDescriptorInput>},
+        TContext
+      > => {
+      return useMutation(getSaveMyFaceDescriptorMutationOptions(options));
+    }
 
 export const getGetStudentHoursUrl = (id: string,) => {
 

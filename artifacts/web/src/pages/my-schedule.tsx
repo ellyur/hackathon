@@ -1,76 +1,13 @@
-import { useState } from 'react';
 import { Link } from 'wouter';
-import { Calendar, Clock, MapPin, User, LogIn } from 'lucide-react';
+import { Calendar, Clock, MapPin, User, LogIn, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useListSchedules } from '@workspace/api-client-react';
+import type { Schedule } from '@workspace/api-client-react';
 
 type ScheduleStatus = 'upcoming' | 'active' | 'completed' | 'cancelled';
-
-interface Schedule {
-  id: string;
-  hospital: string;
-  department: string;
-  date: string;
-  timeStart: string;
-  timeEnd: string;
-  ciName: string;
-  status: ScheduleStatus;
-}
-
-const mockSchedules: Schedule[] = [
-  {
-    id: 'sch-1',
-    hospital: 'St. Luke\'s Medical Center',
-    department: 'Internal Medicine',
-    date: '2024-06-25',
-    timeStart: '07:00 AM',
-    timeEnd: '03:00 PM',
-    ciName: 'CI Maria Santos',
-    status: 'upcoming',
-  },
-  {
-    id: 'sch-2',
-    hospital: 'Philippine General Hospital',
-    department: 'Pediatrics',
-    date: '2024-06-20',
-    timeStart: '07:00 AM',
-    timeEnd: '03:00 PM',
-    ciName: 'CI Jose Reyes',
-    status: 'active',
-  },
-  {
-    id: 'sch-3',
-    hospital: 'Makati Medical Center',
-    department: 'Cardiology',
-    date: '2024-06-28',
-    timeStart: '03:00 PM',
-    timeEnd: '11:00 PM',
-    ciName: 'CI Ana Lim',
-    status: 'upcoming',
-  },
-  {
-    id: 'sch-4',
-    hospital: 'UST Hospital',
-    department: 'Surgery',
-    date: '2024-06-10',
-    timeStart: '07:00 AM',
-    timeEnd: '03:00 PM',
-    ciName: 'CI Roberto Cruz',
-    status: 'completed',
-  },
-  {
-    id: 'sch-5',
-    hospital: 'Ospital ng Maynila',
-    department: 'Emergency',
-    date: '2024-06-05',
-    timeStart: '11:00 PM',
-    timeEnd: '07:00 AM',
-    ciName: 'CI Lena Garcia',
-    status: 'completed',
-  },
-];
 
 const statusConfig: Record<ScheduleStatus, { label: string; className: string }> = {
   upcoming: { label: 'Upcoming', className: 'bg-blue-100 text-blue-700' },
@@ -88,25 +25,40 @@ function formatDate(dateStr: string): string {
   });
 }
 
+function formatTime(t: string): string {
+  if (!t) return '';
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
 function ScheduleCard({ schedule }: { schedule: Schedule }) {
-  const config = statusConfig[schedule.status];
-  const canTimeIn = schedule.status === 'active' || schedule.status === 'upcoming';
+  const status = (schedule.status as ScheduleStatus) ?? 'upcoming';
+  const config = statusConfig[status] ?? statusConfig.upcoming;
+  const canTimeIn = status === 'active' || status === 'upcoming';
+
+  const hospitalName = schedule.hospital?.name ?? 'Hospital';
+  const deptName = schedule.department?.name ?? '';
+  const ciName = schedule.ci ? `${schedule.ci.firstName} ${schedule.ci.lastName}` : 'Clinical Instructor';
 
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="font-semibold text-base">{schedule.hospital}</h3>
-            <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
-              <MapPin className="h-3.5 w-3.5" />
-              {schedule.department}
-            </p>
+            <h3 className="font-semibold text-base">{hospitalName}</h3>
+            {deptName && (
+              <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
+                <MapPin className="h-3.5 w-3.5" />
+                {deptName}
+              </p>
+            )}
           </div>
           {config.className ? (
             <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${config.className}`}>{config.label}</span>
           ) : (
-            <Badge variant={schedule.status === 'cancelled' ? 'destructive' : 'outline'}>{config.label}</Badge>
+            <Badge variant={status === 'cancelled' ? 'destructive' : 'outline'}>{config.label}</Badge>
           )}
         </div>
       </CardHeader>
@@ -114,15 +66,15 @@ function ScheduleCard({ schedule }: { schedule: Schedule }) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Calendar className="h-4 w-4 flex-shrink-0" />
-            <span>{formatDate(schedule.date)}</span>
+            <span>{schedule.dutyDate ? formatDate(schedule.dutyDate) : '—'}</span>
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
             <Clock className="h-4 w-4 flex-shrink-0" />
-            <span>{schedule.timeStart} – {schedule.timeEnd}</span>
+            <span>{schedule.startTime ? `${formatTime(schedule.startTime)} – ${formatTime(schedule.endTime)}` : '—'}</span>
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
             <User className="h-4 w-4 flex-shrink-0" />
-            <span>{schedule.ciName}</span>
+            <span>{ciName}</span>
           </div>
         </div>
         {canTimeIn && (
@@ -141,8 +93,29 @@ function ScheduleCard({ schedule }: { schedule: Schedule }) {
 }
 
 export function MySchedulePage() {
-  const upcoming = mockSchedules.filter((s) => s.status === 'upcoming' || s.status === 'active');
-  const past = mockSchedules.filter((s) => s.status === 'completed' || s.status === 'cancelled');
+  const { data: schedules, isLoading, isError } = useListSchedules(undefined, {
+    query: { staleTime: 60_000 } as never,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground gap-2">
+        <Loader2 className="w-5 h-5 animate-spin" /> Loading schedules…
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-64 text-destructive gap-2">
+        Failed to load schedules. Please try again.
+      </div>
+    );
+  }
+
+  const all = schedules ?? [];
+  const upcoming = all.filter(s => s.status === 'upcoming' || s.status === 'active');
+  const past = all.filter(s => s.status === 'completed' || s.status === 'cancelled');
 
   return (
     <div className="space-y-6">
@@ -174,7 +147,7 @@ export function MySchedulePage() {
               </CardContent>
             </Card>
           ) : (
-            upcoming.map((s) => <ScheduleCard key={s.id} schedule={s} />)
+            upcoming.map(s => <ScheduleCard key={s.id} schedule={s} />)
           )}
         </TabsContent>
 
@@ -188,7 +161,7 @@ export function MySchedulePage() {
               </CardContent>
             </Card>
           ) : (
-            past.map((s) => <ScheduleCard key={s.id} schedule={s} />)
+            past.map(s => <ScheduleCard key={s.id} schedule={s} />)
           )}
         </TabsContent>
       </Tabs>

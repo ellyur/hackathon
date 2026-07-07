@@ -12,6 +12,57 @@ import { requireAuth, requireRole } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
 
+// ── Face descriptor (enrollment) ─────────────────────────────────────────────
+
+router.get("/students/me/face-descriptor", requireAuth, requireRole("student"), async (req, res): Promise<void> => {
+  const [profile] = await db
+    .select()
+    .from(studentProfilesTable)
+    .where(eq(studentProfilesTable.userId, req.session.userId!));
+
+  if (!profile) {
+    res.status(404).json({ error: "Student profile not found" });
+    return;
+  }
+
+  res.json({
+    enrolled: !!profile.faceDescriptor,
+    descriptor: profile.faceDescriptor ?? null,
+  });
+});
+
+router.post("/students/me/face-descriptor", requireAuth, requireRole("student"), async (req, res): Promise<void> => {
+  const { descriptor } = req.body as { descriptor?: unknown };
+
+  if (
+    !Array.isArray(descriptor) ||
+    descriptor.length !== 128 ||
+    descriptor.some((v) => typeof v !== "number")
+  ) {
+    res.status(400).json({ error: "Invalid descriptor: must be an array of 128 numbers" });
+    return;
+  }
+
+  const [profile] = await db
+    .select()
+    .from(studentProfilesTable)
+    .where(eq(studentProfilesTable.userId, req.session.userId!));
+
+  if (!profile) {
+    res.status(404).json({ error: "Student profile not found" });
+    return;
+  }
+
+  await db
+    .update(studentProfilesTable)
+    .set({ faceDescriptor: descriptor as number[] })
+    .where(eq(studentProfilesTable.userId, req.session.userId!));
+
+  res.json({ enrolled: true, descriptor });
+});
+
+// ── Student list ──────────────────────────────────────────────────────────────
+
 router.get("/students", requireAuth, async (req, res): Promise<void> => {
   const { search } = req.query as { search?: string };
 

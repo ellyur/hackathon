@@ -16,7 +16,8 @@ import {
   Menu,
   X,
   Stethoscope,
-  PieChart
+  PieChart,
+  ScanFace
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -42,6 +43,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       { name: 'Clinical Passport', href: '/passport', icon: ClipboardList },
       { name: 'Attendance', href: '/attendance', icon: CheckCircle },
       { name: 'Available Slots', href: '/slots', icon: PlusCircle },
+      { name: 'Face Setup', href: '/profile/face-setup', icon: ScanFace },
     ],
     ci: [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -146,6 +148,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <DropdownMenuItem asChild>
                 <Link href="/settings/profile" className="cursor-pointer w-full flex">Profile Settings</Link>
               </DropdownMenuItem>
+              {user.role === 'student' && (
+                <DropdownMenuItem asChild>
+                  <Link href="/profile/face-setup" className="cursor-pointer w-full flex">Face Setup</Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={logout} className="text-destructive cursor-pointer">
                 Log out
               </DropdownMenuItem>
