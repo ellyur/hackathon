@@ -190,22 +190,31 @@ export function TimeInSimulatorPage() {
     }
 
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('MEDIA_DEVICES_UNAVAILABLE');
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
       });
       streamRef.current = stream;
       setStep('face-scanning');
 
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play();
-          startDetection(landmarker, enrolledDescriptor);
-        }
-      }, 300);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.play().catch(() => {/* autoplay may be blocked */});
+            startDetection(landmarker, enrolledDescriptor);
+          }
+        });
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('Permission') || msg.includes('NotAllowed')) {
+      if (msg === 'MEDIA_DEVICES_UNAVAILABLE' || msg.includes('mediaDevices')) {
+        setFaceError(
+          "Camera API unavailable. If you're in a preview panel, open the app in a new browser tab — camera requires a direct HTTPS connection.",
+        );
+      } else if (msg.includes('Permission') || msg.includes('NotAllowed') || msg.includes('denied')) {
         setFaceError('Camera access was denied. Please allow camera permission and try again.');
       } else if (msg.includes('NotFound') || msg.includes('DevicesNotFound')) {
         setFaceError('No camera found on this device.');

@@ -10,10 +10,13 @@
 
 import type { FaceLandmarker as FaceLandmarkerType } from '@mediapipe/tasks-vision';
 
-const WASM_PATH =
-  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm';
-const MODEL_PATH =
-  'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+// Serve WASM and model locally to avoid CDN blocking in sandboxed environments.
+// Files are copied into public/mediapipe-wasm/ during setup.
+// Use import.meta.env.BASE_URL so paths stay correct when the app is hosted
+// at a subpath (e.g. BASE_PATH=/app → BASE_URL=/app/).
+const _base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const WASM_PATH = `${_base}/mediapipe-wasm`;
+const MODEL_PATH = `${_base}/mediapipe-wasm/face_landmarker.task`;
 
 // Singleton cache
 let _landmarker: FaceLandmarkerType | null = null;
@@ -32,7 +35,7 @@ export async function getFaceLandmarker(): Promise<FaceLandmarkerType> {
     _landmarker = await FaceLandmarker.createFromOptions(vision, {
       baseOptions: {
         modelAssetPath: MODEL_PATH,
-        delegate: 'GPU',
+        delegate: 'CPU',
       },
       runningMode: 'VIDEO',
       numFaces: 1,
