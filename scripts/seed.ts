@@ -24,7 +24,7 @@ import {
 } from "@workspace/db";
 import bcrypt from "bcrypt";
 
-const HASH = await bcrypt.hash("password123", 12);
+const HASH = await bcrypt.hash("password123", 10);
 
 // ── IDs (match the mock data so client code stays consistent) ─────────────────
 const ADMIN_ID = "u-admin-001";
@@ -78,7 +78,10 @@ await db.insert(usersTable).values([
   { id: S4_ID,        email: "student4@clinicalflow.com",  passwordHash: HASH, role: "student",   firstName: "Mae",      lastName: "Flores",    phone: "+63-917-444-0004", isActive: true },
   { id: S5_ID,        email: "student5@clinicalflow.com",  passwordHash: HASH, role: "student",   firstName: "Rico",     lastName: "Garcia",    phone: "+63-917-444-0005", isActive: false },
   { id: S6_ID,        email: "student6@clinicalflow.com",  passwordHash: HASH, role: "student",   firstName: "Diana",    lastName: "Ramos",     phone: "+63-917-444-0006", isActive: true },
-]).onConflictDoNothing();
+]).onConflictDoUpdate({
+  target: usersTable.id,
+  set: { passwordHash: HASH }, // always refresh hash (rounds may have changed)
+});
 console.log("  ✓ users");
 
 // ── Student profiles ───────────────────────────────────────────────────────────

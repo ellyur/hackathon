@@ -7,16 +7,12 @@ import { requireAuth } from "../middlewares/auth.js";
 const router: IRouter = Router();
 
 async function getUserProfile(userId: string) {
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  const [[user], [studentProfile], [ciProfile]] = await Promise.all([
+    db.select().from(usersTable).where(eq(usersTable.id, userId)),
+    db.select().from(studentProfilesTable).where(eq(studentProfilesTable.userId, userId)),
+    db.select().from(ciProfilesTable).where(eq(ciProfilesTable.userId, userId)),
+  ]);
   if (!user) return null;
-  const [studentProfile] = await db
-    .select()
-    .from(studentProfilesTable)
-    .where(eq(studentProfilesTable.userId, userId));
-  const [ciProfile] = await db
-    .select()
-    .from(ciProfilesTable)
-    .where(eq(ciProfilesTable.userId, userId));
   const { passwordHash: _pw, ...safeUser } = user;
   return { ...safeUser, studentProfile: studentProfile ?? null, ciProfile: ciProfile ?? null };
 }

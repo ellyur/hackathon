@@ -81,7 +81,7 @@ router.post("/users", requireRole("admin"), async (req, res): Promise<void> => {
     return;
   }
 
-  const passwordHash = await bcrypt.hash(body.password, 12);
+  const passwordHash = await bcrypt.hash(body.password, 10);
   const newId = randomUUID();
 
   await db.insert(usersTable).values({
@@ -169,7 +169,7 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
   if (body.phone !== undefined) userUpdates.phone = body.phone;
   if (body.avatarUrl !== undefined) userUpdates.avatarUrl = body.avatarUrl;
   // Password change — allowed for self or admin
-  if (body.password) userUpdates.passwordHash = await bcrypt.hash(body.password, 12);
+  if (body.password) userUpdates.passwordHash = await bcrypt.hash(body.password, 10);
   // Admin-only: activate/deactivate
   if (isAdmin && body.isActive !== undefined) userUpdates.isActive = body.isActive;
 
