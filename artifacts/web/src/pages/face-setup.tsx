@@ -11,7 +11,7 @@ import {
 import { useGetMyFaceDescriptor, useSaveMyFaceDescriptor } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
 import {
-  loadFaceApiModels, resetFaceApiModels, prefetchFaceApiModels, detectFaceDescriptor,
+  loadFaceApiModels, resetFaceApiModels, detectFaceDescriptor,
 } from '@/lib/face-detection';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -49,9 +49,6 @@ export function FaceSetupPage() {
   const enrollingRef        = useRef(false);
   const processingRef       = useRef(false);
   const rafRef              = useRef<number | null>(null);
-
-  // ── Warm the models in the background as soon as the page mounts ─────────
-  useEffect(() => { prefetchFaceApiModels(); }, []);
 
   // ── Cleanup on unmount ───────────────────────────────────────────────────
   const stopCamera = useCallback(() => {

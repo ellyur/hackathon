@@ -1,15 +1,14 @@
 /**
  * face-detection.ts
  *
- * face-api.js wrapper — uses a true dynamic import that is invisible to
- * Vite's static import scanner.  face-api.js (and its TensorFlow backend)
- * is only fetched the first time the user triggers face enrollment or
- * verification — never at app startup.
+ * Wraps face-api.js with lazy loading so TensorFlow.js is never imported at
+ * app startup — only when the user explicitly triggers face enrollment or
+ * time-in verification.
  *
- * - Models are loaded lazily and cached as a singleton (~6 MB total).
- * - detectFaceDescriptor() → 128-element descriptor (Float32Array → number[]).
- * - descriptorDistance() → Euclidean distance; lower = more similar.
- * - FACE_MATCH_THRESHOLD: accept a match when distance ≤ this value.
+ * face-api.js is listed in vite.config optimizeDeps.exclude so Vite does NOT
+ * attempt to pre-bundle it in Node.js (which would crash because TF.js needs
+ * real browser APIs).  The standard dynamic import() below is still rewritten
+ * by Vite at build time to the correct module URL, so the browser can find it.
  */
 
 function modelsPath(): string {
@@ -20,15 +19,12 @@ function modelsPath(): string {
 let _faceapi: any = null;
 let _loaded: Promise<void> | null = null;
 
-/** Dynamically load face-api.js. The string is built at runtime so Vite's
- *  static scanner never sees a bare import('face-api.js') and won't
- *  eagerly pre-bundle (and potentially crash) the library. */
 async function getFaceApi() {
   if (_faceapi) return _faceapi;
-  // Split the package name so Vite's regex scanner doesn't match it as a
-  // static dependency and pull it into the pre-bundle step.
-  const pkg = ['face', 'api.js'].join('-');
-  _faceapi = await import(/* @vite-ignore */ pkg);
+  // Standard dynamic import — Vite rewrites the specifier to the correct URL.
+  // optimizeDeps.exclude keeps this out of the pre-bundle step so TF.js only
+  // runs inside the browser, never in Vite's Node.js pre-bundler.
+  _faceapi = await import('face-api.js');
   return _faceapi;
 }
 
@@ -79,7 +75,7 @@ export async function detectFaceDescriptor(
     .withFaceLandmarks()
     .withFaceDescriptor();
   if (!detection) return null;
-  return Array.from(detection.descriptor);
+  return Array.from(detection.descriptor as Float32Array);
 }
 
 /**

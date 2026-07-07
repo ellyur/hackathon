@@ -29,6 +29,13 @@ if (!basePath) {
 
 export default defineConfig({
   base: basePath,
+  optimizeDeps: {
+    // face-api.js loads TensorFlow.js which crashes when Vite tries to
+    // pre-bundle it in Node.js (no browser APIs).  Excluding it here
+    // prevents the startup crash while still letting the browser import
+    // it correctly at runtime via the normal dynamic-import path.
+    exclude: ['face-api.js'],
+  },
   plugins: [
     react(),
     tailwindcss(),
