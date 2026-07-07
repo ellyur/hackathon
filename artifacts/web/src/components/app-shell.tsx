@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'wouter';
+import { Link, Redirect, useLocation } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
 import type { AuthUser } from '@workspace/api-client-react';
 import {
@@ -28,13 +28,27 @@ import { cn } from '@/lib/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { user: rawUser, logout } = useAuth();
+  const { user: rawUser, logout, isLoading: authLoading } = useAuth();
   const user = rawUser as AuthUser | undefined;
   const [location] = useLocation();
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  if (!user) return null;
+  // ProtectedRoute guarantees user is non-null by the time AppShell renders,
+  // but during a fresh page load there is a brief window before the auth query
+  // resolves where user is undefined. Show a spinner instead of returning null
+  // (which produces a completely blank page with no sidebar or header).
+  if (!user) {
+    if (authLoading) {
+      return (
+        <div className="h-screen w-full flex items-center justify-center bg-background">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      );
+    }
+    // Auth finished but still no user — redirect to login
+    return <Redirect to="/login" />;
+  }
 
   const roleNavItems = {
     student: [
