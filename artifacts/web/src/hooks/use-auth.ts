@@ -71,10 +71,16 @@ export function useAuth() {
   const queryClient = useQueryClient();
   const mockRole = localStorage.getItem('mockRole');
 
-  // Real session query — only fires when not in mock mode
+  // Only attempt the auth check when there is actually a token to send.
+  // Without a token the server will always return 401, and the query will
+  // hang during that round-trip, leaving isLoading:true which renders as a
+  // blank-looking page for the user.
+  const hasToken = !!localStorage.getItem('authToken');
+
+  // Real session query — only fires when not in mock mode AND a token exists
   const realAuth = useGetMe({
     query: {
-      enabled: !mockRole,
+      enabled: !mockRole && hasToken,
       retry: false,
       queryKey: getGetMeQueryKey(),
     },
