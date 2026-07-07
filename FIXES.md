@@ -46,10 +46,28 @@
 
 ---
 
+## 5. Blank Page After Login in Replit Preview (Critical)
+
+**Symptom:** After the session save fix, login returns HTTP 200 in curl but the browser preview still shows a blank white page. The `SameSite` issue.
+
+**Root cause:** Two layered problems:
+1. The session cookie had no `SameSite` attribute, so browsers default to `SameSite=Lax`. The Replit preview pane is an **iframe** on `replit.com` embedding `*.replit.dev` — a cross-site context. `SameSite=Lax` cookies are blocked in cross-site iframes by modern browsers (Chrome, Firefox, Safari). The browser silently drops the session cookie, so every request to `/api/auth/me` returns 401 regardless of a successful login.
+2. Setting `secure: true` on the cookie is required by `SameSite=None`, but Express then checks `req.secure` before sending the `Set-Cookie` header. Behind Replit's HTTPS proxy, `req.secure` is `false` because the server only sees HTTP internally. Without `app.set('trust proxy', 1)`, Express never set the cookie at all.
+
+**Fix:**
+- `session.ts`: detect `REPL_ID` env var (always set on Replit) → use `sameSite: 'none', secure: true`
+- `app.ts`: add `app.set('trust proxy', 1)` so Express trusts the `X-Forwarded-Proto: https` header from Replit's proxy and sets `req.secure = true`
+
+**Files:** `artifacts/api-server/src/lib/session.ts`, `artifacts/api-server/src/app.ts`
+
+---
+
 ## Changes Summary
 
 | File | Change |
 |------|--------|
 | `artifacts/api-server/src/routes/auth.ts` | Add `session.save()` before `res.json()` in login handler |
+| `artifacts/api-server/src/lib/session.ts` | Set `SameSite=None; Secure` when running on Replit |
+| `artifacts/api-server/src/app.ts` | Add `trust proxy` so `req.secure` reflects the HTTPS proxy |
 | `artifacts/web/src/App.tsx` | Remove `DevRoleSwitcher` import and usage |
 | `artifacts/web/src/pages/login.tsx` | Remove demo credentials footer and `fillCredential` helper |

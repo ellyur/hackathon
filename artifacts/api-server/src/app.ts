@@ -7,6 +7,10 @@ import { sessionMiddleware } from "./lib/session.js";
 
 const app: Express = express();
 
+// Trust the first proxy (Replit's HTTPS reverse proxy).
+// Required so req.secure === true and SameSite=None; Secure cookies are sent.
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
