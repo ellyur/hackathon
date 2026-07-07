@@ -1,14 +1,14 @@
 /**
  * face-detection.ts
  *
- * face-api.js wrapper — uses DYNAMIC import so the library (and its TensorFlow
- * dependency) is never loaded at module-init time. It is only fetched the first
- * time the user triggers face enrollment or verification.
+ * face-api.js wrapper — uses a true dynamic import that is invisible to
+ * Vite's static import scanner.  face-api.js (and its TensorFlow backend)
+ * is only fetched the first time the user triggers face enrollment or
+ * verification — never at app startup.
  *
  * - Models are loaded lazily and cached as a singleton (~6 MB total).
- * - detectFaceDescriptor() runs detection + landmark + recognition in one call,
- *   returning a 128-element descriptor array.
- * - descriptorDistance() returns Euclidean distance; lower = more similar.
+ * - detectFaceDescriptor() → 128-element descriptor (Float32Array → number[]).
+ * - descriptorDistance() → Euclidean distance; lower = more similar.
  * - FACE_MATCH_THRESHOLD: accept a match when distance ≤ this value.
  */
 
@@ -16,15 +16,19 @@ function modelsPath(): string {
   return `${import.meta.env.BASE_URL.replace(/\/$/, '')}/models`;
 }
 
-type FaceApiModule = typeof import('face-api.js');
-
-let _faceapi: FaceApiModule | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _faceapi: any = null;
 let _loaded: Promise<void> | null = null;
 
-async function getFaceApi(): Promise<FaceApiModule> {
-  if (!_faceapi) {
-    _faceapi = await import('face-api.js');
-  }
+/** Dynamically load face-api.js. The string is built at runtime so Vite's
+ *  static scanner never sees a bare import('face-api.js') and won't
+ *  eagerly pre-bundle (and potentially crash) the library. */
+async function getFaceApi() {
+  if (_faceapi) return _faceapi;
+  // Split the package name so Vite's regex scanner doesn't match it as a
+  // static dependency and pull it into the pre-bundle step.
+  const pkg = ['face', 'api.js'].join('-');
+  _faceapi = await import(/* @vite-ignore */ pkg);
   return _faceapi;
 }
 
@@ -80,7 +84,7 @@ export async function detectFaceDescriptor(
 
 /**
  * Euclidean distance between two 128-element descriptor arrays.
- * Lower = more similar faces. Typical same-person range: 0.0 – 0.5.
+ * Lower = more similar. Typical same-person range: 0.0 – 0.5.
  */
 export function descriptorDistance(a: number[], b: number[]): number {
   let sum = 0;
