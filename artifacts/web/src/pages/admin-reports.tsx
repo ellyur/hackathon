@@ -1,0 +1,122 @@
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
+import { useToast } from '@/hooks/use-toast';
+import { FileText, Users, ClipboardList, UserCheck, CalendarClock, TrendingUp, Download, Loader2 } from 'lucide-react';
+
+interface ReportConfig {
+  id: string;
+  title: string;
+  description: string;
+  icon: React.ElementType;
+  color: string;
+}
+
+const REPORTS: ReportConfig[] = [
+  { id: 'student-progress', title: 'Student Progress Report', description: 'Per-student summary of case completions, hours logged, and overall progress toward graduation requirements.', icon: Users, color: 'text-blue-500 bg-blue-50' },
+  { id: 'attendance-summary', title: 'Attendance Summary Report', description: 'Aggregated attendance records broken down by hospital and department, including present/absent/late rates.', icon: ClipboardList, color: 'text-teal-500 bg-teal-50' },
+  { id: 'case-compliance', title: 'Case Compliance Report', description: 'Analysis of case gap distribution — identifies which cases are most frequently incomplete across the student cohort.', icon: FileText, color: 'text-purple-500 bg-purple-50' },
+  { id: 'ci-performance', title: 'Clinical Instructor Performance', description: 'CI attendance verification rates, average response times, and pending verification counts per instructor.', icon: UserCheck, color: 'text-orange-500 bg-orange-50' },
+  { id: 'makeup-duty', title: 'Makeup Duty Status', description: 'Outstanding makeup duty assignments, completion rates, and overdue cases requiring immediate attention.', icon: CalendarClock, color: 'text-red-500 bg-red-50' },
+  { id: 'completion-forecast', title: 'Program Completion Forecast', description: 'Projected graduation risk analysis — estimates which students are on track vs. at-risk of not completing requirements.', icon: TrendingUp, color: 'text-emerald-500 bg-emerald-50' },
+];
+
+export function AdminReportsPage() {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState<Record<string, boolean>>({});
+  const [format, setFormat] = useState<Record<string, string>>({});
+  const [dateFrom, setDateFrom] = useState<Record<string, string>>({});
+  const [dateTo, setDateTo] = useState<Record<string, string>>({});
+
+  const handleGenerate = async (reportId: string, reportTitle: string) => {
+    setLoading(prev => ({ ...prev, [reportId]: true }));
+    await new Promise(r => setTimeout(r, 1500));
+    setLoading(prev => ({ ...prev, [reportId]: false }));
+    toast({
+      title: 'Report generated',
+      description: `${reportTitle} is ready. Downloading as ${(format[reportId] || 'PDF').toUpperCase()}...`,
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-3xl font-bold tracking-tight">Generate Reports</h2>
+        <p className="text-muted-foreground mt-1">Export program data in multiple formats for review and compliance.</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {REPORTS.map(report => {
+          const Icon = report.icon;
+          const isLoading = loading[report.id] ?? false;
+          return (
+            <Card key={report.id} className="flex flex-col">
+              <CardHeader className="pb-3">
+                <div className="flex items-start gap-3">
+                  <div className={`p-2.5 rounded-lg ${report.color}`}>
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">{report.title}</CardTitle>
+                    <CardDescription className="mt-1 text-xs">{report.description}</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <Separator />
+              <CardContent className="pt-4 flex-1 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">From</Label>
+                    <Input
+                      type="date"
+                      className="mt-1 text-sm h-8"
+                      value={dateFrom[report.id] ?? ''}
+                      onChange={e => setDateFrom(prev => ({ ...prev, [report.id]: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">To</Label>
+                    <Input
+                      type="date"
+                      className="mt-1 text-sm h-8"
+                      value={dateTo[report.id] ?? ''}
+                      onChange={e => setDateTo(prev => ({ ...prev, [report.id]: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={format[report.id] ?? 'pdf'}
+                    onValueChange={v => setFormat(prev => ({ ...prev, [report.id]: v }))}
+                  >
+                    <SelectTrigger className="h-8 text-sm flex-1">
+                      <SelectValue placeholder="Format" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pdf">PDF</SelectItem>
+                      <SelectItem value="csv">CSV</SelectItem>
+                      <SelectItem value="xlsx">Excel (.xlsx)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    className="h-8 text-sm gap-1.5"
+                    onClick={() => handleGenerate(report.id, report.title)}
+                    disabled={isLoading}
+                  >
+                    {isLoading
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Generating...</>
+                      : <><Download className="w-3.5 h-3.5" />Generate</>}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
