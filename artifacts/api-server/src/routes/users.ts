@@ -22,7 +22,7 @@ async function getUserProfile(userId: string) {
   return { ...safeUser, studentProfile: studentProfile ?? null, ciProfile: ciProfile ?? null };
 }
 
-router.get("/users", requireAuth, async (req, res): Promise<void> => {
+router.get("/users", requireRole("admin", "scheduler"), async (req, res): Promise<void> => {
   const { role, isActive, search } = req.query as {
     role?: string;
     isActive?: string;

@@ -9,7 +9,8 @@ import { useGetStudentPassport } from '@workspace/api-client-react';
 
 export function ClinicalPassportPage() {
   // Use a hardcoded mock ID if no real API is available since this is a demo
-  const { data: passport, isLoading } = useGetStudentPassport('usr_student', { query: { enabled: false } });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: passport, isLoading } = useGetStudentPassport('usr_student', { query: { enabled: false } as any });
 
   // Mock data for demo since the API might not be fully seeded
   const mockCategories = [

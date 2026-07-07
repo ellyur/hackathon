@@ -17,6 +17,7 @@ import { AvailableSlotsPage } from '@/pages/slots';
 import { TimeInSimulatorPage } from '@/pages/time-in';
 import { MasterSchedulePage } from '@/pages/master-schedule';
 import { AttendanceRosterPage } from '@/pages/attendance-roster';
+import { AdminUsersPage } from '@/pages/admin-users';
 
 const queryClient = new QueryClient();
 
@@ -77,7 +78,7 @@ function Router() {
               <Route path="/announcements/manage"><PlaceholderPage title="Manage Announcements" /></Route>
 
               {/* Admin */}
-              <Route path="/admin/users"><PlaceholderPage title="Manage Users" /></Route>
+              <Route path="/admin/users" component={AdminUsersPage} />
               <Route path="/admin/users/create"><PlaceholderPage title="Create User" /></Route>
               <Route path="/admin/hospitals"><PlaceholderPage title="Manage Hospitals" /></Route>
               <Route path="/admin/hospitals/:id/departments"><PlaceholderPage title="Manage Departments" /></Route>

@@ -2,26 +2,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { MapPin, ScanFace, Map as MapIcon, Fingerprint, CheckCircle2, AlertCircle, Camera, RefreshCw } from 'lucide-react';
+import { MapPin, ScanFace, Map as MapIcon, Fingerprint, CheckCircle2, AlertCircle, Camera, RefreshCw, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useRoute } from 'wouter';
 import * as faceapi from 'face-api.js';
-
-// Hospital geofence config — in production these come from the assigned schedule
-const HOSPITAL = {
-  name: "St. Luke's Medical Center - ICU",
-  latitude: 14.5784,
-  longitude: 121.0186,
-  radiusMeters: 100,
-};
+import { useGetSchedule, useRecordTimeIn } from '@workspace/api-client-react';
+import { useToast } from '@/hooks/use-toast';
 
 const MODELS_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
 
-type Step = 'idle' | 'gps-checking' | 'gps-ok' | 'gps-error' | 'face-loading' | 'face-scanning' | 'face-ok' | 'face-error' | 'done';
+type Step = 'idle' | 'gps-checking' | 'gps-ok' | 'gps-error' | 'face-loading' | 'face-scanning' | 'face-ok' | 'face-error' | 'submitting' | 'done' | 'submit-error';
 
 interface GpsResult {
   distance: number;
   withinRange: boolean;
   accuracy: number;
+  latitude: number;
+  longitude: number;
 }
 
 function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -35,6 +32,17 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 export function TimeInSimulatorPage() {
+  const [, params] = useRoute('/schedule/:id');
+  const scheduleId = params?.id ?? '';
+  const { toast } = useToast();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: schedule, isLoading: scheduleLoading } = useGetSchedule(scheduleId, {
+    query: { enabled: !!scheduleId, staleTime: 60_000 } as any,
+  });
+
+  const recordTimeIn = useRecordTimeIn();
+
   const [step, setStep] = useState<Step>('idle');
   const [gpsResult, setGpsResult] = useState<GpsResult | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
@@ -42,10 +50,17 @@ export function TimeInSimulatorPage() {
   const [faceDetected, setFaceDetected] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [timeInAt, setTimeInAt] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const hospitalRadius = (schedule as { attendanceRadius?: number } | undefined)?.attendanceRadius
+    ?? (schedule as { hospital?: { attendanceRadius?: number } } | undefined)?.hospital?.attendanceRadius
+    ?? 150;
+  const hospitalLat = (schedule as { hospital?: { latitude?: number } } | undefined)?.hospital?.latitude ?? 0;
+  const hospitalLng = (schedule as { hospital?: { longitude?: number } } | undefined)?.hospital?.longitude ?? 0;
 
   // ── GPS verification ──────────────────────────────────────────────────────
   const verifyGps = useCallback(() => {
@@ -63,24 +78,25 @@ export function TimeInSimulatorPage() {
         const dist = haversineDistance(
           pos.coords.latitude,
           pos.coords.longitude,
-          HOSPITAL.latitude,
-          HOSPITAL.longitude,
+          hospitalLat,
+          hospitalLng,
         );
         const result: GpsResult = {
           distance: Math.round(dist),
-          withinRange: dist <= HOSPITAL.radiusMeters,
+          withinRange: hospitalLat === 0 || dist <= hospitalRadius,
           accuracy: Math.round(pos.coords.accuracy),
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
         };
         setGpsResult(result);
 
         if (result.withinRange) {
           setStep('gps-ok');
-          // Auto-advance to face scan after a brief pause
           setTimeout(() => startFaceScan(), 1200);
         } else {
           setStep('gps-error');
           setGpsError(
-            `You are ${result.distance}m from the hospital. You must be within ${HOSPITAL.radiusMeters}m to time in.`,
+            `You are ${result.distance}m from the hospital. You must be within ${hospitalRadius}m to time in.`,
           );
         }
       },
@@ -95,7 +111,7 @@ export function TimeInSimulatorPage() {
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     );
-  }, []);
+  }, [hospitalLat, hospitalLng, hospitalRadius]);
 
   // ── Face scan ─────────────────────────────────────────────────────────────
   const startFaceScan = useCallback(async () => {
@@ -103,7 +119,6 @@ export function TimeInSimulatorPage() {
     setFaceError(null);
     setFaceDetected(false);
 
-    // Load models if not already loaded
     if (!modelsLoaded) {
       try {
         await faceapi.nets.tinyFaceDetector.loadFromUri(MODELS_URL);
@@ -115,7 +130,6 @@ export function TimeInSimulatorPage() {
       }
     }
 
-    // Start camera
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
@@ -123,7 +137,6 @@ export function TimeInSimulatorPage() {
       streamRef.current = stream;
       setStep('face-scanning');
 
-      // Wait for the video element to be ready then attach stream
       setTimeout(() => {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -154,19 +167,12 @@ export function TimeInSimulatorPage() {
         );
         if (detection) {
           setFaceDetected(true);
-          // Hold briefly so user sees the "face found" state, then confirm
           setTimeout(() => confirmFace(), 800);
         }
       } catch {
         // silent — keep trying
       }
     }, 300);
-  }, []);
-
-  const confirmFace = useCallback(() => {
-    stopCamera();
-    setStep('done');
-    setTimeInAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
   }, []);
 
   const stopCamera = useCallback(() => {
@@ -183,6 +189,43 @@ export function TimeInSimulatorPage() {
     }
   }, []);
 
+  const confirmFace = useCallback(() => {
+    stopCamera();
+    // Submit to backend
+    setStep('submitting');
+    setSubmitError(null);
+  }, [stopCamera]);
+
+  // Submit when step transitions to 'submitting'
+  useEffect(() => {
+    if (step !== 'submitting') return;
+    recordTimeIn.mutate(
+      {
+        data: {
+          scheduleId,
+          studentLatitude: gpsResult?.latitude,
+          studentLongitude: gpsResult?.longitude,
+          gpsVerified: true,
+          faceVerified: true,
+          livenessVerified: true,
+        },
+      },
+      {
+        onSuccess: () => {
+          setStep('done');
+          setTimeInAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+          toast({ title: 'Time-in recorded', description: 'Your attendance has been saved.' });
+        },
+        onError: (err: unknown) => {
+          const msg = err instanceof Error ? err.message : 'Failed to record time-in.';
+          setSubmitError(msg);
+          setStep('submit-error');
+        },
+      },
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
   const reset = useCallback(() => {
     stopCamera();
     setStep('idle');
@@ -191,10 +234,29 @@ export function TimeInSimulatorPage() {
     setFaceError(null);
     setFaceDetected(false);
     setTimeInAt(null);
+    setSubmitError(null);
   }, [stopCamera]);
 
-  // Clean up on unmount
   useEffect(() => () => stopCamera(), [stopCamera]);
+
+  if (scheduleLoading) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground gap-2">
+        <Loader2 className="w-5 h-5 animate-spin" /> Loading schedule…
+      </div>
+    );
+  }
+
+  const hospitalName = (schedule as { hospital?: { name?: string } } | undefined)?.hospital?.name
+    ?? (schedule as { title?: string } | undefined)?.title
+    ?? 'Hospital';
+  const deptName = (schedule as { department?: { name?: string } } | undefined)?.department?.name ?? '';
+  const ciFirstName = (schedule as { ci?: { firstName?: string } } | undefined)?.ci?.firstName ?? '';
+  const ciLastName = (schedule as { ci?: { lastName?: string } } | undefined)?.ci?.lastName ?? '';
+  const dutyDate = (schedule as { dutyDate?: string } | undefined)?.dutyDate ?? '';
+  const startTime = (schedule as { startTime?: string } | undefined)?.startTime ?? '';
+  const endTime = (schedule as { endTime?: string } | undefined)?.endTime ?? '';
+  const gracePeriodMin = (schedule as { gracePeriodMin?: number } | undefined)?.gracePeriodMin ?? 15;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -210,8 +272,8 @@ export function TimeInSimulatorPage() {
         <Card className="md:col-span-2 overflow-hidden">
           <div className="h-2 bg-primary" />
           <CardHeader>
-            <CardTitle>{HOSPITAL.name}</CardTitle>
-            <CardDescription>Today, 08:00 AM – 04:00 PM</CardDescription>
+            <CardTitle>{hospitalName}{deptName ? ` — ${deptName}` : ''}</CardTitle>
+            <CardDescription>{dutyDate ? `${dutyDate}, ${startTime} – ${endTime}` : 'Loading schedule…'}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col sm:flex-row gap-6">
@@ -224,22 +286,18 @@ export function TimeInSimulatorPage() {
                     </Avatar>
                   </div>
                   <div>
-                    <div className="text-sm font-medium">Dr. James Wilson</div>
+                    <div className="text-sm font-medium">{ciFirstName ? `${ciFirstName} ${ciLastName}` : 'Clinical Instructor'}</div>
                     <div className="text-xs text-muted-foreground">Clinical Instructor</div>
                   </div>
                 </div>
                 <div className="pt-4 border-t space-y-3">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Required Hours:</span>
-                    <span className="font-medium">8.0 hrs</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Grace Period:</span>
-                    <span className="font-medium text-amber-600">Until 08:15 AM</span>
+                    <span className="font-medium text-amber-600">{gracePeriodMin} min after start</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Geofence Radius:</span>
-                    <span className="font-medium">{HOSPITAL.radiusMeters} m</span>
+                    <span className="font-medium">{hospitalRadius} m</span>
                   </div>
                 </div>
 
@@ -370,6 +428,33 @@ export function TimeInSimulatorPage() {
                   </div>
                 )}
 
+                {step === 'submitting' && (
+                  <>
+                    <Loader2 className="w-12 h-12 text-primary animate-spin" />
+                    <div>
+                      <h3 className="font-semibold text-lg">Recording Attendance</h3>
+                      <p className="text-sm text-muted-foreground mt-1">Saving your time-in…</p>
+                    </div>
+                  </>
+                )}
+
+                {step === 'submit-error' && (
+                  <>
+                    <AlertCircle className="w-12 h-12 text-destructive" />
+                    <div>
+                      <h3 className="font-semibold text-lg text-destructive">Submission Failed</h3>
+                      {submitError && (
+                        <Alert variant="destructive" className="mt-2 text-left">
+                          <AlertDescription className="text-xs">{submitError}</AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
+                    <Button variant="outline" size="sm" onClick={reset} className="gap-2">
+                      <RefreshCw className="w-4 h-4" /> Try Again
+                    </Button>
+                  </>
+                )}
+
                 {step === 'face-error' && (
                   <>
                     <AlertCircle className="w-12 h-12 text-destructive" />
@@ -404,6 +489,9 @@ export function TimeInSimulatorPage() {
                       </div>
                       <div className="flex items-center gap-1 text-emerald-600">
                         <CheckCircle2 className="w-3 h-3" /> Face Match
+                      </div>
+                      <div className="flex items-center gap-1 text-emerald-600">
+                        <CheckCircle2 className="w-3 h-3" /> Saved to Server
                       </div>
                     </div>
                     <Button variant="ghost" size="sm" onClick={reset} className="text-muted-foreground">

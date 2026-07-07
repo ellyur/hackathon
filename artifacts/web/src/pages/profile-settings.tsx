@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import type { AuthUser } from '@workspace/api-client-react';
 
 const profileSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -33,7 +34,8 @@ type ProfileFormValues = z.infer<typeof profileSchema>;
 type PasswordFormValues = z.infer<typeof passwordSchema>;
 
 export function ProfileSettingsPage() {
-  const { user } = useAuth();
+  const { user: rawUser } = useAuth();
+  const user = rawUser as AuthUser | undefined;
   const { toast } = useToast();
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);

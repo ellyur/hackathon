@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
+import type { AuthUser } from '@workspace/api-client-react';
 import {
   LayoutDashboard,
   Bell,
@@ -26,7 +27,8 @@ import { cn } from '@/lib/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user: rawUser, logout } = useAuth();
+  const user = rawUser as AuthUser | undefined;
   const [location] = useLocation();
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);

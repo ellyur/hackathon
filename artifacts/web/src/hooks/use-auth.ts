@@ -106,7 +106,7 @@ export function useAuth() {
     isError: realAuth.isError,
     isMock: false,
     logout: () => {
-      logoutMutation.mutate({});
+      logoutMutation.mutate(undefined as unknown as void);
     },
   };
 }

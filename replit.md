@@ -1,45 +1,54 @@
-# [Project name]
+# ClinicalFlow
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
-
-## Run & Operate
-
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+A clinical rotation management system for nursing schools. Tracks student schedules, GPS + facial biometric attendance, clinical passport (case completion), duty slots, and analytics across roles: Admin, Scheduler, Clinical Instructor (CI), and Student.
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- **Backend**: Express 5 + TypeScript, session-cookie auth (`express-session`), Pino logging
+- **Frontend**: React 19 + Vite 7, Wouter routing, Tailwind CSS 4, TanStack Query, Framer Motion
+- **Database**: PostgreSQL + Drizzle ORM (schema-first)
+- **API**: OpenAPI spec → Orval codegen → typed React hooks (`lib/api-client-react`)
+- **Monorepo**: pnpm workspaces
 
-## Where things live
+## Running the project
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+Both workflows are configured and auto-start:
+- **API Server** → `PORT=8080 pnpm --filter @workspace/api-server run dev`
+- **ClinicalFlow Web** → `PORT=22333 BASE_PATH=/ pnpm --filter @workspace/web run dev`
 
-## Architecture decisions
+After pulling or merging new code:
+```bash
+pnpm install
+pnpm --filter @workspace/db run push   # apply schema changes
+pnpm --filter @workspace/scripts run seed  # seed demo data (safe to re-run)
+pnpm --filter @workspace/api-client-react exec tsc -p tsconfig.json  # rebuild type declarations
+```
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+## Environment variables / secrets
 
-## Product
+| Name | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `SESSION_SECRET` | Express session signing key |
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+## Seeded test accounts (password: `password123`)
+
+| Email | Role |
+|---|---|
+| admin@clinicalflow.com | Admin |
+| scheduler@clinicalflow.com | Scheduler |
+| ci@clinicalflow.com | Clinical Instructor |
+| student@clinicalflow.com | Student |
+
+## Key features
+
+- **GPS + Facial attendance**: Students time-in via the `/schedule/:id` page. Real GPS geofencing against hospital coordinates + on-device face detection (face-api.js). Verified attendance is saved to the database.
+- **Admin: manage users**: `/admin/users` — list, search, filter, deactivate users. Account creation by Admin only.
+- **Clinical passport**: tracks case completions per student with CI verification.
+- **Scheduling & slots**: Scheduler creates rotations; students can apply for open duty slots.
+- **Analytics & audit logs**: Admin views.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
-
-## Gotchas
-
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- Keep the existing monorepo structure; do not restructure or migrate packages.
+- Seed script is at `scripts/seed.ts` — run with `pnpm --filter @workspace/scripts run seed`.
