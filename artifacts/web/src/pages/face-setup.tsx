@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-// face-api.js is heavy and can throw during module evaluation in some environments.
-// Load it lazily inside startEnrollment so the page always renders.
-type FaceApiModule = typeof import('face-api.js');
+import type { FaceLandmarker as FaceLandmarkerType } from '@mediapipe/tasks-vision';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -9,8 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScanFace, Camera, CheckCircle2, AlertCircle, RefreshCw, Loader2, ShieldCheck } from 'lucide-react';
 import { useGetMyFaceDescriptor, useSaveMyFaceDescriptor } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
-
-const MODELS_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
+import { getFaceLandmarker, extractDescriptor } from '@/lib/face-detection';
 
 type SetupStep = 'idle' | 'loading-models' | 'opening-camera' | 'scanning' | 'face-detected' | 'saving' | 'done' | 'error';
 
@@ -25,7 +22,6 @@ export function FaceSetupPage() {
 
   const [step, setStep] = useState<SetupStep>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [modelsLoaded, setModelsLoaded] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -60,57 +56,39 @@ export function FaceSetupPage() {
     );
   }, [stopCamera, saveDescriptor, refetch, toast]);
 
-  const startDetection = useCallback((faceapi: FaceApiModule) => {
+  const startDetection = useCallback((landmarker: FaceLandmarkerType) => {
     confirmingRef.current = false;
-    intervalRef.current = setInterval(async () => {
+    intervalRef.current = setInterval(() => {
       if (confirmingRef.current) return;
       if (!videoRef.current || videoRef.current.readyState < 2) return;
       try {
-        const detection = await faceapi
-          .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
-          .withFaceLandmarks(true)
-          .withFaceDescriptor();
-
-        if (detection) {
+        const result = landmarker.detectForVideo(videoRef.current, performance.now());
+        if (result.faceLandmarks && result.faceLandmarks.length > 0) {
           if (confirmingRef.current) return;
           confirmingRef.current = true;
           clearInterval(intervalRef.current!);
           intervalRef.current = null;
+          const descriptor = extractDescriptor(result.faceLandmarks[0]);
           setStep('face-detected');
-          setTimeout(() => saveEnrollment(Array.from(detection.descriptor)), 800);
+          setTimeout(() => saveEnrollment(descriptor), 800);
         }
       } catch {
         // keep trying
       }
-    }, 400);
+    }, 100);
   }, [saveEnrollment]);
 
   const startEnrollment = useCallback(async () => {
     setError(null);
     setStep('loading-models');
 
-    let faceapi: FaceApiModule;
+    let landmarker: FaceLandmarkerType;
     try {
-      faceapi = await import('face-api.js');
+      landmarker = await getFaceLandmarker();
     } catch {
-      setError('Failed to load face detection library. Please refresh the page and try again.');
+      setError('Failed to load face detection. Please refresh the page and try again.');
       setStep('error');
       return;
-    }
-
-    if (!modelsLoaded) {
-      try {
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(MODELS_URL),
-          faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODELS_URL),
-          faceapi.nets.faceRecognitionNet.loadFromUri(MODELS_URL),
-        ]);
-        setModelsLoaded(true);
-      } catch {
-        setError('Failed to load face detection models. Check your internet connection.');
-        setStep('error');
-        return;
-      }
     }
 
     setStep('opening-camera');
@@ -125,7 +103,7 @@ export function FaceSetupPage() {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           videoRef.current.play();
-          startDetection(faceapi);
+          startDetection(landmarker);
         }
       }, 300);
     } catch (err) {
@@ -139,7 +117,7 @@ export function FaceSetupPage() {
       }
       setStep('error');
     }
-  }, [modelsLoaded, startDetection]);
+  }, [startDetection]);
 
   const reset = useCallback(() => {
     stopCamera();

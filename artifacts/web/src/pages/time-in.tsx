@@ -5,12 +5,16 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { MapPin, ScanFace, Map as MapIcon, Fingerprint, CheckCircle2, AlertCircle, Camera, RefreshCw, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRoute, Link } from 'wouter';
-import * as faceapi from 'face-api.js';
+import type { FaceLandmarker as FaceLandmarkerType } from '@mediapipe/tasks-vision';
+import { getDistance } from 'geolib';
 import { useGetSchedule, useRecordTimeIn, useGetMyFaceDescriptor } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
-
-const MODELS_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
-const FACE_MATCH_THRESHOLD = 0.55; // euclidean distance; lower = stricter
+import {
+  getFaceLandmarker,
+  extractDescriptor,
+  descriptorSimilarity,
+  FACE_MATCH_THRESHOLD,
+} from '@/lib/face-detection';
 
 type Step = 'idle' | 'gps-checking' | 'gps-ok' | 'gps-error' | 'face-loading' | 'face-scanning' | 'face-ok' | 'face-error' | 'face-no-match' | 'submitting' | 'done' | 'submit-error';
 
@@ -20,16 +24,6 @@ interface GpsResult {
   accuracy: number;
   latitude: number;
   longitude: number;
-}
-
-function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371000;
-  const φ1 = (lat1 * Math.PI) / 180;
-  const φ2 = (lat2 * Math.PI) / 180;
-  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 export function TimeInSimulatorPage() {
@@ -53,14 +47,13 @@ export function TimeInSimulatorPage() {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [faceError, setFaceError] = useState<string | null>(null);
   const [faceDetected, setFaceDetected] = useState(false);
-  const [modelsLoaded, setModelsLoaded] = useState(false);
   const [timeInAt, setTimeInAt] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const confirmingRef = useRef(false); // guard: prevent duplicate confirmations
+  const confirmingRef = useRef(false);
 
   const hospitalRadius = (schedule as { attendanceRadius?: number } | undefined)?.attendanceRadius
     ?? (schedule as { hospital?: { attendanceRadius?: number } } | undefined)?.hospital?.attendanceRadius
@@ -69,8 +62,8 @@ export function TimeInSimulatorPage() {
   const hospitalLng = (schedule as { hospital?: { longitude?: number } } | undefined)?.hospital?.longitude ?? 0;
 
   const isEnrolled = faceData?.enrolled === true;
-  const enrolledDescriptor = faceData?.descriptor
-    ? new Float32Array(faceData.descriptor as number[])
+  const enrolledDescriptor: number[] | null = faceData?.descriptor
+    ? (faceData.descriptor as number[])
     : null;
 
   // ── GPS verification ──────────────────────────────────────────────────────
@@ -86,14 +79,12 @@ export function TimeInSimulatorPage() {
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const dist = haversineDistance(
-          pos.coords.latitude,
-          pos.coords.longitude,
-          hospitalLat,
-          hospitalLng,
+        const dist = getDistance(
+          { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
+          { latitude: hospitalLat, longitude: hospitalLng },
         );
         const result: GpsResult = {
-          distance: Math.round(dist),
+          distance: dist,
           withinRange: hospitalLat === 0 || dist <= hospitalRadius,
           accuracy: Math.round(pos.coords.accuracy),
           latitude: pos.coords.latitude,
@@ -125,77 +116,29 @@ export function TimeInSimulatorPage() {
   }, [hospitalLat, hospitalLng, hospitalRadius]);
 
   // ── Face scan ─────────────────────────────────────────────────────────────
-  const startFaceScan = useCallback(async () => {
-    setStep('face-loading');
-    setFaceError(null);
-    setFaceDetected(false);
-
-    if (!modelsLoaded) {
-      try {
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(MODELS_URL),
-          faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODELS_URL),
-          faceapi.nets.faceRecognitionNet.loadFromUri(MODELS_URL),
-        ]);
-        setModelsLoaded(true);
-      } catch {
-        setFaceError('Failed to load face detection models. Check your internet connection.');
-        setStep('face-error');
-        return;
-      }
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-      });
-      streamRef.current = stream;
-      setStep('face-scanning');
-
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play();
-          startDetection();
-        }
-      }, 300);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('Permission') || msg.includes('NotAllowed')) {
-        setFaceError('Camera access was denied. Please allow camera permission and try again.');
-      } else if (msg.includes('NotFound') || msg.includes('DevicesNotFound')) {
-        setFaceError('No camera found on this device.');
-      } else {
-        setFaceError(`Camera error: ${msg}`);
-      }
-      setStep('face-error');
-    }
-  }, [modelsLoaded]);
-
-  const startDetection = useCallback(() => {
+  const startDetection = useCallback((landmarker: FaceLandmarkerType, descriptor: number[]) => {
     confirmingRef.current = false;
-    detectionIntervalRef.current = setInterval(async () => {
+    detectionIntervalRef.current = setInterval(() => {
       if (confirmingRef.current) return;
       if (!videoRef.current || videoRef.current.readyState < 2) return;
       try {
-        const result = await faceapi
-          .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
-          .withFaceLandmarks(true)
-          .withFaceDescriptor();
-
-        if (result) {
+        const result = landmarker.detectForVideo(videoRef.current, performance.now());
+        if (result.faceLandmarks && result.faceLandmarks.length > 0) {
           if (confirmingRef.current) return;
           confirmingRef.current = true;
           clearInterval(detectionIntervalRef.current!);
           detectionIntervalRef.current = null;
           setFaceDetected(true);
-          setTimeout(() => confirmFace(result.descriptor), 800);
+          const detected = extractDescriptor(result.faceLandmarks[0]);
+          setTimeout(() => confirmFace(detected, descriptor), 800);
         }
       } catch {
         // silent — keep trying
       }
-    }, 400);
-  }, [enrolledDescriptor]);
+    }, 100);
+  // confirmFace declared below; passed as arg to avoid stale closure
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const stopCamera = useCallback(() => {
     if (detectionIntervalRef.current) {
@@ -211,23 +154,67 @@ export function TimeInSimulatorPage() {
     }
   }, []);
 
-  const confirmFace = useCallback((detectedDescriptor: Float32Array) => {
+  const confirmFace = useCallback((detectedDescriptor: number[], enrolled: number[]) => {
     stopCamera();
-
-    // Compare against enrolled descriptor
-    if (enrolledDescriptor) {
-      const distance = faceapi.euclideanDistance(detectedDescriptor, enrolledDescriptor);
-      if (distance > FACE_MATCH_THRESHOLD) {
-        setFaceDetected(false);
-        setFaceError(`Face did not match your enrolled profile (distance: ${distance.toFixed(3)}). Please try again or re-enroll your face.`);
-        setStep('face-no-match');
-        return;
-      }
+    const similarity = descriptorSimilarity(detectedDescriptor, enrolled);
+    if (similarity < FACE_MATCH_THRESHOLD) {
+      setFaceDetected(false);
+      setFaceError(
+        `Face did not match your enrolled profile (similarity: ${similarity.toFixed(3)}, required ≥ ${FACE_MATCH_THRESHOLD}). Please try again or re-enroll.`,
+      );
+      setStep('face-no-match');
+      return;
     }
-
     setStep('submitting');
     setSubmitError(null);
-  }, [stopCamera, enrolledDescriptor]);
+  }, [stopCamera]);
+
+  const startFaceScan = useCallback(async () => {
+    setStep('face-loading');
+    setFaceError(null);
+    setFaceDetected(false);
+
+    if (!enrolledDescriptor) {
+      setFaceError('No enrolled face descriptor found. Please enroll your face first.');
+      setStep('face-error');
+      return;
+    }
+
+    let landmarker: FaceLandmarkerType;
+    try {
+      landmarker = await getFaceLandmarker();
+    } catch {
+      setFaceError('Failed to load face detection. Check your internet connection.');
+      setStep('face-error');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+      });
+      streamRef.current = stream;
+      setStep('face-scanning');
+
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+          startDetection(landmarker, enrolledDescriptor);
+        }
+      }, 300);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('Permission') || msg.includes('NotAllowed')) {
+        setFaceError('Camera access was denied. Please allow camera permission and try again.');
+      } else if (msg.includes('NotFound') || msg.includes('DevicesNotFound')) {
+        setFaceError('No camera found on this device.');
+      } else {
+        setFaceError(`Camera error: ${msg}`);
+      }
+      setStep('face-error');
+    }
+  }, [enrolledDescriptor, startDetection]);
 
   // Submit when step transitions to 'submitting'
   useEffect(() => {
