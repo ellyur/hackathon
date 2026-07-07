@@ -27,6 +27,7 @@ export const studentProfilesTable = pgTable("student_profiles", {
   academicYear: text("academic_year").notNull(),
   totalHoursRequired: integer("total_hours_required").notNull().default(500),
   faceDescriptor: json("face_descriptor").$type<number[]>(),
+  luxandPersonUuid: text("luxand_person_uuid"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

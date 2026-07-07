@@ -4,12 +4,36 @@ import {
   attendanceTable,
   schedulesTable,
   scheduleStudentsTable,
+  studentProfilesTable,
   auditLogsTable,
   notificationsTable,
 } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
+import { searchFace } from "../lib/luxand.js";
+
+/**
+ * Short-lived, one-time face-verification tokens.
+ * Issued by /attendance/verify-face, consumed by /attendance/time-in.
+ * Bound to a userId so they cannot be shared between students.
+ */
+interface FaceVerificationRecord {
+  userId: string;
+  expiresAt: number; // ms since epoch
+}
+const faceVerificationTokens = new Map<string, FaceVerificationRecord>();
+
+// Prune expired tokens every 10 minutes to avoid memory growth
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, record] of faceVerificationTokens) {
+    if (record.expiresAt < now) faceVerificationTokens.delete(token);
+  }
+}, 10 * 60 * 1000).unref();
+
+/** Minimum Luxand probability score required to accept a face match. */
+const MIN_FACE_CONFIDENCE = 0.7;
 
 const router: IRouter = Router();
 
@@ -50,19 +74,93 @@ router.get("/attendance", requireAuth, async (req, res): Promise<void> => {
   res.json(records);
 });
 
+/**
+ * POST /api/attendance/verify-face
+ * Body: { image: string }  — base64-encoded JPEG
+ *
+ * Calls Luxand.cloud to check whether the face in the photo matches the
+ * enrolled student.  Returns { verified: boolean, probability?: number }.
+ */
+router.post("/attendance/verify-face", requireAuth, requireRole("student"), async (req, res): Promise<void> => {
+  const { image } = req.body as { image?: string };
+  if (!image || typeof image !== "string") {
+    res.status(400).json({ error: "image (base64 JPEG) is required" });
+    return;
+  }
+
+  const [profile] = await db
+    .select()
+    .from(studentProfilesTable)
+    .where(eq(studentProfilesTable.userId, req.session.userId!));
+
+  if (!profile?.luxandPersonUuid) {
+    res.status(400).json({ error: "Face not enrolled. Please enroll your face first." });
+    return;
+  }
+
+  try {
+    const imageBuffer = Buffer.from(image, "base64");
+    const matches = await searchFace(imageBuffer);
+
+    const topMatch = matches.find(
+      (m) => m.uuid === profile.luxandPersonUuid && m.probability >= MIN_FACE_CONFIDENCE,
+    );
+
+    if (topMatch) {
+      // Issue a one-time, server-bound verification token (5-minute TTL)
+      const verificationToken = randomUUID();
+      faceVerificationTokens.set(verificationToken, {
+        userId: req.session.userId!,
+        expiresAt: Date.now() + 5 * 60 * 1000,
+      });
+      res.json({ verified: true, probability: topMatch.probability, verificationToken });
+    } else {
+      const bestProbability = matches.find((m) => m.uuid === profile.luxandPersonUuid)?.probability ?? 0;
+      res.json({ verified: false, probability: bestProbability });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(502).json({ error: `Face verification failed: ${msg}` });
+  }
+});
+
 router.post("/attendance/time-in", requireRole("student"), async (req, res): Promise<void> => {
   const body = req.body as {
     scheduleId: string;
     studentLatitude?: number;
     studentLongitude?: number;
     gpsVerified?: boolean;
-    faceVerified?: boolean;
+    faceVerificationToken?: string; // server-issued one-time token from /verify-face
     livenessVerified?: boolean;
     gpsAccuracy?: number;
   };
 
   if (!body.scheduleId) {
     res.status(400).json({ error: "scheduleId is required" });
+    return;
+  }
+
+  // ── Server-side face verification token check ─────────────────────────────
+  const tokenRecord = body.faceVerificationToken
+    ? faceVerificationTokens.get(body.faceVerificationToken)
+    : undefined;
+
+  if (
+    !tokenRecord ||
+    tokenRecord.expiresAt < Date.now() ||
+    tokenRecord.userId !== req.session.userId
+  ) {
+    res.status(400).json({
+      error: "Face verification is required. Please complete face verification before timing in.",
+    });
+    return;
+  }
+
+  // Consume the token — one-time use
+  faceVerificationTokens.delete(body.faceVerificationToken!);
+
+  if (!body.gpsVerified) {
+    res.status(400).json({ error: "GPS verification must pass before time-in" });
     return;
   }
 
@@ -90,12 +188,6 @@ router.post("/attendance/time-in", requireRole("student"), async (req, res): Pro
     return;
   }
 
-  // Biometric verification must be confirmed by the client
-  if (!body.gpsVerified || !body.faceVerified || !body.livenessVerified) {
-    res.status(400).json({ error: "GPS, face, and liveness verification must all pass before time-in" });
-    return;
-  }
-
   // Determine late status
   const now = new Date();
   const [h, m] = schedule.startTime.split(":").map(Number);
@@ -115,7 +207,7 @@ router.post("/attendance/time-in", requireRole("student"), async (req, res): Pro
     studentLatitude: body.studentLatitude ?? null,
     studentLongitude: body.studentLongitude ?? null,
     gpsVerified: body.gpsVerified ?? false,
-    faceVerified: body.faceVerified ?? false,
+    faceVerified: true,         // proven by the server-validated token above
     livenessVerified: body.livenessVerified ?? false,
   });
 

@@ -3,30 +3,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Progress } from '@/components/ui/progress';
 import {
   ScanFace, Camera, CheckCircle2, AlertCircle, RefreshCw,
-  Loader2, ShieldCheck, Info,
+  Loader2, ShieldCheck, Aperture,
 } from 'lucide-react';
-import { useGetMyFaceDescriptor, useSaveMyFaceDescriptor } from '@workspace/api-client-react';
+import { useGetMyFaceDescriptor } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
-import {
-  loadFaceApiModels, resetFaceApiModels, detectFaceDescriptor,
-} from '@/lib/face-detection';
-
-// ─── Types ───────────────────────────────────────────────────────────────────
 
 type Step =
   | 'idle'
   | 'requesting-permission'
-  | 'loading-models'
-  | 'scanning'
-  | 'face-detected'
-  | 'saving'
+  | 'preview'
+  | 'uploading'
   | 'done'
   | 'error';
-
-// ─── Component ───────────────────────────────────────────────────────────────
 
 export function FaceSetupPage() {
   const { toast } = useToast();
@@ -34,205 +24,132 @@ export function FaceSetupPage() {
   const { data: faceData, isLoading: faceLoading, refetch } =
     useGetMyFaceDescriptor({ query: { staleTime: 30_000 } as never });
 
-  const saveDescriptor = useSaveMyFaceDescriptor();
+  const [step, setStep]   = useState<Step>('idle');
+  const [error, setError] = useState<string | null>(null);
 
-  const [step, setStep]           = useState<Step>('idle');
-  const [error, setError]         = useState<string | null>(null);
-  const [modelProgress, setModelProgress] = useState(0);
+  const videoRef    = useRef<HTMLVideoElement>(null);
+  const streamRef   = useRef<MediaStream | null>(null);
 
-  const videoRef            = useRef<HTMLVideoElement>(null);
-  const streamRef           = useRef<MediaStream | null>(null);
-  const intervalRef         = useRef<ReturnType<typeof setInterval> | null>(null);
-  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const saveTimeoutRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const confirmingRef       = useRef(false);
-  const enrollingRef        = useRef(false);
-  const processingRef       = useRef(false);
-  const rafRef              = useRef<number | null>(null);
-
-  // ── Cleanup on unmount ───────────────────────────────────────────────────
   const stopCamera = useCallback(() => {
-    if (intervalRef.current)         { clearInterval(intervalRef.current);         intervalRef.current = null; }
-    if (progressIntervalRef.current) { clearInterval(progressIntervalRef.current); progressIntervalRef.current = null; }
-    if (saveTimeoutRef.current)      { clearTimeout(saveTimeoutRef.current);        saveTimeoutRef.current = null; }
-    if (rafRef.current)              { cancelAnimationFrame(rafRef.current);        rafRef.current = null; }
-    if (streamRef.current)           { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
-    if (videoRef.current)            { videoRef.current.srcObject = null; }
-    enrollingRef.current = false;
-    processingRef.current = false;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) videoRef.current.srcObject = null;
   }, []);
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
-  // ── Save the captured descriptor ─────────────────────────────────────────
-  const saveEnrollment = useCallback((descriptor: number[]) => {
-    stopCamera();
-    setStep('saving');
-    saveDescriptor.mutate(
-      { data: { descriptor } },
-      {
-        onSuccess: () => {
-          setStep('done');
-          refetch();
-          toast({
-            title: 'Face enrolled',
-            description: 'Your face is saved. You can now use it to time in.',
-          });
-        },
-        onError: (err) => {
-          setError(err instanceof Error ? err.message : 'Failed to save face data.');
-          setStep('error');
-        },
-      },
-    );
-  }, [stopCamera, saveDescriptor, refetch, toast]);
-
-  // ── Run the face detection loop ──────────────────────────────────────────
-  const startDetection = useCallback(() => {
-    confirmingRef.current = false;
-    intervalRef.current = setInterval(async () => {
-      if (confirmingRef.current || processingRef.current) return;
-      const vid = videoRef.current;
-      if (!vid || vid.readyState < 2 || vid.paused) return;
-
-      processingRef.current = true;
-      try {
-        const descriptor = await detectFaceDescriptor(vid);
-        if (descriptor && !confirmingRef.current) {
-          confirmingRef.current = true;
-          clearInterval(intervalRef.current!);
-          intervalRef.current = null;
-          setStep('face-detected');
-          saveTimeoutRef.current = setTimeout(() => {
-            saveTimeoutRef.current = null;
-            saveEnrollment(descriptor);
-          }, 800);
-        }
-      } catch {
-        // keep trying
-      } finally {
-        processingRef.current = false;
-      }
-    }, 300);
-  }, [saveEnrollment]);
-
-  // ── Assign the stream to the <video> once it's in the DOM ───────────────
-  const attachStreamAndDetect = useCallback(
-    (stream: MediaStream) => {
-      const tryAttach = () => {
-        const vid = videoRef.current;
-        if (!vid) { rafRef.current = requestAnimationFrame(tryAttach); return; }
-        vid.srcObject = stream;
-        vid.play().catch(() => { /* autoplay policy — playsInline+muted still works */ });
-        startDetection();
-      };
-      rafRef.current = requestAnimationFrame(tryAttach);
-    },
-    [startDetection],
-  );
-
-  // ── Main enrollment flow ─────────────────────────────────────────────────
-  const startEnrollment = useCallback(async () => {
-    if (enrollingRef.current) return;
-    enrollingRef.current = true;
-
+  const startCamera = useCallback(async () => {
     setError(null);
-
-    // Step 1 – camera permission ─────────────────────────────────────────
     setStep('requesting-permission');
 
     if (!navigator.mediaDevices?.getUserMedia) {
       setError(
-        'Camera API unavailable. ' +
-        'This usually means the page is not served over HTTPS, or you are inside ' +
-        'a sandboxed iframe. Open the app URL directly in your browser.',
+        'Camera API unavailable. Open the app directly in your browser over HTTPS ' +
+        '(not inside an embedded preview frame).',
       );
       setStep('error');
-      enrollingRef.current = false;
       return;
     }
 
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'user',
-          width:  { ideal: 640 },
-          height: { ideal: 480 },
-        },
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
       });
     } catch (err) {
       const name = err instanceof DOMException ? err.name : '';
-      const msg  = err instanceof Error ? err.message : String(err);
-      if (name === 'NotAllowedError' || /Permission|denied/i.test(msg)) {
-        setError(
-          "Camera permission was denied. " +
-          "Tap the camera icon in your browser's address bar and choose \"Allow\", " +
-          "then try again.",
-        );
-      } else if (name === 'NotFoundError' || /NotFound|DevicesNotFound/i.test(msg)) {
+      if (name === 'NotAllowedError') {
+        setError("Camera permission was denied. Tap the camera icon in your browser's address bar and choose \"Allow\", then try again.");
+      } else if (name === 'NotFoundError') {
         setError('No camera found on this device.');
-      } else if (name === 'NotReadableError' || /NotReadable|TrackStart/i.test(msg)) {
-        setError(
-          'Camera is already in use by another app. Close other tabs or apps ' +
-          'using the camera, then try again.',
-        );
+      } else if (name === 'NotReadableError') {
+        setError('Camera is in use by another app. Close other tabs using the camera and try again.');
       } else {
-        setError(`Camera error: ${name || msg}`);
+        setError(`Camera error: ${name || (err instanceof Error ? err.message : String(err))}`);
       }
       setStep('error');
-      enrollingRef.current = false;
       return;
     }
 
     streamRef.current = stream;
+    setStep('preview');
 
-    // Step 2 – load models (may already be cached from prefetch) ─────────
-    setStep('loading-models');
+    // Attach stream to video element via RAF to ensure it's mounted
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {/* autoplay policy — playsInline+muted still works */});
+        }
+      });
+    });
+  }, []);
 
-    setModelProgress(0);
-    progressIntervalRef.current = setInterval(() => {
-      setModelProgress(p => (p >= 85 ? 85 : p + 8));
-    }, 200);
-
-    try {
-      await loadFaceApiModels();
-    } catch (err) {
-      stopCamera();
-      resetFaceApiModels();
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(`Model load failed: ${msg}`);
-      setStep('error');
+  const captureAndEnroll = useCallback(async () => {
+    const vid = videoRef.current;
+    if (!vid || vid.readyState < 2) {
+      setError('Camera is not ready yet. Please wait a moment and try again.');
       return;
     }
 
-    if (progressIntervalRef.current) {
-      clearInterval(progressIntervalRef.current);
-      progressIntervalRef.current = null;
+    // Snapshot the current frame
+    const canvas = document.createElement('canvas');
+    canvas.width  = vid.videoWidth  || 640;
+    canvas.height = vid.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { setError('Canvas not supported.'); return; }
+    // Mirror to match the mirrored video display
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(vid, 0, 0);
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    const base64  = dataUrl.split(',')[1];
+    if (!base64) { setError('Failed to capture image.'); return; }
+
+    stopCamera();
+    setStep('uploading');
+
+    try {
+      const res = await fetch('/api/students/me/face-enroll', {
+        method:  'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('authToken')
+            ? { Authorization: `Bearer ${localStorage.getItem('authToken')}` }
+            : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ image: base64 }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
+        throw new Error(body.error ?? `Server error ${res.status}`);
+      }
+
+      setStep('done');
+      refetch();
+      toast({ title: 'Face enrolled', description: 'You can now time in using face verification.' });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Enrollment failed. Please try again.');
+      setStep('error');
     }
-    setModelProgress(100);
+  }, [stopCamera, refetch, toast]);
 
-    // Step 3 – activate camera view & run detection ───────────────────────
-    setStep('scanning');
-    attachStreamAndDetect(stream);
-  }, [attachStreamAndDetect, stopCamera]);
-
-  // ── Reset to idle ────────────────────────────────────────────────────────
   const reset = useCallback(() => {
     stopCamera();
-    confirmingRef.current = false;
     setStep('idle');
     setError(null);
-    setModelProgress(0);
   }, [stopCamera]);
 
   const isEnrolled = faceData?.enrolled === true;
-  const isScanning = step === 'scanning' || step === 'face-detected' || step === 'saving';
+  const showVideo  = step === 'preview';
 
-  // ─── Render ──────────────────────────────────────────────────────────────
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Face Setup</h2>
         <p className="text-muted-foreground mt-1">
@@ -240,7 +157,7 @@ export function FaceSetupPage() {
         </p>
       </div>
 
-      {/* ── Enrollment status card ─────────────────────────────────────── */}
+      {/* Enrollment status */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -261,8 +178,7 @@ export function FaceSetupPage() {
                 <Badge variant="outline" className="text-emerald-600 border-emerald-300">Active</Badge>
               </div>
               <p className="text-sm text-muted-foreground mt-2">
-                Your face data is saved. Re-enroll below if the system doesn't recognise
-                you during time-in.
+                Your face is registered. Re-enroll below if the system doesn't recognise you during time-in.
               </p>
             </>
           ) : (
@@ -275,26 +191,23 @@ export function FaceSetupPage() {
         </CardContent>
       </Card>
 
-      {/* ── Camera / enrollment card ────────────────────────────────────── */}
+      {/* Camera / enroll card */}
       <Card>
         <CardHeader>
           <CardTitle>{isEnrolled ? 'Re-enroll Your Face' : 'Enroll Your Face'}</CardTitle>
           <CardDescription>
-            Look directly at the camera with good lighting. Keep your face centred in the oval guide.
+            Face recognition is handled securely in the cloud — no photos are stored permanently.
           </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-4">
 
-          {/* The video element is always mounted so videoRef is never null. */}
-          <div className={isScanning ? 'block' : 'hidden'}>
+          {/* Live camera preview — always rendered so videoRef stays valid */}
+          <div className={showVideo ? 'block' : 'hidden'}>
             <div className="space-y-3">
               <p className="text-sm font-medium text-center">
-                {step === 'face-detected' || step === 'saving'
-                  ? '✅ Face captured — saving…'
-                  : 'Look directly at the camera'}
+                Position your face in the centre, then tap <strong>Capture</strong>.
               </p>
-
               <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-black border-2 border-primary">
                 <video
                   ref={videoRef}
@@ -303,26 +216,24 @@ export function FaceSetupPage() {
                   muted
                   className="w-full h-full object-cover scale-x-[-1]"
                 />
-                {step === 'scanning' && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="w-44 h-56 border-2 border-primary/70 rounded-full opacity-70 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
-                  </div>
-                )}
-                {(step === 'face-detected' || step === 'saving') && (
-                  <div className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center">
-                    <CheckCircle2 className="w-20 h-20 text-emerald-400 drop-shadow-lg" />
-                  </div>
-                )}
+                {/* Oval guide */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="w-44 h-56 border-2 border-white/60 rounded-full shadow-[0_0_0_9999px_rgba(0,0,0,0.25)]" />
+                </div>
               </div>
-
-              <p className="text-xs text-muted-foreground text-center">
-                <ScanFace className="w-3 h-3 inline mr-1" />
-                Face data is processed on-device — no images are uploaded.
-              </p>
+              <Button className="w-full gap-2" onClick={captureAndEnroll}>
+                <Aperture className="w-4 h-4" /> Capture &amp; Enroll
+              </Button>
+              <button
+                onClick={reset}
+                className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
             </div>
           </div>
 
-          {/* ── Idle / done ─────────────────────────────────────────────── */}
+          {/* Idle */}
           {(step === 'idle' || step === 'done') && (
             <div className="flex flex-col items-center justify-center py-10 gap-4 bg-muted/30 rounded-xl border border-dashed">
               {step === 'done' ? (
@@ -332,9 +243,7 @@ export function FaceSetupPage() {
                   </div>
                   <div className="text-center">
                     <p className="font-semibold text-emerald-700">Face enrolled successfully!</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      You can now time in using face verification.
-                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">You can now time in using face verification.</p>
                   </div>
                   <Button variant="outline" size="sm" onClick={reset}>Enroll Again</Button>
                 </>
@@ -343,27 +252,17 @@ export function FaceSetupPage() {
                   <ScanFace className="w-12 h-12 text-muted-foreground" />
                   <div className="text-center">
                     <p className="font-medium">Ready to enroll</p>
-                    <p className="text-sm text-muted-foreground">
-                      Click below — your browser will ask for camera permission.
-                    </p>
+                    <p className="text-sm text-muted-foreground">Tap below to open your camera.</p>
                   </div>
-                  <Button size="lg" onClick={startEnrollment}>
-                    <Camera className="w-4 h-4 mr-2" /> Start Face Enrollment
+                  <Button size="lg" onClick={startCamera}>
+                    <Camera className="w-4 h-4 mr-2" /> Open Camera
                   </Button>
-
-                  <Alert className="max-w-sm text-left bg-muted/50 border-muted-foreground/20">
-                    <Info className="h-4 w-4" />
-                    <AlertDescription className="text-xs text-muted-foreground">
-                      Allow camera access when prompted. If nothing happens, make sure you
-                      are opening the app over HTTPS in a regular browser tab (not a preview frame).
-                    </AlertDescription>
-                  </Alert>
                 </>
               )}
             </div>
           )}
 
-          {/* ── Requesting camera permission ────────────────────────────── */}
+          {/* Requesting permission */}
           {step === 'requesting-permission' && (
             <div className="flex flex-col items-center justify-center py-10 gap-3 bg-muted/30 rounded-xl border">
               <Camera className="w-10 h-10 text-primary animate-pulse" />
@@ -374,21 +273,16 @@ export function FaceSetupPage() {
             </div>
           )}
 
-          {/* ── Loading face detection models ───────────────────────────── */}
-          {step === 'loading-models' && (
+          {/* Uploading */}
+          {step === 'uploading' && (
             <div className="flex flex-col items-center justify-center py-10 gap-4 bg-muted/30 rounded-xl border">
               <Loader2 className="w-10 h-10 text-primary animate-spin" />
-              <p className="font-medium">Loading face detection…</p>
-              <div className="w-48">
-                <Progress value={modelProgress} className="h-1.5" />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                First load downloads ~6 MB — subsequent loads are instant.
-              </p>
+              <p className="font-medium">Enrolling your face…</p>
+              <p className="text-xs text-muted-foreground">Securely processing via Luxand.cloud</p>
             </div>
           )}
 
-          {/* ── Error ───────────────────────────────────────────────────── */}
+          {/* Error */}
           {step === 'error' && (
             <div className="flex flex-col items-center justify-center py-8 gap-3 bg-destructive/5 rounded-xl border border-destructive/20">
               <AlertCircle className="w-10 h-10 text-destructive" />

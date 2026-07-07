@@ -1,2 +1,4 @@
 - [ClinicalFlow arch](clinicalflow-arch.md) — JWT Bearer auth (cookies fail in Replit iframe); token in localStorage; Bearer header on every request
 - [Orval params collision fix](orval-params-collision.md) — endpoints with BOTH path params AND query params collide; fix by moving path param to query
+- [Luxand face recognition](luxand-integration.md) — cloud-based face recog replaces face-api.js; enrollment stored as luxandPersonUuid; all ML server-side
+- [Face verification token pattern](face-verification-token.md) — one-time UUID token (5-min TTL, user-bound) issued by /verify-face, consumed by /time-in to prevent biometric bypass

@@ -8,12 +8,6 @@ import { useRoute, Link } from 'wouter';
 import { getDistance } from 'geolib';
 import { useGetSchedule, useRecordTimeIn, useGetMyFaceDescriptor } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
-import {
-  loadFaceApiModels,
-  detectFaceDescriptor,
-  descriptorDistance,
-  FACE_MATCH_THRESHOLD,
-} from '@/lib/face-detection';
 
 type Step = 'idle' | 'gps-checking' | 'gps-ok' | 'gps-error' | 'face-loading' | 'face-scanning' | 'face-ok' | 'face-error' | 'face-no-match' | 'submitting' | 'done' | 'submit-error';
 
@@ -46,6 +40,7 @@ export function TimeInSimulatorPage() {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [faceError, setFaceError] = useState<string | null>(null);
   const [faceDetected, setFaceDetected] = useState(false);
+  const [faceVerificationToken, setFaceVerificationToken] = useState<string | null>(null);
   const [timeInAt, setTimeInAt] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -62,9 +57,6 @@ export function TimeInSimulatorPage() {
   const hospitalLng = (schedule as { hospital?: { longitude?: number } } | undefined)?.hospital?.longitude ?? 0;
 
   const isEnrolled = faceData?.enrolled === true;
-  const enrolledDescriptor: number[] | null = faceData?.descriptor
-    ? (faceData.descriptor as number[])
-    : null;
 
   // ── GPS verification ──────────────────────────────────────────────────────
   const verifyGps = useCallback(() => {
@@ -131,67 +123,65 @@ export function TimeInSimulatorPage() {
     processingRef.current = false;
   }, []);
 
-  // ── Face identity confirmation ────────────────────────────────────────────
-  const confirmFace = useCallback((detectedDescriptor: number[], enrolled: number[]) => {
-    stopCamera();
-    const distance = descriptorDistance(detectedDescriptor, enrolled);
-    if (distance > FACE_MATCH_THRESHOLD) {
-      setFaceDetected(false);
-      setFaceError(
-        `Face did not match your enrolled profile (distance: ${distance.toFixed(3)}, required ≤ ${FACE_MATCH_THRESHOLD}). Please try again or re-enroll.`,
-      );
-      setStep('face-no-match');
+  // ── Server-side face verification via Luxand.cloud ───────────────────────
+  const captureAndVerify = useCallback(async () => {
+    const vid = videoRef.current;
+    if (!vid || vid.readyState < 2) {
+      setFaceError('Camera is not ready. Please wait a moment and try again.');
       return;
     }
-    setStep('submitting');
-    setSubmitError(null);
-  }, [stopCamera]);
 
-  // ── Face scan detection loop ──────────────────────────────────────────────
-  const startDetection = useCallback((enrolled: number[]) => {
-    confirmingRef.current = false;
-    intervalRef.current = setInterval(async () => {
-      if (confirmingRef.current || processingRef.current) return;
-      const vid = videoRef.current;
-      if (!vid || vid.readyState < 2) return;
+    setFaceDetected(true); // show "verifying…" overlay
 
-      processingRef.current = true;
-      try {
-        const descriptor = await detectFaceDescriptor(vid);
-        if (descriptor && !confirmingRef.current) {
-          confirmingRef.current = true;
-          clearInterval(intervalRef.current!);
-          intervalRef.current = null;
-          setFaceDetected(true);
-          setTimeout(() => confirmFace(descriptor, enrolled), 800);
-        }
-      } catch {
-        // silent — keep trying
-      } finally {
-        processingRef.current = false;
+    const canvas = document.createElement('canvas');
+    canvas.width  = vid.videoWidth  || 640;
+    canvas.height = vid.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { setFaceError('Canvas not supported.'); setFaceDetected(false); return; }
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(vid, 0, 0);
+    const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+
+    stopCamera();
+
+    try {
+      const res = await fetch('/api/attendance/verify-face', {
+        method:  'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('authToken')
+            ? { Authorization: `Bearer ${localStorage.getItem('authToken')}` }
+            : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ image: base64 }),
+      });
+      const data = await res.json() as { verified?: boolean; error?: string; probability?: number };
+
+      if (!res.ok) throw new Error(data.error ?? `Server error ${res.status}`);
+
+      if (data.verified && data.verificationToken) {
+        setFaceVerificationToken(data.verificationToken as string);
+        setStep('submitting');
+        setSubmitError(null);
+      } else {
+        setFaceDetected(false);
+        setFaceError('Face did not match your enrolled profile. Please try again or re-enroll your face.');
+        setStep('face-no-match');
       }
-    }, 300);
-  }, [confirmFace]);
+    } catch (err) {
+      setFaceDetected(false);
+      setFaceError(err instanceof Error ? err.message : 'Verification failed. Please try again.');
+      setStep('face-error');
+    }
+  }, [stopCamera]);
 
   // ── Face scan flow ────────────────────────────────────────────────────────
   const startFaceScan = useCallback(async () => {
     setStep('face-loading');
     setFaceError(null);
     setFaceDetected(false);
-
-    if (!enrolledDescriptor) {
-      setFaceError('No enrolled face descriptor found. Please enroll your face first.');
-      setStep('face-error');
-      return;
-    }
-
-    try {
-      await loadFaceApiModels();
-    } catch {
-      setFaceError('Failed to load face detection. Check your internet connection.');
-      setStep('face-error');
-      return;
-    }
 
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -208,7 +198,6 @@ export function TimeInSimulatorPage() {
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
             videoRef.current.play().catch(() => {/* autoplay may be blocked */});
-            startDetection(enrolledDescriptor);
           }
         });
       });
@@ -227,7 +216,7 @@ export function TimeInSimulatorPage() {
       }
       setStep('face-error');
     }
-  }, [enrolledDescriptor, startDetection]);
+  }, []);
 
   // Submit when step transitions to 'submitting'
   useEffect(() => {
@@ -239,9 +228,9 @@ export function TimeInSimulatorPage() {
           studentLatitude: gpsResult?.latitude,
           studentLongitude: gpsResult?.longitude,
           gpsVerified: true,
-          faceVerified: true,
+          faceVerificationToken: faceVerificationToken ?? undefined,
           livenessVerified: true,
-        },
+        } as Parameters<typeof recordTimeIn.mutate>[0]['data'],
       },
       {
         onSuccess: () => {
@@ -267,6 +256,7 @@ export function TimeInSimulatorPage() {
     setGpsError(null);
     setFaceError(null);
     setFaceDetected(false);
+    setFaceVerificationToken(null);
     setTimeInAt(null);
     setSubmitError(null);
   }, [stopCamera]);
@@ -443,9 +433,9 @@ export function TimeInSimulatorPage() {
                   <>
                     <Camera className="w-12 h-12 text-primary animate-pulse" />
                     <div>
-                      <h3 className="font-semibold text-lg">Preparing Camera</h3>
+                      <h3 className="font-semibold text-lg">Opening Camera</h3>
                       <p className="text-sm text-muted-foreground mt-1">
-                        Loading face detection models…
+                        Allow camera access when prompted…
                       </p>
                     </div>
                   </>
@@ -453,8 +443,8 @@ export function TimeInSimulatorPage() {
 
                 {step === 'face-scanning' && (
                   <div className="w-full space-y-3">
-                    <p className="text-sm font-medium">
-                      {faceDetected ? '✅ Face detected — verifying…' : 'Look directly at the camera'}
+                    <p className="text-sm font-medium text-center">
+                      {faceDetected ? '⏳ Verifying with server…' : 'Centre your face, then tap Verify'}
                     </p>
                     <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black border-2 border-primary">
                       <video
@@ -466,18 +456,23 @@ export function TimeInSimulatorPage() {
                       />
                       {!faceDetected && (
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                          <div className="w-40 h-52 border-2 border-primary/60 rounded-full opacity-60" />
+                          <div className="w-40 h-52 border-2 border-white/60 rounded-full opacity-60" />
                         </div>
                       )}
                       {faceDetected && (
-                        <div className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center">
-                          <CheckCircle2 className="w-16 h-16 text-emerald-400" />
+                        <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                          <Loader2 className="w-16 h-16 text-white animate-spin" />
                         </div>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    {!faceDetected && (
+                      <Button className="w-full gap-2" onClick={captureAndVerify}>
+                        <ScanFace className="w-4 h-4" /> Capture &amp; Verify Face
+                      </Button>
+                    )}
+                    <p className="text-xs text-muted-foreground text-center">
                       <ScanFace className="w-3 h-3 inline mr-1" />
-                      Face verification runs on-device — no images are uploaded
+                      Verified securely via Luxand.cloud
                     </p>
                   </div>
                 )}

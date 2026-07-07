@@ -12,7 +12,13 @@ import { requireAuth, requireRole } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
 
-// ── Face descriptor (enrollment) ─────────────────────────────────────────────
+// ── Face enrollment (Luxand.cloud) ───────────────────────────────────────────
+
+import {
+  createPerson,
+  addPhotoToPerson,
+  deletePerson,
+} from "../lib/luxand.js";
 
 router.get("/students/me/face-descriptor", requireAuth, requireRole("student"), async (req, res): Promise<void> => {
   const [profile] = await db
@@ -26,22 +32,30 @@ router.get("/students/me/face-descriptor", requireAuth, requireRole("student"), 
   }
 
   res.json({
-    enrolled: !!profile.faceDescriptor,
-    descriptor: profile.faceDescriptor ?? null,
+    enrolled: !!profile.luxandPersonUuid,
+    descriptor: null, // descriptor is now managed server-side via Luxand
   });
 });
 
-router.post("/students/me/face-descriptor", requireAuth, requireRole("student"), async (req, res): Promise<void> => {
-  const { descriptor } = req.body as { descriptor?: unknown };
+/**
+ * POST /api/students/me/face-enroll
+ * Body: { image: string }  — base64-encoded JPEG (no data-URL prefix)
+ *
+ * Enrolls or re-enrolls the student's face using Luxand.cloud.
+ * If the student already has a Luxand person UUID, the old entry is deleted
+ * and a fresh one is created so the student gets a clean reference photo.
+ */
+router.post("/students/me/face-enroll", requireAuth, requireRole("student"), async (req, res): Promise<void> => {
+  const { image } = req.body as { image?: string };
 
-  // Accept either 128-element (face-api.js legacy) or 1434-element (MediaPipe) descriptors
-  const VALID_LENGTHS = [128, 1434];
-  if (
-    !Array.isArray(descriptor) ||
-    !VALID_LENGTHS.includes(descriptor.length) ||
-    descriptor.some((v) => typeof v !== "number")
-  ) {
-    res.status(400).json({ error: `Invalid descriptor: must be an array of ${VALID_LENGTHS.join(" or ")} numbers` });
+  if (!image || typeof image !== "string") {
+    res.status(400).json({ error: "image (base64 JPEG) is required" });
+    return;
+  }
+
+  const imageBuffer = Buffer.from(image, "base64");
+  if (imageBuffer.length < 1000) {
+    res.status(400).json({ error: "Image is too small or malformed" });
     return;
   }
 
@@ -55,12 +69,30 @@ router.post("/students/me/face-descriptor", requireAuth, requireRole("student"),
     return;
   }
 
-  await db
-    .update(studentProfilesTable)
-    .set({ faceDescriptor: descriptor as number[] })
-    .where(eq(studentProfilesTable.userId, req.session.userId!));
+  try {
+    // Delete old Luxand person on re-enroll so the student starts clean
+    if (profile.luxandPersonUuid) {
+      await deletePerson(profile.luxandPersonUuid).catch(() => {/* ignore – may already be deleted */});
+    }
 
-  res.json({ enrolled: true, descriptor });
+    // Create a new Luxand person keyed by student number for traceability
+    const personName = `${profile.studentNumber ?? req.session.userId}`;
+    const personUuid = await createPerson(personName);
+
+    // Add the captured photo as the reference face
+    await addPhotoToPerson(personUuid, imageBuffer);
+
+    // Persist the UUID
+    await db
+      .update(studentProfilesTable)
+      .set({ luxandPersonUuid: personUuid })
+      .where(eq(studentProfilesTable.userId, req.session.userId!));
+
+    res.json({ enrolled: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(502).json({ error: `Face enrollment failed: ${msg}` });
+  }
 });
 
 // ── Student list ──────────────────────────────────────────────────────────────
