@@ -5,14 +5,13 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { MapPin, ScanFace, Map as MapIcon, Fingerprint, CheckCircle2, AlertCircle, Camera, RefreshCw, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRoute, Link } from 'wouter';
-import type { FaceLandmarker as FaceLandmarkerType } from '@mediapipe/tasks-vision';
 import { getDistance } from 'geolib';
 import { useGetSchedule, useRecordTimeIn, useGetMyFaceDescriptor } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
 import {
-  getFaceLandmarker,
-  extractDescriptor,
-  descriptorSimilarity,
+  loadFaceApiModels,
+  detectFaceDescriptor,
+  descriptorDistance,
   FACE_MATCH_THRESHOLD,
 } from '@/lib/face-detection';
 
@@ -52,8 +51,9 @@ export function TimeInSimulatorPage() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const confirmingRef = useRef(false);
+  const processingRef = useRef(false);
 
   const hospitalRadius = (schedule as { attendanceRadius?: number } | undefined)?.attendanceRadius
     ?? (schedule as { hospital?: { attendanceRadius?: number } } | undefined)?.hospital?.attendanceRadius
@@ -115,35 +115,11 @@ export function TimeInSimulatorPage() {
     );
   }, [hospitalLat, hospitalLng, hospitalRadius]);
 
-  // ── Face scan ─────────────────────────────────────────────────────────────
-  const startDetection = useCallback((landmarker: FaceLandmarkerType, descriptor: number[]) => {
-    confirmingRef.current = false;
-    detectionIntervalRef.current = setInterval(() => {
-      if (confirmingRef.current) return;
-      if (!videoRef.current || videoRef.current.readyState < 2) return;
-      try {
-        const result = landmarker.detectForVideo(videoRef.current, performance.now());
-        if (result.faceLandmarks && result.faceLandmarks.length > 0) {
-          if (confirmingRef.current) return;
-          confirmingRef.current = true;
-          clearInterval(detectionIntervalRef.current!);
-          detectionIntervalRef.current = null;
-          setFaceDetected(true);
-          const detected = extractDescriptor(result.faceLandmarks[0]);
-          setTimeout(() => confirmFace(detected, descriptor), 800);
-        }
-      } catch {
-        // silent — keep trying
-      }
-    }, 100);
-  // confirmFace declared below; passed as arg to avoid stale closure
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  // ── Stop camera ───────────────────────────────────────────────────────────
   const stopCamera = useCallback(() => {
-    if (detectionIntervalRef.current) {
-      clearInterval(detectionIntervalRef.current);
-      detectionIntervalRef.current = null;
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
@@ -152,15 +128,17 @@ export function TimeInSimulatorPage() {
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    processingRef.current = false;
   }, []);
 
+  // ── Face identity confirmation ────────────────────────────────────────────
   const confirmFace = useCallback((detectedDescriptor: number[], enrolled: number[]) => {
     stopCamera();
-    const similarity = descriptorSimilarity(detectedDescriptor, enrolled);
-    if (similarity < FACE_MATCH_THRESHOLD) {
+    const distance = descriptorDistance(detectedDescriptor, enrolled);
+    if (distance > FACE_MATCH_THRESHOLD) {
       setFaceDetected(false);
       setFaceError(
-        `Face did not match your enrolled profile (similarity: ${similarity.toFixed(3)}, required ≥ ${FACE_MATCH_THRESHOLD}). Please try again or re-enroll.`,
+        `Face did not match your enrolled profile (distance: ${distance.toFixed(3)}, required ≤ ${FACE_MATCH_THRESHOLD}). Please try again or re-enroll.`,
       );
       setStep('face-no-match');
       return;
@@ -169,6 +147,33 @@ export function TimeInSimulatorPage() {
     setSubmitError(null);
   }, [stopCamera]);
 
+  // ── Face scan detection loop ──────────────────────────────────────────────
+  const startDetection = useCallback((enrolled: number[]) => {
+    confirmingRef.current = false;
+    intervalRef.current = setInterval(async () => {
+      if (confirmingRef.current || processingRef.current) return;
+      const vid = videoRef.current;
+      if (!vid || vid.readyState < 2) return;
+
+      processingRef.current = true;
+      try {
+        const descriptor = await detectFaceDescriptor(vid);
+        if (descriptor && !confirmingRef.current) {
+          confirmingRef.current = true;
+          clearInterval(intervalRef.current!);
+          intervalRef.current = null;
+          setFaceDetected(true);
+          setTimeout(() => confirmFace(descriptor, enrolled), 800);
+        }
+      } catch {
+        // silent — keep trying
+      } finally {
+        processingRef.current = false;
+      }
+    }, 300);
+  }, [confirmFace]);
+
+  // ── Face scan flow ────────────────────────────────────────────────────────
   const startFaceScan = useCallback(async () => {
     setStep('face-loading');
     setFaceError(null);
@@ -180,9 +185,8 @@ export function TimeInSimulatorPage() {
       return;
     }
 
-    let landmarker: FaceLandmarkerType;
     try {
-      landmarker = await getFaceLandmarker();
+      await loadFaceApiModels();
     } catch {
       setFaceError('Failed to load face detection. Check your internet connection.');
       setStep('face-error');
@@ -204,7 +208,7 @@ export function TimeInSimulatorPage() {
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
             videoRef.current.play().catch(() => {/* autoplay may be blocked */});
-            startDetection(landmarker, enrolledDescriptor);
+            startDetection(enrolledDescriptor);
           }
         });
       });
@@ -539,23 +543,9 @@ export function TimeInSimulatorPage() {
                     <div>
                       <h3 className="font-semibold text-lg text-emerald-700">Verified &amp; Timed In</h3>
                       <p className="text-sm text-muted-foreground mt-1">
-                        {timeInAt} · You are Present
+                        {timeInAt ? `Recorded at ${timeInAt}` : 'Attendance saved.'}
                       </p>
                     </div>
-                    <div className="flex gap-3 w-full text-xs text-left bg-background p-3 rounded border">
-                      <div className="flex items-center gap-1 text-emerald-600">
-                        <CheckCircle2 className="w-3 h-3" /> Location Match
-                      </div>
-                      <div className="flex items-center gap-1 text-emerald-600">
-                        <CheckCircle2 className="w-3 h-3" /> Face Match
-                      </div>
-                      <div className="flex items-center gap-1 text-emerald-600">
-                        <CheckCircle2 className="w-3 h-3" /> Saved to Server
-                      </div>
-                    </div>
-                    <Button variant="ghost" size="sm" onClick={reset} className="text-muted-foreground">
-                      Reset
-                    </Button>
                   </>
                 )}
               </div>
@@ -567,7 +557,8 @@ export function TimeInSimulatorPage() {
   );
 }
 
-// ── Step indicator helper ───────────────────────────────────────────────────
+// ── Helper component ──────────────────────────────────────────────────────────
+
 function StepIndicator({
   icon,
   label,
@@ -579,20 +570,24 @@ function StepIndicator({
   status: 'pending' | 'active' | 'done' | 'error';
   detail?: string;
 }) {
-  const colors = {
+  const colours = {
     pending: 'text-muted-foreground bg-muted',
-    active: 'text-primary bg-primary/10 animate-pulse',
-    done: 'text-emerald-600 bg-emerald-50',
-    error: 'text-destructive bg-destructive/10',
+    active:  'text-primary bg-primary/10 animate-pulse',
+    done:    'text-emerald-600 bg-emerald-100',
+    error:   'text-destructive bg-destructive/10',
   };
   return (
     <div className="flex items-center gap-3">
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${colors[status]}`}>
-        {status === 'done' ? <CheckCircle2 className="w-4 h-4" /> : status === 'error' ? <AlertCircle className="w-4 h-4" /> : icon}
+      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${colours[status]}`}>
+        {status === 'done'
+          ? <CheckCircle2 className="w-4 h-4" />
+          : status === 'error'
+          ? <AlertCircle className="w-4 h-4" />
+          : icon}
       </div>
       <div className="text-left">
-        <p className="text-sm font-medium leading-none">{label}</p>
-        {detail && <p className="text-xs text-muted-foreground mt-0.5">{detail}</p>}
+        <div className="text-sm font-medium">{label}</div>
+        {detail && <div className="text-xs text-muted-foreground">{detail}</div>}
       </div>
     </div>
   );

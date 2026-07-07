@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { FaceLandmarker as FaceLandmarkerType } from '@mediapipe/tasks-vision';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +11,7 @@ import {
 import { useGetMyFaceDescriptor, useSaveMyFaceDescriptor } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
 import {
-  getFaceLandmarker, resetFaceLandmarker, prefetchFaceLandmarker, extractDescriptor,
+  loadFaceApiModels, resetFaceApiModels, prefetchFaceApiModels, detectFaceDescriptor,
 } from '@/lib/face-detection';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -41,17 +40,18 @@ export function FaceSetupPage() {
   const [error, setError]         = useState<string | null>(null);
   const [modelProgress, setModelProgress] = useState(0);
 
-  const videoRef          = useRef<HTMLVideoElement>(null);
-  const streamRef         = useRef<MediaStream | null>(null);
-  const intervalRef       = useRef<ReturnType<typeof setInterval> | null>(null);
+  const videoRef            = useRef<HTMLVideoElement>(null);
+  const streamRef           = useRef<MediaStream | null>(null);
+  const intervalRef         = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const saveTimeoutRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const confirmingRef     = useRef(false);
-  const enrollingRef      = useRef(false);   // in-flight guard — prevents double-trigger
-  const rafRef            = useRef<number | null>(null);
+  const saveTimeoutRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const confirmingRef       = useRef(false);
+  const enrollingRef        = useRef(false);
+  const processingRef       = useRef(false);
+  const rafRef              = useRef<number | null>(null);
 
-  // ── Warm the model in the background as soon as the page mounts ─────────
-  useEffect(() => { prefetchFaceLandmarker(); }, []);
+  // ── Warm the models in the background as soon as the page mounts ─────────
+  useEffect(() => { prefetchFaceApiModels(); }, []);
 
   // ── Cleanup on unmount ───────────────────────────────────────────────────
   const stopCamera = useCallback(() => {
@@ -62,6 +62,7 @@ export function FaceSetupPage() {
     if (streamRef.current)           { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     if (videoRef.current)            { videoRef.current.srcObject = null; }
     enrollingRef.current = false;
+    processingRef.current = false;
   }, []);
 
   useEffect(() => () => stopCamera(), [stopCamera]);
@@ -89,41 +90,44 @@ export function FaceSetupPage() {
     );
   }, [stopCamera, saveDescriptor, refetch, toast]);
 
-  // ── Run the landmark detection loop ─────────────────────────────────────
-  const startDetection = useCallback((landmarker: FaceLandmarkerType) => {
+  // ── Run the face detection loop ──────────────────────────────────────────
+  const startDetection = useCallback(() => {
     confirmingRef.current = false;
-    intervalRef.current = setInterval(() => {
-      if (confirmingRef.current) return;
+    intervalRef.current = setInterval(async () => {
+      if (confirmingRef.current || processingRef.current) return;
       const vid = videoRef.current;
       if (!vid || vid.readyState < 2 || vid.paused) return;
+
+      processingRef.current = true;
       try {
-        const result = landmarker.detectForVideo(vid, performance.now());
-        if (result.faceLandmarks?.length) {
-          if (confirmingRef.current) return;
+        const descriptor = await detectFaceDescriptor(vid);
+        if (descriptor && !confirmingRef.current) {
           confirmingRef.current = true;
           clearInterval(intervalRef.current!);
           intervalRef.current = null;
-          const descriptor = extractDescriptor(result.faceLandmarks[0]);
           setStep('face-detected');
-          // Track the timeout so we can cancel it on unmount or reset
           saveTimeoutRef.current = setTimeout(() => {
             saveTimeoutRef.current = null;
             saveEnrollment(descriptor);
           }, 800);
         }
-      } catch { /* keep trying */ }
-    }, 100);
+      } catch {
+        // keep trying
+      } finally {
+        processingRef.current = false;
+      }
+    }, 300);
   }, [saveEnrollment]);
 
   // ── Assign the stream to the <video> once it's in the DOM ───────────────
   const attachStreamAndDetect = useCallback(
-    (stream: MediaStream, landmarker: FaceLandmarkerType) => {
+    (stream: MediaStream) => {
       const tryAttach = () => {
         const vid = videoRef.current;
         if (!vid) { rafRef.current = requestAnimationFrame(tryAttach); return; }
         vid.srcObject = stream;
         vid.play().catch(() => { /* autoplay policy — playsInline+muted still works */ });
-        startDetection(landmarker);
+        startDetection();
       };
       rafRef.current = requestAnimationFrame(tryAttach);
     },
@@ -132,7 +136,6 @@ export function FaceSetupPage() {
 
   // ── Main enrollment flow ─────────────────────────────────────────────────
   const startEnrollment = useCallback(async () => {
-    // In-flight guard — ignore double-taps or rapid re-triggers
     if (enrollingRef.current) return;
     enrollingRef.current = true;
 
@@ -162,8 +165,6 @@ export function FaceSetupPage() {
         },
       });
     } catch (err) {
-      // Prefer DOMException.name for reliable cross-browser matching;
-      // fall back to message text for environments that don't set name.
       const name = err instanceof DOMException ? err.name : '';
       const msg  = err instanceof Error ? err.message : String(err);
       if (name === 'NotAllowedError' || /Permission|denied/i.test(msg)) {
@@ -192,31 +193,20 @@ export function FaceSetupPage() {
     // Step 2 – load models (may already be cached from prefetch) ─────────
     setStep('loading-models');
 
-    // Animate a progress bar so it doesn't look frozen; tracked in a ref
-    // so the unmount / stopCamera cleanup can cancel it.
     setModelProgress(0);
     progressIntervalRef.current = setInterval(() => {
-      setModelProgress(p => (p >= 85 ? 85 : p + 5));
-    }, 250);
+      setModelProgress(p => (p >= 85 ? 85 : p + 8));
+    }, 200);
 
-    let landmarker: FaceLandmarkerType;
     try {
-      landmarker = await getFaceLandmarker();
+      await loadFaceApiModels();
     } catch (err) {
-      // stopCamera() clears progressIntervalRef + stream
       stopCamera();
-      resetFaceLandmarker();   // clear broken singleton so next attempt retries fresh
+      resetFaceApiModels();
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('Asset not reachable')) {
-        setError(
-          'Face detection assets could not be loaded (they may still be uploading). ' +
-          'Try refreshing the page.',
-        );
-      } else {
-        setError(`Model load failed: ${msg}`);
-      }
+      setError(`Model load failed: ${msg}`);
       setStep('error');
-      return;  // enrollingRef already reset by stopCamera()
+      return;
     }
 
     if (progressIntervalRef.current) {
@@ -227,8 +217,8 @@ export function FaceSetupPage() {
 
     // Step 3 – activate camera view & run detection ───────────────────────
     setStep('scanning');
-    attachStreamAndDetect(stream, landmarker);
-  }, [attachStreamAndDetect]);
+    attachStreamAndDetect(stream);
+  }, [attachStreamAndDetect, stopCamera]);
 
   // ── Reset to idle ────────────────────────────────────────────────────────
   const reset = useCallback(() => {
@@ -299,8 +289,7 @@ export function FaceSetupPage() {
 
         <CardContent className="space-y-4">
 
-          {/* The video element is always mounted so videoRef is never null.
-              It is visually hidden until we're in the scanning step. */}
+          {/* The video element is always mounted so videoRef is never null. */}
           <div className={isScanning ? 'block' : 'hidden'}>
             <div className="space-y-3">
               <p className="text-sm font-medium text-center">
@@ -317,13 +306,11 @@ export function FaceSetupPage() {
                   muted
                   className="w-full h-full object-cover scale-x-[-1]"
                 />
-                {/* Face oval guide */}
                 {step === 'scanning' && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="w-44 h-56 border-2 border-primary/70 rounded-full opacity-70 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
                   </div>
                 )}
-                {/* Captured flash */}
                 {(step === 'face-detected' || step === 'saving') && (
                   <div className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center">
                     <CheckCircle2 className="w-20 h-20 text-emerald-400 drop-shadow-lg" />
@@ -399,7 +386,7 @@ export function FaceSetupPage() {
                 <Progress value={modelProgress} className="h-1.5" />
               </div>
               <p className="text-xs text-muted-foreground">
-                First load downloads ~36 MB — subsequent loads are instant.
+                First load downloads ~6 MB — subsequent loads are instant.
               </p>
             </div>
           )}
