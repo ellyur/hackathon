@@ -34,12 +34,14 @@ router.get("/students/me/face-descriptor", requireAuth, requireRole("student"), 
 router.post("/students/me/face-descriptor", requireAuth, requireRole("student"), async (req, res): Promise<void> => {
   const { descriptor } = req.body as { descriptor?: unknown };
 
+  // Accept either 128-element (face-api.js legacy) or 1434-element (MediaPipe) descriptors
+  const VALID_LENGTHS = [128, 1434];
   if (
     !Array.isArray(descriptor) ||
-    descriptor.length !== 128 ||
+    !VALID_LENGTHS.includes(descriptor.length) ||
     descriptor.some((v) => typeof v !== "number")
   ) {
-    res.status(400).json({ error: "Invalid descriptor: must be an array of 128 numbers" });
+    res.status(400).json({ error: `Invalid descriptor: must be an array of ${VALID_LENGTHS.join(" or ")} numbers` });
     return;
   }
 
