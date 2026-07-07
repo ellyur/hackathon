@@ -1,88 +1,132 @@
 import { Router, type IRouter } from "express";
-import { hospitals, departments, randomUUID } from "../lib/mockData.js";
+import { db, hospitalsTable, departmentsTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
+import { randomUUID } from "crypto";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
 
 router.get("/hospitals", requireAuth, async (_req, res): Promise<void> => {
-  const result = hospitals.map((h) => ({
-    ...h,
-    departments: departments.filter((d) => d.hospitalId === h.id),
-  }));
-  res.json(result);
+  const hospitals = await db
+    .select()
+    .from(hospitalsTable)
+    .where(eq(hospitalsTable.isActive, true));
+
+  const withDepts = await Promise.all(
+    hospitals.map(async (h) => {
+      const departments = await db
+        .select()
+        .from(departmentsTable)
+        .where(and(eq(departmentsTable.hospitalId, h.id), eq(departmentsTable.isActive, true)));
+      return { ...h, departments };
+    }),
+  );
+
+  res.json(withDepts);
 });
 
 router.post("/hospitals", requireRole("admin"), async (req, res): Promise<void> => {
   const body = req.body as {
-    name: string; address?: string; contactNumber?: string;
-    latitude?: number; longitude?: number; attendanceRadius?: number; isActive?: boolean;
+    name: string;
+    address?: string;
+    contactNumber?: string;
+    latitude?: number;
+    longitude?: number;
+    attendanceRadius?: number;
   };
   if (!body.name) {
     res.status(400).json({ error: "Hospital name is required" });
     return;
   }
-  const newHospital = {
-    id: randomUUID(),
+
+  const id = randomUUID();
+  await db.insert(hospitalsTable).values({
+    id,
     name: body.name,
     address: body.address ?? "",
     contactNumber: body.contactNumber ?? "",
     latitude: body.latitude ?? 0,
     longitude: body.longitude ?? 0,
     attendanceRadius: body.attendanceRadius ?? 100,
-    isActive: body.isActive ?? true,
-    createdAt: new Date().toISOString(),
-  };
-  hospitals.push(newHospital);
-  res.status(201).json({ ...newHospital, departments: [] });
+    isActive: true,
+  });
+
+  const [hospital] = await db.select().from(hospitalsTable).where(eq(hospitalsTable.id, id));
+  res.status(201).json(hospital);
 });
 
 router.patch("/hospitals/:id", requireRole("admin"), async (req, res): Promise<void> => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const hospital = hospitals.find((h) => h.id === id);
+  const { id } = req.params;
+  const [hospital] = await db.select().from(hospitalsTable).where(eq(hospitalsTable.id, id));
   if (!hospital) {
     res.status(404).json({ error: "Hospital not found" });
     return;
   }
-  const body = req.body as {
-    name?: string; address?: string; contactNumber?: string;
-    latitude?: number; longitude?: number; attendanceRadius?: number; isActive?: boolean;
-  };
-  if (body.name !== undefined) hospital.name = body.name;
-  if (body.address !== undefined) hospital.address = body.address;
-  if (body.contactNumber !== undefined) hospital.contactNumber = body.contactNumber;
-  if (body.latitude !== undefined) hospital.latitude = body.latitude;
-  if (body.longitude !== undefined) hospital.longitude = body.longitude;
-  if (body.attendanceRadius !== undefined) hospital.attendanceRadius = body.attendanceRadius;
-  if (body.isActive !== undefined) hospital.isActive = body.isActive;
-  res.json({ ...hospital, departments: departments.filter((d) => d.hospitalId === id) });
+
+  const body = req.body as Partial<{
+    name: string;
+    address: string;
+    contactNumber: string;
+    latitude: number;
+    longitude: number;
+    attendanceRadius: number;
+    isActive: boolean;
+  }>;
+
+  await db
+    .update(hospitalsTable)
+    .set({
+      ...(body.name !== undefined && { name: body.name }),
+      ...(body.address !== undefined && { address: body.address }),
+      ...(body.contactNumber !== undefined && { contactNumber: body.contactNumber }),
+      ...(body.latitude !== undefined && { latitude: body.latitude }),
+      ...(body.longitude !== undefined && { longitude: body.longitude }),
+      ...(body.attendanceRadius !== undefined && { attendanceRadius: body.attendanceRadius }),
+      ...(body.isActive !== undefined && { isActive: body.isActive }),
+    })
+    .where(eq(hospitalsTable.id, id));
+
+  const [updated] = await db.select().from(hospitalsTable).where(eq(hospitalsTable.id, id));
+  res.json(updated);
 });
 
 router.get("/hospitals/:id/departments", requireAuth, async (req, res): Promise<void> => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  res.json(departments.filter((d) => d.hospitalId === id));
+  const { id } = req.params;
+  const departments = await db
+    .select()
+    .from(departmentsTable)
+    .where(and(eq(departmentsTable.hospitalId, id), eq(departmentsTable.isActive, true)));
+  res.json(departments);
 });
 
 router.post("/hospitals/:id/departments", requireRole("admin"), async (req, res): Promise<void> => {
-  const hospitalId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const hospital = hospitals.find((h) => h.id === hospitalId);
+  const { id: hospitalId } = req.params;
+  const [hospital] = await db
+    .select()
+    .from(hospitalsTable)
+    .where(eq(hospitalsTable.id, hospitalId));
   if (!hospital) {
     res.status(404).json({ error: "Hospital not found" });
     return;
   }
-  const body = req.body as { name: string; code?: string; isActive?: boolean };
+
+  const body = req.body as { name: string; code?: string };
   if (!body.name) {
     res.status(400).json({ error: "Department name is required" });
     return;
   }
-  const newDept = {
-    id: randomUUID(),
+
+  const deptId = randomUUID();
+  await db.insert(departmentsTable).values({
+    id: deptId,
     hospitalId,
     name: body.name,
     code: body.code ?? "",
-    isActive: body.isActive ?? true,
-  };
-  departments.push(newDept);
-  res.status(201).json(newDept);
+    isActive: true,
+  });
+
+  const [dept] = await db.select().from(departmentsTable).where(eq(departmentsTable.id, deptId));
+  res.status(201).json(dept);
 });
 
 export default router;

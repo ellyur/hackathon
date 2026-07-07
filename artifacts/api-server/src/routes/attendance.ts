@@ -1,239 +1,291 @@
 import { Router, type IRouter } from "express";
 import {
-  attendance, schedules, notifications, randomUUID,
-  buildAttendanceResponse, type AttendanceStatus,
-} from "../lib/mockData.js";
+  db,
+  attendanceTable,
+  schedulesTable,
+  scheduleStudentsTable,
+  auditLogsTable,
+  notificationsTable,
+} from "@workspace/db";
+import { eq, and, desc } from "drizzle-orm";
+import { randomUUID } from "crypto";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
 
 router.get("/attendance", requireAuth, async (req, res): Promise<void> => {
-  const { scheduleId, studentId, status } = req.query as {
-    scheduleId?: string; studentId?: string; status?: string;
+  const { scheduleId, studentId } = req.query as {
+    scheduleId?: string;
+    studentId?: string;
   };
-  const currentRole = req.session.role!;
-  const currentUserId = req.session.userId!;
+  const session = req.session;
 
-  let result = attendance;
-  if (currentRole === "student") result = result.filter((a) => a.studentId === currentUserId);
-  else {
-    if (studentId) result = result.filter((a) => a.studentId === studentId);
+  const conditions = [];
+
+  if (session.role === "student") {
+    // Students see only their own records
+    conditions.push(eq(attendanceTable.studentId, session.userId!));
+  } else if (session.role === "ci") {
+    // CIs see only attendance for schedules they are assigned to
+    conditions.push(eq(attendanceTable.ciId, session.userId!));
+    if (studentId) conditions.push(eq(attendanceTable.studentId, studentId));
+  } else {
+    // Admin / Scheduler — full access with optional filters
+    if (studentId) conditions.push(eq(attendanceTable.studentId, studentId));
   }
-  if (scheduleId) result = result.filter((a) => a.scheduleId === scheduleId);
-  if (status) result = result.filter((a) => a.status === status);
 
-  res.json(result.map(buildAttendanceResponse));
+  if (scheduleId) conditions.push(eq(attendanceTable.scheduleId, scheduleId));
+
+  const records = conditions.length
+    ? await db
+        .select()
+        .from(attendanceTable)
+        .where(and(...conditions))
+        .orderBy(desc(attendanceTable.createdAt))
+    : await db
+        .select()
+        .from(attendanceTable)
+        .orderBy(desc(attendanceTable.createdAt));
+
+  res.json(records);
 });
 
-router.post("/attendance/time-in", requireAuth, async (req, res): Promise<void> => {
+router.post("/attendance/time-in", requireRole("student"), async (req, res): Promise<void> => {
   const body = req.body as {
-    scheduleId: string; studentLatitude?: number; studentLongitude?: number;
-    gpsVerified: boolean; faceVerified: boolean; livenessVerified: boolean; deviceInfo?: string;
+    scheduleId: string;
+    studentLatitude?: number;
+    studentLongitude?: number;
+    gpsVerified?: boolean;
+    faceVerified?: boolean;
+    livenessVerified?: boolean;
+    gpsAccuracy?: number;
   };
+
   if (!body.scheduleId) {
     res.status(400).json({ error: "scheduleId is required" });
     return;
   }
 
-  const studentId = req.session.userId!;
-  const schedule = schedules.find((s) => s.id === body.scheduleId);
+  const [schedule] = await db
+    .select()
+    .from(schedulesTable)
+    .where(eq(schedulesTable.id, body.scheduleId));
   if (!schedule) {
     res.status(404).json({ error: "Schedule not found" });
     return;
   }
 
-  if (!body.gpsVerified) {
-    res.status(400).json({ error: "You are outside the attendance radius for this hospital" });
-    return;
-  }
-  if (!body.faceVerified || !body.livenessVerified) {
-    res.status(400).json({ error: "Face verification failed" });
-    return;
-  }
-
-  // Determine if late
-  const timeInNow = new Date();
-  const [sh, sm] = schedule.startTime.split(":").map(Number);
-  const scheduleStart = new Date();
-  scheduleStart.setHours(sh, sm, 0, 0);
-  const diffMin = (timeInNow.getTime() - scheduleStart.getTime()) / 60000;
-  const isLate = diffMin > schedule.gracePeriodMin;
-
-  // Check if existing record
-  let existing = attendance.find((a) => a.scheduleId === body.scheduleId && a.studentId === studentId);
-  if (existing) {
-    existing.timeIn = timeInNow.toISOString();
-    existing.status = isLate ? "late" : "present";
-    existing.gpsVerified = body.gpsVerified;
-    existing.faceVerified = body.faceVerified;
-    existing.livenessVerified = body.livenessVerified;
-    existing.method = "biometric";
-    res.json(buildAttendanceResponse(existing));
+  // Verify the student is actually assigned to this schedule
+  const [assignment] = await db
+    .select()
+    .from(scheduleStudentsTable)
+    .where(
+      and(
+        eq(scheduleStudentsTable.scheduleId, body.scheduleId),
+        eq(scheduleStudentsTable.studentId, req.session.userId!),
+      ),
+    );
+  if (!assignment) {
+    res.status(403).json({ error: "You are not assigned to this schedule" });
     return;
   }
 
-  const newRecord = {
-    id: randomUUID(),
+  // Biometric verification must be confirmed by the client
+  if (!body.gpsVerified || !body.faceVerified || !body.livenessVerified) {
+    res.status(400).json({ error: "GPS, face, and liveness verification must all pass before time-in" });
+    return;
+  }
+
+  // Determine late status
+  const now = new Date();
+  const [h, m] = schedule.startTime.split(":").map(Number);
+  const dutyStart = new Date(schedule.dutyDate);
+  dutyStart.setHours(h, m, 0, 0);
+  const lateThreshold = new Date(dutyStart.getTime() + schedule.gracePeriodMin * 60 * 1000);
+  const status = now > lateThreshold ? "late" : "present";
+
+  const id = randomUUID();
+  await db.insert(attendanceTable).values({
+    id,
     scheduleId: body.scheduleId,
-    studentId,
-    ciId: schedule.ciId,
-    timeIn: timeInNow.toISOString(),
-    timeOut: null,
-    dutyHours: null,
-    status: (isLate ? "late" : "present") as AttendanceStatus,
-    method: "biometric" as const,
+    studentId: req.session.userId!,
+    timeIn: now,
+    status,
+    method: "biometric",
     studentLatitude: body.studentLatitude ?? null,
     studentLongitude: body.studentLongitude ?? null,
-    gpsVerified: body.gpsVerified,
-    faceVerified: body.faceVerified,
-    livenessVerified: body.livenessVerified,
-    remarks: null,
-    needsMakeup: false,
-    makeupCompleted: false,
-    createdAt: new Date().toISOString(),
-  };
-  attendance.push(newRecord);
-
-  // Notify student
-  notifications.push({
-    id: randomUUID(),
-    userId: studentId,
-    type: "time_in_recorded",
-    title: "Time In Recorded",
-    message: `Your Time In has been recorded at ${timeInNow.toLocaleTimeString()}. Status: ${newRecord.status.toUpperCase()}.`,
-    relatedEntity: "attendance",
-    relatedId: newRecord.id,
-    isRead: false,
-    readAt: null,
-    createdAt: new Date().toISOString(),
+    gpsVerified: body.gpsVerified ?? false,
+    faceVerified: body.faceVerified ?? false,
+    livenessVerified: body.livenessVerified ?? false,
   });
 
-  res.json(buildAttendanceResponse(newRecord));
+  const [record] = await db.select().from(attendanceTable).where(eq(attendanceTable.id, id));
+  res.status(201).json(record);
 });
 
-router.post("/attendance/time-out", requireAuth, async (req, res): Promise<void> => {
-  const body = req.body as {
-    scheduleId: string; studentLatitude?: number; studentLongitude?: number;
-    gpsVerified: boolean; faceVerified: boolean; livenessVerified: boolean; deviceInfo?: string;
-  };
-  if (!body.scheduleId) {
+router.post("/attendance/time-out", requireRole("student"), async (req, res): Promise<void> => {
+  const { scheduleId } = req.body as { scheduleId: string };
+  if (!scheduleId) {
     res.status(400).json({ error: "scheduleId is required" });
     return;
   }
-  if (!body.gpsVerified || !body.faceVerified || !body.livenessVerified) {
-    res.status(400).json({ error: "Verification failed. Cannot record Time Out." });
-    return;
-  }
 
-  const studentId = req.session.userId!;
-  const record = attendance.find((a) => a.scheduleId === body.scheduleId && a.studentId === studentId);
-  if (!record || !record.timeIn) {
-    res.status(400).json({ error: "No active Time In record found" });
+  const [record] = await db
+    .select()
+    .from(attendanceTable)
+    .where(
+      and(
+        eq(attendanceTable.scheduleId, scheduleId),
+        eq(attendanceTable.studentId, req.session.userId!),
+      ),
+    );
+
+  if (!record) {
+    res.status(404).json({ error: "No time-in record found" });
     return;
   }
 
   const now = new Date();
-  record.timeOut = now.toISOString();
-  const timeInDate = new Date(record.timeIn);
-  record.dutyHours = Math.round(((now.getTime() - timeInDate.getTime()) / 3600000) * 100) / 100;
+  const dutyHours = record.timeIn
+    ? Math.round(((now.getTime() - record.timeIn.getTime()) / 3600000) * 100) / 100
+    : null;
 
-  notifications.push({
-    id: randomUUID(),
-    userId: studentId,
-    type: "time_out_recorded",
-    title: "Time Out Recorded",
-    message: `Your Time Out has been recorded. Duty hours: ${record.dutyHours.toFixed(2)} hours.`,
-    relatedEntity: "attendance",
-    relatedId: record.id,
-    isRead: false,
-    readAt: null,
-    createdAt: new Date().toISOString(),
-  });
+  await db
+    .update(attendanceTable)
+    .set({ timeOut: now, dutyHours })
+    .where(eq(attendanceTable.id, record.id));
 
-  res.json(buildAttendanceResponse(record));
+  const [updated] = await db
+    .select()
+    .from(attendanceTable)
+    .where(eq(attendanceTable.id, record.id));
+  res.json(updated);
 });
 
-router.post("/attendance/ci-assisted", requireRole("ci", "scheduler", "admin"), async (req, res): Promise<void> => {
-  const body = req.body as {
-    scheduleId: string; studentId: string; status: AttendanceStatus;
-    gpsVerified?: boolean; faceVerified?: boolean; remarks?: string;
-  };
-  if (!body.scheduleId || !body.studentId || !body.status) {
-    res.status(400).json({ error: "Missing required fields" });
-    return;
-  }
+router.post(
+  "/attendance/ci-assisted",
+  requireRole("ci"),
+  async (req, res): Promise<void> => {
+    const body = req.body as {
+      scheduleId: string;
+      studentId: string;
+      status: "present" | "late" | "absent";
+      remarks?: string;
+      gpsVerified?: boolean;
+      faceVerified?: boolean;
+    };
 
-  const existing = attendance.find((a) => a.scheduleId === body.scheduleId && a.studentId === body.studentId);
-  if (existing) {
-    existing.status = body.status;
-    existing.method = "ci_assisted";
-    existing.gpsVerified = body.gpsVerified ?? false;
-    existing.faceVerified = body.faceVerified ?? false;
-    existing.remarks = body.remarks ?? null;
-    if (body.status === "absent") {
-      existing.needsMakeup = true;
+    if (!body.scheduleId || !body.studentId || !body.status) {
+      res.status(400).json({ error: "scheduleId, studentId, and status are required" });
+      return;
     }
-    res.json(buildAttendanceResponse(existing));
-    return;
-  }
 
-  const newRecord = {
-    id: randomUUID(),
-    scheduleId: body.scheduleId,
-    studentId: body.studentId,
-    ciId: req.session.userId!,
-    timeIn: body.status !== "absent" ? new Date().toISOString() : null,
-    timeOut: null,
-    dutyHours: null,
-    status: body.status,
-    method: "ci_assisted" as const,
-    studentLatitude: null,
-    studentLongitude: null,
-    gpsVerified: body.gpsVerified ?? false,
-    faceVerified: body.faceVerified ?? false,
-    livenessVerified: false,
-    remarks: body.remarks ?? null,
-    needsMakeup: body.status === "absent",
-    makeupCompleted: false,
-    createdAt: new Date().toISOString(),
-  };
-  attendance.push(newRecord);
-  res.json(buildAttendanceResponse(newRecord));
-});
+    // Verify this CI is assigned to the schedule
+    const [schedule] = await db
+      .select()
+      .from(schedulesTable)
+      .where(and(eq(schedulesTable.id, body.scheduleId), eq(schedulesTable.ciId, req.session.userId!)));
+    if (!schedule) {
+      res.status(403).json({ error: "You are not the CI for this schedule" });
+      return;
+    }
 
-router.patch("/attendance/:id/manual", requireRole("ci", "scheduler", "admin"), async (req, res): Promise<void> => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const record = attendance.find((a) => a.id === id);
-  if (!record) {
-    res.status(404).json({ error: "Attendance record not found" });
-    return;
-  }
-  const { status, remarks } = req.body as { status: AttendanceStatus; remarks?: string };
-  if (!status) {
-    res.status(400).json({ error: "Status is required" });
-    return;
-  }
-  record.status = status;
-  record.method = "manual";
-  record.remarks = remarks ?? record.remarks;
-  record.needsMakeup = status === "absent";
+    // Verify the student is assigned to this schedule
+    const [studentAssignment] = await db
+      .select()
+      .from(scheduleStudentsTable)
+      .where(
+        and(
+          eq(scheduleStudentsTable.scheduleId, body.scheduleId),
+          eq(scheduleStudentsTable.studentId, body.studentId),
+        ),
+      );
+    if (!studentAssignment) {
+      res.status(400).json({ error: "Student is not assigned to this schedule" });
+      return;
+    }
 
-  if (status === "absent") {
-    notifications.push({
-      id: randomUUID(),
-      userId: record.studentId,
-      type: "marked_absent",
-      title: "You Were Marked Absent",
-      message: "You have been marked ABSENT for your duty. Please contact your Scheduler.",
-      relatedEntity: "attendance",
-      relatedId: record.id,
-      isRead: false,
-      readAt: null,
-      createdAt: new Date().toISOString(),
+    const id = randomUUID();
+    await db.insert(attendanceTable).values({
+      id,
+      scheduleId: body.scheduleId,
+      studentId: body.studentId,
+      ciId: req.session.userId!,
+      timeIn: new Date(),
+      status: body.status,
+      method: "ci_assisted",
+      gpsVerified: body.gpsVerified ?? true,
+      faceVerified: body.faceVerified ?? true,
+      livenessVerified: true,
+      remarks: body.remarks ?? null,
     });
-  }
 
-  res.json(buildAttendanceResponse(record));
-});
+    const [record] = await db.select().from(attendanceTable).where(eq(attendanceTable.id, id));
+    res.status(201).json(record);
+  },
+);
+
+router.patch(
+  "/attendance/:id/manual",
+  requireRole("ci", "scheduler", "admin"),
+  async (req, res): Promise<void> => {
+    const { id } = req.params;
+    const [record] = await db.select().from(attendanceTable).where(eq(attendanceTable.id, id));
+    if (!record) {
+      res.status(404).json({ error: "Attendance record not found" });
+      return;
+    }
+
+    const body = req.body as {
+      status: "present" | "late" | "absent";
+      remarks?: string;
+    };
+
+    if (!body.status) {
+      res.status(400).json({ error: "Status is required" });
+      return;
+    }
+
+    const needsMakeup = body.status === "absent";
+    await db
+      .update(attendanceTable)
+      .set({
+        status: body.status,
+        remarks: body.remarks ?? record.remarks,
+        method: "manual",
+        needsMakeup,
+        ciId: req.session.userId!,
+      })
+      .where(eq(attendanceTable.id, id));
+
+    // If marked absent, create notification for scheduler
+    if (needsMakeup) {
+      await db.insert(notificationsTable).values({
+        id: randomUUID(),
+        userId: req.session.userId!, // TODO: route to actual scheduler
+        type: "absence_marked",
+        title: "Student Marked Absent",
+        message: `A student has been marked ABSENT for schedule ${record.scheduleId}.`,
+        relatedEntity: "attendance",
+        relatedId: id,
+        isRead: false,
+      });
+    }
+
+    await db.insert(auditLogsTable).values({
+      id: randomUUID(),
+      userId: req.session.userId!,
+      action: "attendance_manual_override",
+      entityType: "attendance",
+      entityId: id,
+      oldValue: { status: record.status },
+      newValue: { status: body.status },
+      ipAddress: req.ip ?? "",
+    });
+
+    const [updated] = await db.select().from(attendanceTable).where(eq(attendanceTable.id, id));
+    res.json(updated);
+  },
+);
 
 export default router;

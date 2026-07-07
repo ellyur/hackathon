@@ -1,34 +1,60 @@
 import { Router, type IRouter } from "express";
-import { users, studentProfiles, ciProfiles, getUserProfile, randomUUID, type Role } from "../lib/mockData.js";
+import { db, usersTable, studentProfilesTable, ciProfilesTable } from "@workspace/db";
+import { eq, ilike, and, or } from "drizzle-orm";
+import bcrypt from "bcrypt";
+import { randomUUID } from "crypto";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
 
+async function getUserProfile(userId: string) {
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!user) return null;
+  const [studentProfile] = await db
+    .select()
+    .from(studentProfilesTable)
+    .where(eq(studentProfilesTable.userId, userId));
+  const [ciProfile] = await db
+    .select()
+    .from(ciProfilesTable)
+    .where(eq(ciProfilesTable.userId, userId));
+  const { passwordHash: _pw, ...safeUser } = user;
+  return { ...safeUser, studentProfile: studentProfile ?? null, ciProfile: ciProfile ?? null };
+}
+
 router.get("/users", requireAuth, async (req, res): Promise<void> => {
-  const { role, isActive, search } = req.query as { role?: string; isActive?: string; search?: string };
+  const { role, isActive, search } = req.query as {
+    role?: string;
+    isActive?: string;
+    search?: string;
+  };
 
-  let result = users.map((u) => getUserProfile(u));
+  let query = db.select().from(usersTable);
+  const conditions = [];
 
-  if (role) result = result.filter((u) => u.role === role);
-  if (isActive !== undefined) result = result.filter((u) => u.isActive === (isActive === "true"));
+  if (role) conditions.push(eq(usersTable.role, role as "admin" | "scheduler" | "ci" | "student"));
+  if (isActive !== undefined)
+    conditions.push(eq(usersTable.isActive, isActive === "true"));
   if (search) {
-    const q = search.toLowerCase();
-    result = result.filter(
-      (u) =>
-        u.firstName.toLowerCase().includes(q) ||
-        u.lastName.toLowerCase().includes(q) ||
-        u.email.toLowerCase().includes(q)
+    const q = `%${search}%`;
+    conditions.push(
+      or(ilike(usersTable.firstName, q), ilike(usersTable.lastName, q), ilike(usersTable.email, q)),
     );
   }
 
-  res.json(result);
+  const users = conditions.length
+    ? await (query.where(and(...conditions)) as typeof query)
+    : await query;
+
+  const profiles = await Promise.all(users.map((u) => getUserProfile(u.id)));
+  res.json(profiles.filter(Boolean));
 });
 
 router.post("/users", requireRole("admin"), async (req, res): Promise<void> => {
   const body = req.body as {
     email: string;
     password: string;
-    role: Role;
+    role: "admin" | "scheduler" | "ci" | "student";
     firstName: string;
     lastName: string;
     phone?: string;
@@ -46,65 +72,79 @@ router.post("/users", requireRole("admin"), async (req, res): Promise<void> => {
     return;
   }
 
-  if (users.find((u) => u.email === body.email)) {
+  const [existing] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.email, body.email.toLowerCase()));
+  if (existing) {
     res.status(400).json({ error: "Email already in use" });
     return;
   }
 
-  const newUser = {
-    id: randomUUID(),
-    email: body.email,
-    passwordHash: body.password,
+  const passwordHash = await bcrypt.hash(body.password, 12);
+  const newId = randomUUID();
+
+  await db.insert(usersTable).values({
+    id: newId,
+    email: body.email.toLowerCase(),
+    passwordHash,
     role: body.role,
     firstName: body.firstName,
     lastName: body.lastName,
     phone: body.phone ?? null,
     avatarUrl: null,
     isActive: true,
-    createdAt: new Date().toISOString(),
-  };
-
-  users.push(newUser);
+  });
 
   if (body.role === "student") {
-    studentProfiles.push({
+    await db.insert(studentProfilesTable).values({
       id: randomUUID(),
-      userId: newUser.id,
+      userId: newId,
       studentNumber: body.studentNumber ?? `BSN-${Date.now()}`,
       yearLevel: body.yearLevel ?? 1,
       section: body.section ?? "A",
       program: body.program ?? "BSN",
       academicYear: body.academicYear ?? "2024-2025",
       totalHoursRequired: 500,
-      createdAt: new Date().toISOString(),
     });
   }
 
   if (body.role === "ci") {
-    ciProfiles.push({
+    await db.insert(ciProfilesTable).values({
       id: randomUUID(),
-      userId: newUser.id,
+      userId: newId,
       employeeId: body.employeeId ?? `CI-${Date.now()}`,
       specialization: body.specialization ?? "General",
     });
   }
 
-  res.status(201).json(getUserProfile(newUser));
+  const profile = await getUserProfile(newId);
+  res.status(201).json(profile);
 });
 
 router.get("/users/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const user = users.find((u) => u.id === id);
-  if (!user) {
+  const { id } = req.params;
+  const profile = await getUserProfile(id);
+  if (!profile) {
     res.status(404).json({ error: "User not found" });
     return;
   }
-  res.json(getUserProfile(user));
+  res.json(profile);
 });
 
 router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const user = users.find((u) => u.id === id);
+  const { id } = req.params;
+  const session = req.session;
+  const isAdmin = session.role === "admin";
+  const isSelf = session.userId === id;
+
+  // Only admins can modify other accounts; any user can update their own profile
+  if (!isAdmin && !isSelf) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!user) {
     res.status(404).json({ error: "User not found" });
     return;
@@ -115,34 +155,51 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
     lastName?: string;
     phone?: string;
     avatarUrl?: string;
+    // admin-only fields:
     isActive?: boolean;
+    password?: string;
     section?: string;
     yearLevel?: number;
   };
 
-  if (body.firstName !== undefined) user.firstName = body.firstName;
-  if (body.lastName !== undefined) user.lastName = body.lastName;
-  if (body.phone !== undefined) user.phone = body.phone;
-  if (body.avatarUrl !== undefined) user.avatarUrl = body.avatarUrl;
-  if (body.isActive !== undefined) user.isActive = body.isActive;
+  const userUpdates: Partial<typeof usersTable.$inferInsert> = {};
+  // Fields any user can change on their own profile
+  if (body.firstName !== undefined) userUpdates.firstName = body.firstName;
+  if (body.lastName !== undefined) userUpdates.lastName = body.lastName;
+  if (body.phone !== undefined) userUpdates.phone = body.phone;
+  if (body.avatarUrl !== undefined) userUpdates.avatarUrl = body.avatarUrl;
+  // Password change — allowed for self or admin
+  if (body.password) userUpdates.passwordHash = await bcrypt.hash(body.password, 12);
+  // Admin-only: activate/deactivate
+  if (isAdmin && body.isActive !== undefined) userUpdates.isActive = body.isActive;
 
-  const profile = studentProfiles.find((sp) => sp.userId === id);
-  if (profile) {
-    if (body.section !== undefined) profile.section = body.section;
-    if (body.yearLevel !== undefined) profile.yearLevel = body.yearLevel;
+  if (Object.keys(userUpdates).length > 0) {
+    await db.update(usersTable).set(userUpdates).where(eq(usersTable.id, id));
   }
 
-  res.json(getUserProfile(user));
+  // Student profile fields — self or admin
+  if (body.section !== undefined || body.yearLevel !== undefined) {
+    const profileUpdates: Partial<typeof studentProfilesTable.$inferInsert> = {};
+    if (body.section !== undefined) profileUpdates.section = body.section;
+    if (body.yearLevel !== undefined) profileUpdates.yearLevel = body.yearLevel;
+    await db
+      .update(studentProfilesTable)
+      .set(profileUpdates)
+      .where(eq(studentProfilesTable.userId, id));
+  }
+
+  const profile = await getUserProfile(id);
+  res.json(profile);
 });
 
 router.delete("/users/:id", requireRole("admin"), async (req, res): Promise<void> => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const user = users.find((u) => u.id === id);
+  const { id } = req.params;
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!user) {
     res.status(404).json({ error: "User not found" });
     return;
   }
-  user.isActive = false;
+  await db.update(usersTable).set({ isActive: false }).where(eq(usersTable.id, id));
   res.json({ message: "User deactivated" });
 });
 

@@ -1,159 +1,238 @@
 import { Router, type IRouter } from "express";
 import {
-  clinicalCases, caseCompletions, users,
-  buildCaseCompletionResponse, randomUUID, auditLogs,
-} from "../lib/mockData.js";
+  db,
+  clinicalCasesTable,
+  caseCompletionsTable,
+  usersTable,
+  auditLogsTable,
+} from "@workspace/db";
+import { eq, and, desc } from "drizzle-orm";
+import { randomUUID } from "crypto";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
 
-// Clinical Cases
+// ── Clinical Cases (admin-managed library) ───────────────────────────────────
+
 router.get("/cases", requireAuth, async (_req, res): Promise<void> => {
-  res.json(clinicalCases.filter((c) => c.isActive));
+  const cases = await db
+    .select()
+    .from(clinicalCasesTable)
+    .where(eq(clinicalCasesTable.isActive, true));
+  res.json(cases);
 });
 
 router.post("/cases", requireRole("admin"), async (req, res): Promise<void> => {
   const body = req.body as {
-    name: string; description?: string; category: string; requiredCount: number; isActive?: boolean;
+    name: string;
+    description?: string;
+    category: string;
+    requiredCount?: number;
   };
-  if (!body.name || !body.category || !body.requiredCount) {
-    res.status(400).json({ error: "Missing required fields" });
+  if (!body.name || !body.category) {
+    res.status(400).json({ error: "Name and category are required" });
     return;
   }
-  const newCase = {
-    id: randomUUID(),
+
+  const id = randomUUID();
+  await db.insert(clinicalCasesTable).values({
+    id,
     name: body.name,
     description: body.description ?? "",
     category: body.category,
-    requiredCount: body.requiredCount,
-    isActive: body.isActive ?? true,
-    createdAt: new Date().toISOString(),
-  };
-  clinicalCases.push(newCase);
-  res.status(201).json(newCase);
+    requiredCount: body.requiredCount ?? 1,
+    isActive: true,
+  });
+
+  const [c] = await db.select().from(clinicalCasesTable).where(eq(clinicalCasesTable.id, id));
+  res.status(201).json(c);
 });
 
 router.patch("/cases/:id", requireRole("admin"), async (req, res): Promise<void> => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const c = clinicalCases.find((c) => c.id === id);
+  const { id } = req.params;
+  const [c] = await db.select().from(clinicalCasesTable).where(eq(clinicalCasesTable.id, id));
   if (!c) {
-    res.status(404).json({ error: "Clinical case not found" });
+    res.status(404).json({ error: "Case not found" });
     return;
   }
-  const body = req.body as { name?: string; description?: string; category?: string; requiredCount?: number; isActive?: boolean };
-  if (body.name !== undefined) c.name = body.name;
-  if (body.description !== undefined) c.description = body.description;
-  if (body.category !== undefined) c.category = body.category;
-  if (body.requiredCount !== undefined) c.requiredCount = body.requiredCount;
-  if (body.isActive !== undefined) c.isActive = body.isActive;
-  res.json(c);
+
+  const body = req.body as Partial<{
+    name: string;
+    description: string;
+    category: string;
+    requiredCount: number;
+    isActive: boolean;
+  }>;
+
+  await db
+    .update(clinicalCasesTable)
+    .set({
+      ...(body.name !== undefined && { name: body.name }),
+      ...(body.description !== undefined && { description: body.description }),
+      ...(body.category !== undefined && { category: body.category }),
+      ...(body.requiredCount !== undefined && { requiredCount: body.requiredCount }),
+      ...(body.isActive !== undefined && { isActive: body.isActive }),
+    })
+    .where(eq(clinicalCasesTable.id, id));
+
+  const [updated] = await db
+    .select()
+    .from(clinicalCasesTable)
+    .where(eq(clinicalCasesTable.id, id));
+  res.json(updated);
 });
 
-// Case Completions
+// ── Case Completions ─────────────────────────────────────────────────────────
+
 router.get("/case-completions", requireAuth, async (req, res): Promise<void> => {
-  const { studentId, status, scheduleId } = req.query as { studentId?: string; status?: string; scheduleId?: string };
-  const currentUserId = req.session.userId!;
-  const currentRole = req.session.role!;
+  const { studentId, status } = req.query as { studentId?: string; status?: string };
+  const session = req.session;
 
-  let result = caseCompletions;
+  // Students can only see their own completions
+  const effectiveStudentId =
+    session.role === "student" ? session.userId : (studentId ?? undefined);
 
-  // Students can only see their own
-  if (currentRole === "student") {
-    result = result.filter((cc) => cc.studentId === currentUserId);
-  } else {
-    if (studentId) result = result.filter((cc) => cc.studentId === studentId);
-  }
-  if (status) result = result.filter((cc) => cc.status === status);
-  if (scheduleId) result = result.filter((cc) => cc.scheduleId === scheduleId);
+  const conditions = [];
+  if (effectiveStudentId) conditions.push(eq(caseCompletionsTable.studentId, effectiveStudentId));
+  if (status)
+    conditions.push(
+      eq(caseCompletionsTable.status, status as "pending" | "verified" | "rejected"),
+    );
 
-  res.json(result.map(buildCaseCompletionResponse));
+  const completions = conditions.length
+    ? await db
+        .select()
+        .from(caseCompletionsTable)
+        .where(and(...conditions))
+        .orderBy(desc(caseCompletionsTable.submittedAt))
+    : await db
+        .select()
+        .from(caseCompletionsTable)
+        .orderBy(desc(caseCompletionsTable.submittedAt));
+
+  res.json(completions);
 });
 
-router.post("/case-completions", requireAuth, async (req, res): Promise<void> => {
-  const currentRole = req.session.role!;
-  if (currentRole !== "student") {
-    res.status(403).json({ error: "Only students can submit case completions" });
-    return;
-  }
+router.post("/case-completions", requireRole("student"), async (req, res): Promise<void> => {
   const body = req.body as {
-    clinicalCaseId: string; scheduleId: string; hospitalId: string; departmentId: string;
-    notes?: string; photoUrl?: string;
+    clinicalCaseId: string;
+    scheduleId: string;
+    hospitalId: string;
+    departmentId: string;
+    notes?: string;
+    photoUrl?: string;
   };
+
   if (!body.clinicalCaseId || !body.scheduleId || !body.hospitalId || !body.departmentId) {
     res.status(400).json({ error: "Missing required fields" });
     return;
   }
-  const newCC = {
-    id: randomUUID(),
+
+  const id = randomUUID();
+  await db.insert(caseCompletionsTable).values({
+    id,
     studentId: req.session.userId!,
     clinicalCaseId: body.clinicalCaseId,
     scheduleId: body.scheduleId,
     hospitalId: body.hospitalId,
     departmentId: body.departmentId,
-    submittedAt: new Date().toISOString(),
-    verifiedAt: null,
-    verifiedBy: null,
-    status: "pending" as const,
-    rejectionReason: null,
     notes: body.notes ?? null,
     photoUrl: body.photoUrl ?? null,
-  };
-  caseCompletions.push(newCC);
-  res.status(201).json(buildCaseCompletionResponse(newCC));
+    status: "pending",
+  });
+
+  const [cc] = await db
+    .select()
+    .from(caseCompletionsTable)
+    .where(eq(caseCompletionsTable.id, id));
+  res.status(201).json(cc);
 });
 
-router.patch("/case-completions/:id/verify", requireRole("scheduler", "admin"), async (req, res): Promise<void> => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const cc = caseCompletions.find((c) => c.id === id);
-  if (!cc) {
-    res.status(404).json({ error: "Case completion not found" });
-    return;
-  }
-  const oldStatus = cc.status;
-  cc.status = "verified";
-  cc.verifiedAt = new Date().toISOString();
-  cc.verifiedBy = req.session.userId!;
-  auditLogs.push({
-    id: randomUUID(),
-    userId: req.session.userId!,
-    action: "case_verified",
-    entityType: "case_completion",
-    entityId: id,
-    oldValue: { status: oldStatus },
-    newValue: { status: "verified" },
-    ipAddress: req.ip ?? "unknown",
-    createdAt: new Date().toISOString(),
-  });
-  res.json(buildCaseCompletionResponse(cc));
-});
+router.patch(
+  "/case-completions/:id/verify",
+  requireRole("scheduler", "admin"),
+  async (req, res): Promise<void> => {
+    const { id } = req.params;
+    const [cc] = await db
+      .select()
+      .from(caseCompletionsTable)
+      .where(eq(caseCompletionsTable.id, id));
+    if (!cc) {
+      res.status(404).json({ error: "Case completion not found" });
+      return;
+    }
 
-router.patch("/case-completions/:id/reject", requireRole("scheduler", "admin"), async (req, res): Promise<void> => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const cc = caseCompletions.find((c) => c.id === id);
-  if (!cc) {
-    res.status(404).json({ error: "Case completion not found" });
-    return;
-  }
-  const { rejectionReason } = req.body as { rejectionReason: string };
-  if (!rejectionReason) {
-    res.status(400).json({ error: "Rejection reason is required" });
-    return;
-  }
-  const oldStatus = cc.status;
-  cc.status = "rejected";
-  cc.rejectionReason = rejectionReason;
-  auditLogs.push({
-    id: randomUUID(),
-    userId: req.session.userId!,
-    action: "case_rejected",
-    entityType: "case_completion",
-    entityId: id,
-    oldValue: { status: oldStatus },
-    newValue: { status: "rejected", rejectionReason },
-    ipAddress: req.ip ?? "unknown",
-    createdAt: new Date().toISOString(),
-  });
-  res.json(buildCaseCompletionResponse(cc));
-});
+    await db
+      .update(caseCompletionsTable)
+      .set({
+        status: "verified",
+        verifiedAt: new Date(),
+        verifiedBy: req.session.userId!,
+      })
+      .where(eq(caseCompletionsTable.id, id));
+
+    await db.insert(auditLogsTable).values({
+      id: randomUUID(),
+      userId: req.session.userId!,
+      action: "case_verified",
+      entityType: "case_completion",
+      entityId: id,
+      oldValue: { status: cc.status },
+      newValue: { status: "verified" },
+      ipAddress: req.ip ?? "",
+    });
+
+    const [updated] = await db
+      .select()
+      .from(caseCompletionsTable)
+      .where(eq(caseCompletionsTable.id, id));
+    res.json(updated);
+  },
+);
+
+router.patch(
+  "/case-completions/:id/reject",
+  requireRole("scheduler", "admin"),
+  async (req, res): Promise<void> => {
+    const { id } = req.params;
+    const [cc] = await db
+      .select()
+      .from(caseCompletionsTable)
+      .where(eq(caseCompletionsTable.id, id));
+    if (!cc) {
+      res.status(404).json({ error: "Case completion not found" });
+      return;
+    }
+
+    const { reason } = req.body as { reason?: string };
+
+    await db
+      .update(caseCompletionsTable)
+      .set({
+        status: "rejected",
+        rejectionReason: reason ?? "No reason given",
+        verifiedAt: new Date(),
+        verifiedBy: req.session.userId!,
+      })
+      .where(eq(caseCompletionsTable.id, id));
+
+    await db.insert(auditLogsTable).values({
+      id: randomUUID(),
+      userId: req.session.userId!,
+      action: "case_rejected",
+      entityType: "case_completion",
+      entityId: id,
+      oldValue: { status: cc.status },
+      newValue: { status: "rejected", rejectionReason: reason },
+      ipAddress: req.ip ?? "",
+    });
+
+    const [updated] = await db
+      .select()
+      .from(caseCompletionsTable)
+      .where(eq(caseCompletionsTable.id, id));
+    res.json(updated);
+  },
+);
 
 export default router;

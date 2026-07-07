@@ -1,20 +1,45 @@
 import { Router, type IRouter } from "express";
-import { users, getUserProfile } from "../lib/mockData.js";
+import { db, usersTable, studentProfilesTable, ciProfilesTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
+import bcrypt from "bcrypt";
 import { requireAuth } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
 
+async function getUserProfile(userId: string) {
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!user) return null;
+  const [studentProfile] = await db
+    .select()
+    .from(studentProfilesTable)
+    .where(eq(studentProfilesTable.userId, userId));
+  const [ciProfile] = await db
+    .select()
+    .from(ciProfilesTable)
+    .where(eq(ciProfilesTable.userId, userId));
+  const { passwordHash: _pw, ...safeUser } = user;
+  return { ...safeUser, studentProfile: studentProfile ?? null, ciProfile: ciProfile ?? null };
+}
+
 router.post("/auth/login", async (req, res): Promise<void> => {
   const { email, password } = req.body as { email?: string; password?: string };
-
   if (!email || !password) {
     res.status(400).json({ error: "Email and password are required" });
     return;
   }
 
-  const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.email, email.toLowerCase()));
 
-  if (!user || user.passwordHash !== password) {
+  if (!user) {
+    res.status(401).json({ error: "Invalid email or password" });
+    return;
+  }
+
+  const valid = await bcrypt.compare(password, user.passwordHash);
+  if (!valid) {
     res.status(401).json({ error: "Invalid email or password" });
     return;
   }
@@ -27,10 +52,11 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   req.session.userId = user.id;
   req.session.role = user.role;
 
-  res.json(getUserProfile(user));
+  const profile = await getUserProfile(user.id);
+  res.json(profile);
 });
 
-router.post("/auth/logout", async (req, res): Promise<void> => {
+router.post("/auth/logout", (req, res): void => {
   req.session.destroy((err) => {
     if (err) {
       res.status(500).json({ error: "Failed to end session" });
@@ -42,12 +68,13 @@ router.post("/auth/logout", async (req, res): Promise<void> => {
 });
 
 router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
-  const user = users.find((u) => u.id === req.session.userId);
-  if (!user) {
+  const profile = await getUserProfile(req.session.userId!);
+  if (!profile) {
+    req.session.destroy(() => {});
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
-  res.json(getUserProfile(user));
+  res.json(profile);
 });
 
 export default router;

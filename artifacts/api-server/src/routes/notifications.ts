@@ -1,43 +1,42 @@
 import { Router, type IRouter } from "express";
-import { notifications } from "../lib/mockData.js";
+import { db, notificationsTable } from "@workspace/db";
+import { eq, and, desc } from "drizzle-orm";
+import { randomUUID } from "crypto";
 import { requireAuth } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
 
 router.get("/notifications", requireAuth, async (req, res): Promise<void> => {
-  const { isRead } = req.query as { isRead?: string };
-  const userId = req.session.userId!;
-
-  let result = notifications.filter((n) => n.userId === userId);
-  if (isRead !== undefined) result = result.filter((n) => n.isRead === (isRead === "true"));
-
-  // Sort newest first
-  result = [...result].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-  res.json(result);
+  const notifications = await db
+    .select()
+    .from(notificationsTable)
+    .where(eq(notificationsTable.userId, req.session.userId!))
+    .orderBy(desc(notificationsTable.createdAt));
+  res.json(notifications);
 });
 
 router.patch("/notifications/:id/read", requireAuth, async (req, res): Promise<void> => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const notif = notifications.find((n) => n.id === id && n.userId === req.session.userId);
+  const { id } = req.params;
+  const [notif] = await db
+    .select()
+    .from(notificationsTable)
+    .where(and(eq(notificationsTable.id, id), eq(notificationsTable.userId, req.session.userId!)));
   if (!notif) {
     res.status(404).json({ error: "Notification not found" });
     return;
   }
-  notif.isRead = true;
-  notif.readAt = new Date().toISOString();
-  res.json(notif);
+  await db
+    .update(notificationsTable)
+    .set({ isRead: true, readAt: new Date() })
+    .where(eq(notificationsTable.id, id));
+  res.json({ message: "Marked as read" });
 });
 
 router.post("/notifications/read-all", requireAuth, async (req, res): Promise<void> => {
-  const userId = req.session.userId!;
-  const now = new Date().toISOString();
-  notifications
-    .filter((n) => n.userId === userId && !n.isRead)
-    .forEach((n) => {
-      n.isRead = true;
-      n.readAt = now;
-    });
+  await db
+    .update(notificationsTable)
+    .set({ isRead: true, readAt: new Date() })
+    .where(and(eq(notificationsTable.userId, req.session.userId!), eq(notificationsTable.isRead, false)));
   res.json({ message: "All notifications marked as read" });
 });
 

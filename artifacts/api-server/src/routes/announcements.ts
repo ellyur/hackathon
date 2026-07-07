@@ -1,99 +1,148 @@
 import { Router, type IRouter } from "express";
-import { announcements, announcementReads, users, randomUUID } from "../lib/mockData.js";
+import { db, announcementsTable, announcementReadsTable } from "@workspace/db";
+import { eq, and, or, desc } from "drizzle-orm";
+import { randomUUID } from "crypto";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
 
 router.get("/announcements", requireAuth, async (req, res): Promise<void> => {
-  const userId = req.session.userId!;
-  const userRole = req.session.role!;
+  const role = req.session.role as string;
+  const now = new Date();
 
-  const visible = announcements.filter((a) => {
-    if (a.expiresAt && new Date(a.expiresAt) < new Date()) return false;
-    return a.targetRole === "all" || a.targetRole === userRole;
+  const announcements = await db
+    .select()
+    .from(announcementsTable)
+    .orderBy(desc(announcementsTable.isPinned), desc(announcementsTable.createdAt));
+
+  // Filter by target role and expiry
+  const filtered = announcements.filter((a) => {
+    if (a.expiresAt && a.expiresAt < now) return false;
+    return a.targetRole === "all" || a.targetRole === role;
   });
 
-  const result = visible
-    .sort((a, b) => {
-      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    })
-    .map((ann) => {
-      const poster = ann.postedBy ? users.find((u) => u.id === ann.postedBy) : null;
-      const isRead = announcementReads.some((r) => r.announcementId === ann.id && r.userId === userId);
-      const readCount = announcementReads.filter((r) => r.announcementId === ann.id).length;
-      return {
-        ...ann,
-        isRead,
-        readCount,
-        poster: poster ? { id: poster.id, firstName: poster.firstName, lastName: poster.lastName, email: poster.email, role: poster.role, isActive: poster.isActive, avatarUrl: poster.avatarUrl } : null,
-      };
+  // Attach read status for current user
+  const reads = await db
+    .select()
+    .from(announcementReadsTable)
+    .where(eq(announcementReadsTable.userId, req.session.userId!));
+  const readIds = new Set(reads.map((r) => r.announcementId));
+
+  res.json(filtered.map((a) => ({ ...a, isRead: readIds.has(a.id) })));
+});
+
+router.post(
+  "/announcements",
+  requireRole("admin", "scheduler"),
+  async (req, res): Promise<void> => {
+    const body = req.body as {
+      title: string;
+      body: string;
+      targetRole?: "all" | "student" | "ci" | "scheduler" | "admin";
+      isPinned?: boolean;
+      expiresAt?: string;
+    };
+
+    if (!body.title || !body.body) {
+      res.status(400).json({ error: "Title and body are required" });
+      return;
+    }
+
+    const id = randomUUID();
+    await db.insert(announcementsTable).values({
+      id,
+      title: body.title,
+      body: body.body,
+      targetRole: body.targetRole ?? "all",
+      postedBy: req.session.userId!,
+      isPinned: body.isPinned ?? false,
+      expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
     });
 
-  res.json(result);
-});
+    const [ann] = await db
+      .select()
+      .from(announcementsTable)
+      .where(eq(announcementsTable.id, id));
+    res.status(201).json(ann);
+  },
+);
 
-router.post("/announcements", requireRole("admin", "scheduler"), async (req, res): Promise<void> => {
-  const body = req.body as {
-    title: string; body: string; targetRole: string; isPinned?: boolean; expiresAt?: string;
-  };
-  if (!body.title || !body.body || !body.targetRole) {
-    res.status(400).json({ error: "Missing required fields" });
-    return;
-  }
-  const newAnn = {
-    id: randomUUID(),
-    title: body.title,
-    body: body.body,
-    targetRole: body.targetRole as "all" | "student" | "ci" | "scheduler" | "admin",
-    postedBy: req.session.userId!,
-    isPinned: body.isPinned ?? false,
-    expiresAt: body.expiresAt ?? null,
-    createdAt: new Date().toISOString(),
-  };
-  announcements.push(newAnn);
-  const poster = users.find((u) => u.id === newAnn.postedBy);
-  res.status(201).json({
-    ...newAnn, isRead: false, readCount: 0,
-    poster: poster ? { id: poster.id, firstName: poster.firstName, lastName: poster.lastName, email: poster.email, role: poster.role, isActive: poster.isActive, avatarUrl: poster.avatarUrl } : null,
-  });
-});
+router.patch(
+  "/announcements/:id",
+  requireRole("admin", "scheduler"),
+  async (req, res): Promise<void> => {
+    const { id } = req.params;
+    const [ann] = await db
+      .select()
+      .from(announcementsTable)
+      .where(eq(announcementsTable.id, id));
+    if (!ann) {
+      res.status(404).json({ error: "Announcement not found" });
+      return;
+    }
 
-router.patch("/announcements/:id", requireRole("admin", "scheduler"), async (req, res): Promise<void> => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const ann = announcements.find((a) => a.id === id);
-  if (!ann) {
-    res.status(404).json({ error: "Announcement not found" });
-    return;
-  }
-  const body = req.body as { title?: string; body?: string; targetRole?: string; isPinned?: boolean; expiresAt?: string };
-  if (body.title !== undefined) ann.title = body.title;
-  if (body.body !== undefined) ann.body = body.body;
-  if (body.targetRole !== undefined) ann.targetRole = body.targetRole as typeof ann.targetRole;
-  if (body.isPinned !== undefined) ann.isPinned = body.isPinned;
-  if (body.expiresAt !== undefined) ann.expiresAt = body.expiresAt;
-  const readCount = announcementReads.filter((r) => r.announcementId === id).length;
-  res.json({ ...ann, isRead: false, readCount, poster: null });
-});
+    const body = req.body as Partial<{
+      title: string;
+      body: string;
+      targetRole: "all" | "student" | "ci" | "scheduler" | "admin";
+      isPinned: boolean;
+      expiresAt: string | null;
+    }>;
 
-router.delete("/announcements/:id", requireRole("admin", "scheduler"), async (req, res): Promise<void> => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const index = announcements.findIndex((a) => a.id === id);
-  if (index === -1) {
-    res.status(404).json({ error: "Announcement not found" });
-    return;
-  }
-  announcements.splice(index, 1);
-  res.json({ message: "Announcement deleted" });
-});
+    await db
+      .update(announcementsTable)
+      .set({
+        ...(body.title !== undefined && { title: body.title }),
+        ...(body.body !== undefined && { body: body.body }),
+        ...(body.targetRole !== undefined && { targetRole: body.targetRole }),
+        ...(body.isPinned !== undefined && { isPinned: body.isPinned }),
+        ...(body.expiresAt !== undefined && {
+          expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+        }),
+      })
+      .where(eq(announcementsTable.id, id));
+
+    const [updated] = await db
+      .select()
+      .from(announcementsTable)
+      .where(eq(announcementsTable.id, id));
+    res.json(updated);
+  },
+);
+
+router.delete(
+  "/announcements/:id",
+  requireRole("admin", "scheduler"),
+  async (req, res): Promise<void> => {
+    const { id } = req.params;
+    await db.delete(announcementsTable).where(eq(announcementsTable.id, id));
+    res.json({ message: "Announcement deleted" });
+  },
+);
 
 router.post("/announcements/:id/read", requireAuth, async (req, res): Promise<void> => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { id } = req.params;
   const userId = req.session.userId!;
-  const existing = announcementReads.find((r) => r.announcementId === id && r.userId === userId);
+
+  // Upsert read record
+  const [existing] = await db
+    .select()
+    .from(announcementReadsTable)
+    .where(
+      and(
+        eq(announcementReadsTable.announcementId, id),
+        eq(announcementReadsTable.userId, userId),
+      ),
+    );
+
   if (!existing) {
-    announcementReads.push({ announcementId: id, userId, readAt: new Date().toISOString() });
+    await db.insert(announcementReadsTable).values({
+      announcementId: id,
+      userId,
+      readAt: new Date(),
+    });
   }
+
   res.json({ message: "Marked as read" });
 });
 
