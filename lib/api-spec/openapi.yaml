@@ -3,20 +3,31 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: ClinicalFlow API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: auth
+  - name: users
+  - name: students
+  - name: hospitals
+  - name: cases
+  - name: schedules
+  - name: attendance
+  - name: slots
+  - name: notifications
+  - name: announcements
+  - name: analytics
+  - name: recommendations
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +35,2215 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── AUTH ──────────────────────────────────────────────────────────────────
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginCredentials"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Invalid credentials
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user profile
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Not authenticated
+
+  # ── USERS ─────────────────────────────────────────────────────────────────
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all users
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [admin, scheduler, ci, student]
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserInput"
+      responses:
+        "201":
+          description: Created user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get user by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Update user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    delete:
+      operationId: deactivateUser
+      tags: [users]
+      summary: Deactivate user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deactivated
+
+  # ── STUDENTS ──────────────────────────────────────────────────────────────
+  /students:
+    get:
+      operationId: listStudents
+      tags: [students]
+      summary: List students with filters
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: needsMakeup
+          in: query
+          schema:
+            type: boolean
+        - name: hospitalId
+          in: query
+          schema:
+            type: string
+        - name: caseId
+          in: query
+          schema:
+            type: string
+        - name: minHours
+          in: query
+          schema:
+            type: number
+        - name: maxHours
+          in: query
+          schema:
+            type: number
+      responses:
+        "200":
+          description: List of students
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StudentDetail"
+
+  /students/{id}/passport:
+    get:
+      operationId: getStudentPassport
+      tags: [students]
+      summary: Get student clinical passport summary
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Clinical passport
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClinicalPassport"
+
+  /students/{id}/attendance:
+    get:
+      operationId: getStudentAttendance
+      tags: [students]
+      summary: Get student attendance history
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Attendance records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceRecord"
+
+  /students/{id}/hours:
+    get:
+      operationId: getStudentHours
+      tags: [students]
+      summary: Get student total duty hours
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Hours summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HoursSummary"
+
+  # ── HOSPITALS ─────────────────────────────────────────────────────────────
+  /hospitals:
+    get:
+      operationId: listHospitals
+      tags: [hospitals]
+      summary: List hospitals
+      responses:
+        "200":
+          description: List of hospitals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Hospital"
+    post:
+      operationId: createHospital
+      tags: [hospitals]
+      summary: Create hospital
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HospitalInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Hospital"
+
+  /hospitals/{id}:
+    patch:
+      operationId: updateHospital
+      tags: [hospitals]
+      summary: Update hospital
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HospitalInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Hospital"
+
+  /hospitals/{id}/departments:
+    get:
+      operationId: listDepartments
+      tags: [hospitals]
+      summary: List departments for a hospital
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Departments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Department"
+    post:
+      operationId: createDepartment
+      tags: [hospitals]
+      summary: Create department
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DepartmentInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Department"
+
+  # ── CLINICAL CASES ────────────────────────────────────────────────────────
+  /cases:
+    get:
+      operationId: listClinicalCases
+      tags: [cases]
+      summary: List required clinical cases
+      responses:
+        "200":
+          description: Clinical cases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClinicalCase"
+    post:
+      operationId: createClinicalCase
+      tags: [cases]
+      summary: Create a new case type (Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClinicalCaseInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClinicalCase"
+
+  /cases/{id}:
+    patch:
+      operationId: updateClinicalCase
+      tags: [cases]
+      summary: Update clinical case type
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClinicalCaseInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClinicalCase"
+
+  /case-completions:
+    get:
+      operationId: listCaseCompletions
+      tags: [cases]
+      summary: List case completion submissions
+      parameters:
+        - name: studentId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, verified, rejected]
+        - name: scheduleId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Case completions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CaseCompletion"
+    post:
+      operationId: submitCaseCompletion
+      tags: [cases]
+      summary: Student submits a case completion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CaseCompletionInput"
+      responses:
+        "201":
+          description: Submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaseCompletion"
+
+  /case-completions/{id}/verify:
+    patch:
+      operationId: verifyCaseCompletion
+      tags: [cases]
+      summary: Scheduler verifies a case submission
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaseCompletion"
+
+  /case-completions/{id}/reject:
+    patch:
+      operationId: rejectCaseCompletion
+      tags: [cases]
+      summary: Scheduler rejects a case submission
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CaseRejection"
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaseCompletion"
+
+  # ── SCHEDULES ─────────────────────────────────────────────────────────────
+  /schedules:
+    get:
+      operationId: listSchedules
+      tags: [schedules]
+      summary: List schedules with filters
+      parameters:
+        - name: studentId
+          in: query
+          schema:
+            type: string
+        - name: ciId
+          in: query
+          schema:
+            type: string
+        - name: hospitalId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [upcoming, active, completed, cancelled]
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Schedules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Schedule"
+    post:
+      operationId: createSchedule
+      tags: [schedules]
+      summary: Create a schedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Schedule"
+
+  /schedules/{id}:
+    get:
+      operationId: getSchedule
+      tags: [schedules]
+      summary: Get schedule detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Schedule"
+    patch:
+      operationId: updateSchedule
+      tags: [schedules]
+      summary: Edit schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Schedule"
+    delete:
+      operationId: cancelSchedule
+      tags: [schedules]
+      summary: Cancel schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cancelled
+
+  # ── ATTENDANCE ────────────────────────────────────────────────────────────
+  /attendance:
+    get:
+      operationId: listAttendance
+      tags: [attendance]
+      summary: Query attendance records
+      parameters:
+        - name: scheduleId
+          in: query
+          schema:
+            type: string
+        - name: studentId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [present, late, absent, pending]
+      responses:
+        "200":
+          description: Attendance records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceRecord"
+
+  /attendance/time-in:
+    post:
+      operationId: recordTimeIn
+      tags: [attendance]
+      summary: Record GPS + Face Verification time-in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttendanceTimeIn"
+      responses:
+        "200":
+          description: Time-in recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRecord"
+
+  /attendance/time-out:
+    post:
+      operationId: recordTimeOut
+      tags: [attendance]
+      summary: Record GPS + Face Verification time-out
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttendanceTimeOut"
+      responses:
+        "200":
+          description: Time-out recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRecord"
+
+  /attendance/ci-assisted:
+    post:
+      operationId: ciAssistedAttendance
+      tags: [attendance]
+      summary: CI records attendance in Clinical Instructor Attendance Mode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CIAssistedAttendance"
+      responses:
+        "200":
+          description: Attendance recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRecord"
+
+  /attendance/{id}/manual:
+    patch:
+      operationId: manualAttendanceOverride
+      tags: [attendance]
+      summary: CI manually overrides attendance status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttendanceManualUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRecord"
+
+  # ── AVAILABLE DUTY SLOTS ──────────────────────────────────────────────────
+  /slots:
+    get:
+      operationId: listSlots
+      tags: [slots]
+      summary: List available duty slots
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, closed, cancelled]
+        - name: isMakeup
+          in: query
+          schema:
+            type: boolean
+        - name: hospitalId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Available slots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DutySlot"
+    post:
+      operationId: createSlot
+      tags: [slots]
+      summary: Create available duty slot (Scheduler)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DutySlotInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DutySlot"
+
+  /slots/{id}:
+    patch:
+      operationId: updateSlot
+      tags: [slots]
+      summary: Edit duty slot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DutySlotInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DutySlot"
+    delete:
+      operationId: cancelSlot
+      tags: [slots]
+      summary: Cancel duty slot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cancelled
+
+  /slots/{id}/apply:
+    post:
+      operationId: applyForSlot
+      tags: [slots]
+      summary: Student applies for a duty slot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Application submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DutyApplication"
+
+  /slots/{id}/applications:
+    get:
+      operationId: listSlotApplications
+      tags: [slots]
+      summary: List applications for a slot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Applications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DutyApplication"
+
+  /slots/{id}/applications/{appId}:
+    patch:
+      operationId: reviewSlotApplication
+      tags: [slots]
+      summary: Approve or reject a slot application
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplicationReview"
+      responses:
+        "200":
+          description: Application reviewed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DutyApplication"
+
+  # ── RECOMMENDATIONS ───────────────────────────────────────────────────────
+  /recommendations:
+    get:
+      operationId: getRecommendations
+      tags: [recommendations]
+      summary: Get ranked recommended students for a duty or slot
+      parameters:
+        - name: scheduleId
+          in: query
+          schema:
+            type: string
+        - name: slotId
+          in: query
+          schema:
+            type: string
+        - name: hospitalId
+          in: query
+          schema:
+            type: string
+        - name: departmentId
+          in: query
+          schema:
+            type: string
+        - name: caseIds
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Ranked student recommendations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StudentRecommendation"
+
+  /recommendations/explanation:
+    get:
+      operationId: getRecommendationExplanation
+      tags: [recommendations]
+      summary: Get AI-generated explanation for a student recommendation score
+      parameters:
+        - name: studentId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: scheduleId
+          in: query
+          schema:
+            type: string
+        - name: slotId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Explanation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationExplanation"
+
+  # ── NOTIFICATIONS ─────────────────────────────────────────────────────────
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: List my notifications
+      parameters:
+        - name: isRead
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+
+  /notifications/{id}/read:
+    patch:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark notification as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Marked read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+
+  /notifications/read-all:
+    post:
+      operationId: markAllNotificationsRead
+      tags: [notifications]
+      summary: Mark all notifications as read
+      responses:
+        "200":
+          description: All marked read
+
+  # ── ANNOUNCEMENTS ─────────────────────────────────────────────────────────
+  /announcements:
+    get:
+      operationId: listAnnouncements
+      tags: [announcements]
+      summary: List announcements
+      responses:
+        "200":
+          description: Announcements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Announcement"
+    post:
+      operationId: createAnnouncement
+      tags: [announcements]
+      summary: Create announcement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnouncementInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Announcement"
+
+  /announcements/{id}:
+    patch:
+      operationId: updateAnnouncement
+      tags: [announcements]
+      summary: Edit announcement
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnouncementInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Announcement"
+    delete:
+      operationId: deleteAnnouncement
+      tags: [announcements]
+      summary: Delete announcement
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+
+  /announcements/{id}/read:
+    post:
+      operationId: markAnnouncementRead
+      tags: [announcements]
+      summary: Mark announcement as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Marked read
+
+  # ── ANALYTICS ─────────────────────────────────────────────────────────────
+  /analytics/overview:
+    get:
+      operationId: getAnalyticsOverview
+      tags: [analytics]
+      summary: Program-wide summary statistics
+      responses:
+        "200":
+          description: Overview stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsOverview"
+
+  /analytics/students-at-risk:
+    get:
+      operationId: getStudentsAtRisk
+      tags: [analytics]
+      summary: List at-risk students
+      responses:
+        "200":
+          description: At-risk students
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AtRiskStudent"
+
+  /analytics/case-gaps:
+    get:
+      operationId: getCaseGaps
+      tags: [analytics]
+      summary: Case completion matrix (students x missing cases)
+      responses:
+        "200":
+          description: Case gaps
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaseGapMatrix"
+
+  /analytics/attendance-trend:
+    get:
+      operationId: getAttendanceTrend
+      tags: [analytics]
+      summary: Monthly attendance trend data
+      responses:
+        "200":
+          description: Attendance trend
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceTrendPoint"
+
+  /analytics/hospital-utilization:
+    get:
+      operationId: getHospitalUtilization
+      tags: [analytics]
+      summary: Per-hospital student placement stats
+      responses:
+        "200":
+          description: Hospital utilization
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HospitalUtilization"
+
+  /analytics/makeup-queue:
+    get:
+      operationId: getMakeupQueue
+      tags: [analytics]
+      summary: Students flagged for makeup duty
+      responses:
+        "200":
+          description: Makeup queue
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MakeupQueueItem"
+
+  /analytics/today-duties:
+    get:
+      operationId: getTodayDuties
+      tags: [analytics]
+      summary: Active duties happening today
+      responses:
+        "200":
+          description: Today's duties
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Schedule"
+
+  /analytics/pending-verifications:
+    get:
+      operationId: getPendingVerifications
+      tags: [analytics]
+      summary: Pending case verification submissions count
+      responses:
+        "200":
+          description: Pending verifications summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingVerificationsSummary"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    # ── AUTH ───────────────────────────────────────────────────────────────
+    LoginCredentials:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+
+    AuthUser:
+      type: object
+      required: [id, email, role, firstName, lastName, isActive]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, scheduler, ci, student]
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: ["string", "null"]
+        avatarUrl:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        studentProfile:
+          $ref: "#/components/schemas/StudentProfile"
+        ciProfile:
+          $ref: "#/components/schemas/CIProfile"
+
+    # ── USERS ──────────────────────────────────────────────────────────────
+    User:
+      type: object
+      required: [id, email, role, firstName, lastName, isActive, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, scheduler, ci, student]
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: ["string", "null"]
+        avatarUrl:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        studentProfile:
+          $ref: "#/components/schemas/StudentProfile"
+        ciProfile:
+          $ref: "#/components/schemas/CIProfile"
+
+    UserInput:
+      type: object
+      required: [email, password, role, firstName, lastName]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        role:
+          type: string
+          enum: [admin, scheduler, ci, student]
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: string
+        studentNumber:
+          type: string
+        yearLevel:
+          type: integer
+        section:
+          type: string
+        program:
+          type: string
+        academicYear:
+          type: string
+        employeeId:
+          type: string
+        specialization:
+          type: string
+
+    UserUpdate:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: string
+        avatarUrl:
+          type: string
+        isActive:
+          type: boolean
+        section:
+          type: string
+        yearLevel:
+          type: integer
+
+    StudentProfile:
+      type: object
+      required: [id, userId, studentNumber]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        studentNumber:
+          type: string
+        yearLevel:
+          type: ["integer", "null"]
+        section:
+          type: ["string", "null"]
+        program:
+          type: ["string", "null"]
+        academicYear:
+          type: ["string", "null"]
+        totalHoursRequired:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    CIProfile:
+      type: object
+      required: [id, userId]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        employeeId:
+          type: ["string", "null"]
+        specialization:
+          type: ["string", "null"]
+
+    # ── STUDENT DETAILS ────────────────────────────────────────────────────
+    StudentDetail:
+      type: object
+      required: [id, firstName, lastName, email, isActive]
+      properties:
+        id:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        studentProfile:
+          $ref: "#/components/schemas/StudentProfile"
+        totalHoursCompleted:
+          type: number
+        totalHoursRequired:
+          type: integer
+        attendanceRate:
+          type: number
+        caseCompletionRate:
+          type: number
+        absenceCount:
+          type: integer
+        lateCount:
+          type: integer
+        needsMakeup:
+          type: boolean
+        isAtRisk:
+          type: boolean
+
+    ClinicalPassport:
+      type: object
+      required: [studentId, totalCases, completedCases, overallCompletion, categories]
+      properties:
+        studentId:
+          type: string
+        totalCases:
+          type: integer
+        completedCases:
+          type: integer
+        overallCompletion:
+          type: number
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/PassportCategory"
+
+    PassportCategory:
+      type: object
+      required: [category, cases, completionRate]
+      properties:
+        category:
+          type: string
+        completionRate:
+          type: number
+        cases:
+          type: array
+          items:
+            $ref: "#/components/schemas/PassportCaseEntry"
+
+    PassportCaseEntry:
+      type: object
+      required: [caseId, caseName, required, completed, verified, remaining, status]
+      properties:
+        caseId:
+          type: string
+        caseName:
+          type: string
+        category:
+          type: string
+        required:
+          type: integer
+        completed:
+          type: integer
+        verified:
+          type: integer
+        remaining:
+          type: integer
+        status:
+          type: string
+          enum: [complete, in_progress, deficient]
+
+    HoursSummary:
+      type: object
+      required: [studentId, totalHoursCompleted, totalHoursRequired, hoursRemaining, progressPercent]
+      properties:
+        studentId:
+          type: string
+        totalHoursCompleted:
+          type: number
+        totalHoursRequired:
+          type: integer
+        hoursRemaining:
+          type: number
+        progressPercent:
+          type: number
+
+    # ── HOSPITALS ──────────────────────────────────────────────────────────
+    Hospital:
+      type: object
+      required: [id, name, isActive, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        address:
+          type: ["string", "null"]
+        contactNumber:
+          type: ["string", "null"]
+        latitude:
+          type: ["number", "null"]
+        longitude:
+          type: ["number", "null"]
+        attendanceRadius:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        departments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Department"
+
+    HospitalInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+        contactNumber:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        attendanceRadius:
+          type: integer
+        isActive:
+          type: boolean
+
+    Department:
+      type: object
+      required: [id, hospitalId, name, isActive]
+      properties:
+        id:
+          type: string
+        hospitalId:
+          type: string
+        name:
+          type: string
+        code:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+
+    DepartmentInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        code:
+          type: string
+        isActive:
+          type: boolean
+
+    # ── CLINICAL CASES ─────────────────────────────────────────────────────
+    ClinicalCase:
+      type: object
+      required: [id, name, category, requiredCount, isActive, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        category:
+          type: string
+        requiredCount:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    ClinicalCaseInput:
+      type: object
+      required: [name, category, requiredCount]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        requiredCount:
+          type: integer
+        isActive:
+          type: boolean
+
+    CaseCompletion:
+      type: object
+      required: [id, studentId, clinicalCaseId, status, submittedAt]
+      properties:
+        id:
+          type: string
+        studentId:
+          type: string
+        clinicalCaseId:
+          type: string
+        scheduleId:
+          type: ["string", "null"]
+        hospitalId:
+          type: ["string", "null"]
+        departmentId:
+          type: ["string", "null"]
+        submittedAt:
+          type: string
+          format: date-time
+        verifiedAt:
+          type: ["string", "null"]
+        verifiedBy:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, verified, rejected]
+        rejectionReason:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        photoUrl:
+          type: ["string", "null"]
+        clinicalCase:
+          $ref: "#/components/schemas/ClinicalCase"
+        student:
+          $ref: "#/components/schemas/User"
+        hospital:
+          $ref: "#/components/schemas/Hospital"
+        department:
+          $ref: "#/components/schemas/Department"
+
+    CaseCompletionInput:
+      type: object
+      required: [clinicalCaseId, scheduleId, hospitalId, departmentId]
+      properties:
+        clinicalCaseId:
+          type: string
+        scheduleId:
+          type: string
+        hospitalId:
+          type: string
+        departmentId:
+          type: string
+        notes:
+          type: string
+        photoUrl:
+          type: string
+
+    CaseRejection:
+      type: object
+      required: [rejectionReason]
+      properties:
+        rejectionReason:
+          type: string
+
+    # ── SCHEDULES ──────────────────────────────────────────────────────────
+    Schedule:
+      type: object
+      required: [id, dutyDate, startTime, endTime, status, gracePeriodMin, createdAt]
+      properties:
+        id:
+          type: string
+        title:
+          type: ["string", "null"]
+        hospitalId:
+          type: string
+        departmentId:
+          type: string
+        ciId:
+          type: string
+        dutyDate:
+          type: string
+        startTime:
+          type: string
+        endTime:
+          type: string
+        gracePeriodMin:
+          type: integer
+        status:
+          type: string
+          enum: [upcoming, active, completed, cancelled]
+        notes:
+          type: ["string", "null"]
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        hospital:
+          $ref: "#/components/schemas/Hospital"
+        department:
+          $ref: "#/components/schemas/Department"
+        ci:
+          $ref: "#/components/schemas/User"
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+
+    ScheduleInput:
+      type: object
+      required: [hospitalId, departmentId, ciId, dutyDate, startTime, endTime, studentIds]
+      properties:
+        title:
+          type: string
+        hospitalId:
+          type: string
+        departmentId:
+          type: string
+        ciId:
+          type: string
+        dutyDate:
+          type: string
+        startTime:
+          type: string
+        endTime:
+          type: string
+        gracePeriodMin:
+          type: integer
+        notes:
+          type: string
+        studentIds:
+          type: array
+          items:
+            type: string
+
+    ScheduleUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        hospitalId:
+          type: string
+        departmentId:
+          type: string
+        ciId:
+          type: string
+        dutyDate:
+          type: string
+        startTime:
+          type: string
+        endTime:
+          type: string
+        gracePeriodMin:
+          type: integer
+        notes:
+          type: string
+        studentIds:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [upcoming, active, completed, cancelled]
+
+    # ── ATTENDANCE ─────────────────────────────────────────────────────────
+    AttendanceRecord:
+      type: object
+      required: [id, scheduleId, studentId, status, createdAt]
+      properties:
+        id:
+          type: string
+        scheduleId:
+          type: string
+        studentId:
+          type: string
+        ciId:
+          type: ["string", "null"]
+        timeIn:
+          type: ["string", "null"]
+        timeOut:
+          type: ["string", "null"]
+        dutyHours:
+          type: ["number", "null"]
+        status:
+          type: string
+          enum: [present, late, absent, pending]
+        method:
+          type: string
+          enum: [biometric, ci_assisted, manual]
+        studentLatitude:
+          type: ["number", "null"]
+        studentLongitude:
+          type: ["number", "null"]
+        gpsVerified:
+          type: boolean
+        faceVerified:
+          type: boolean
+        livenessVerified:
+          type: boolean
+        remarks:
+          type: ["string", "null"]
+        needsMakeup:
+          type: boolean
+        makeupCompleted:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        student:
+          $ref: "#/components/schemas/User"
+        schedule:
+          $ref: "#/components/schemas/Schedule"
+
+    AttendanceTimeIn:
+      type: object
+      required: [scheduleId, gpsVerified, faceVerified, livenessVerified]
+      properties:
+        scheduleId:
+          type: string
+        studentLatitude:
+          type: number
+        studentLongitude:
+          type: number
+        gpsVerified:
+          type: boolean
+        faceVerified:
+          type: boolean
+        livenessVerified:
+          type: boolean
+        deviceInfo:
+          type: string
+
+    AttendanceTimeOut:
+      type: object
+      required: [scheduleId, gpsVerified, faceVerified, livenessVerified]
+      properties:
+        scheduleId:
+          type: string
+        studentLatitude:
+          type: number
+        studentLongitude:
+          type: number
+        gpsVerified:
+          type: boolean
+        faceVerified:
+          type: boolean
+        livenessVerified:
+          type: boolean
+        deviceInfo:
+          type: string
+
+    CIAssistedAttendance:
+      type: object
+      required: [scheduleId, studentId, status]
+      properties:
+        scheduleId:
+          type: string
+        studentId:
+          type: string
+        status:
+          type: string
+          enum: [present, late, absent]
+        gpsVerified:
+          type: boolean
+        faceVerified:
+          type: boolean
+        remarks:
+          type: string
+
+    AttendanceManualUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [present, late, absent]
+        remarks:
+          type: string
+
+    # ── DUTY SLOTS ─────────────────────────────────────────────────────────
+    DutySlot:
+      type: object
+      required: [id, hospitalId, departmentId, dutyDate, startTime, endTime, maxStudents, isMakeup, status, createdAt]
+      properties:
+        id:
+          type: string
+        hospitalId:
+          type: string
+        departmentId:
+          type: string
+        ciId:
+          type: ["string", "null"]
+        dutyDate:
+          type: string
+        startTime:
+          type: string
+        endTime:
+          type: string
+        maxStudents:
+          type: integer
+        isMakeup:
+          type: boolean
+        description:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [open, closed, cancelled]
+        createdAt:
+          type: string
+          format: date-time
+        hospital:
+          $ref: "#/components/schemas/Hospital"
+        department:
+          $ref: "#/components/schemas/Department"
+        ci:
+          $ref: "#/components/schemas/User"
+        applicationsCount:
+          type: integer
+        approvedCount:
+          type: integer
+
+    DutySlotInput:
+      type: object
+      required: [hospitalId, departmentId, dutyDate, startTime, endTime, maxStudents]
+      properties:
+        hospitalId:
+          type: string
+        departmentId:
+          type: string
+        ciId:
+          type: string
+        dutyDate:
+          type: string
+        startTime:
+          type: string
+        endTime:
+          type: string
+        maxStudents:
+          type: integer
+        isMakeup:
+          type: boolean
+        description:
+          type: string
+
+    DutyApplication:
+      type: object
+      required: [id, slotId, studentId, appliedAt, status]
+      properties:
+        id:
+          type: string
+        slotId:
+          type: string
+        studentId:
+          type: string
+        appliedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        reviewedBy:
+          type: ["string", "null"]
+        reviewedAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        student:
+          $ref: "#/components/schemas/User"
+        slot:
+          $ref: "#/components/schemas/DutySlot"
+
+    ApplicationReview:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [approved, rejected]
+        notes:
+          type: string
+
+    # ── RECOMMENDATIONS ────────────────────────────────────────────────────
+    StudentRecommendation:
+      type: object
+      required: [studentId, score, reasons]
+      properties:
+        studentId:
+          type: string
+        score:
+          type: number
+        reasons:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecommendationReason"
+        student:
+          $ref: "#/components/schemas/StudentDetail"
+
+    RecommendationReason:
+      type: object
+      required: [criterion, weight, applied]
+      properties:
+        criterion:
+          type: string
+        weight:
+          type: number
+        applied:
+          type: boolean
+        description:
+          type: string
+
+    RecommendationExplanation:
+      type: object
+      required: [studentId, score, explanation]
+      properties:
+        studentId:
+          type: string
+        score:
+          type: number
+        explanation:
+          type: string
+
+    # ── NOTIFICATIONS ──────────────────────────────────────────────────────
+    Notification:
+      type: object
+      required: [id, userId, type, title, message, isRead, createdAt]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        type:
+          type: string
+        title:
+          type: string
+        message:
+          type: string
+        relatedEntity:
+          type: ["string", "null"]
+        relatedId:
+          type: ["string", "null"]
+        isRead:
+          type: boolean
+        readAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    # ── ANNOUNCEMENTS ──────────────────────────────────────────────────────
+    Announcement:
+      type: object
+      required: [id, title, body, targetRole, isPinned, createdAt]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+        targetRole:
+          type: string
+          enum: [all, student, ci, scheduler, admin]
+        postedBy:
+          type: ["string", "null"]
+        isPinned:
+          type: boolean
+        expiresAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        isRead:
+          type: boolean
+        readCount:
+          type: integer
+        poster:
+          $ref: "#/components/schemas/User"
+
+    AnnouncementInput:
+      type: object
+      required: [title, body, targetRole]
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+        targetRole:
+          type: string
+          enum: [all, student, ci, scheduler, admin]
+        isPinned:
+          type: boolean
+        expiresAt:
+          type: string
+
+    # ── ANALYTICS ──────────────────────────────────────────────────────────
+    AnalyticsOverview:
+      type: object
+      required: [totalStudents, activeRotations, completionRate, attendanceRate, totalHospitals, pendingVerifications, studentsNeedingMakeup, upcomingDutiesCount]
+      properties:
+        totalStudents:
+          type: integer
+        activeRotations:
+          type: integer
+        completionRate:
+          type: number
+        attendanceRate:
+          type: number
+        totalHospitals:
+          type: integer
+        pendingVerifications:
+          type: integer
+        studentsNeedingMakeup:
+          type: integer
+        upcomingDutiesCount:
+          type: integer
+
+    AtRiskStudent:
+      type: object
+      required: [studentId, firstName, lastName, riskScore, absenceCount, caseCompletionRate, hoursCompleted]
+      properties:
+        studentId:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        riskScore:
+          type: number
+        absenceCount:
+          type: integer
+        lateCount:
+          type: integer
+        caseCompletionRate:
+          type: number
+        hoursCompleted:
+          type: number
+        hoursRequired:
+          type: integer
+
+    CaseGapMatrix:
+      type: object
+      required: [cases, students, gaps]
+      properties:
+        cases:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClinicalCase"
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        gaps:
+          type: array
+          items:
+            $ref: "#/components/schemas/CaseGapEntry"
+
+    CaseGapEntry:
+      type: object
+      required: [studentId, caseId, completed, required, remaining]
+      properties:
+        studentId:
+          type: string
+        caseId:
+          type: string
+        completed:
+          type: integer
+        required:
+          type: integer
+        remaining:
+          type: integer
+
+    AttendanceTrendPoint:
+      type: object
+      required: [month, present, late, absent]
+      properties:
+        month:
+          type: string
+        present:
+          type: integer
+        late:
+          type: integer
+        absent:
+          type: integer
+
+    HospitalUtilization:
+      type: object
+      required: [hospitalId, hospitalName, studentCount, activeRotations]
+      properties:
+        hospitalId:
+          type: string
+        hospitalName:
+          type: string
+        studentCount:
+          type: integer
+        activeRotations:
+          type: integer
+
+    MakeupQueueItem:
+      type: object
+      required: [studentId, firstName, lastName, absenceDate, scheduleId, daysSinceAbsence]
+      properties:
+        studentId:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        absenceDate:
+          type: string
+        scheduleId:
+          type: string
+        daysSinceAbsence:
+          type: integer
+
+    PendingVerificationsSummary:
+      type: object
+      required: [total, byStatus]
+      properties:
+        total:
+          type: integer
+        byStatus:
+          type: object
+          properties:
+            pending:
+              type: integer
+            verified:
+              type: integer
+            rejected:
+              type: integer

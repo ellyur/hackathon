@@ -1,0 +1,30 @@
+import { pgTable, text, boolean, timestamp, integer, pgEnum } from "drizzle-orm/pg-core";
+import { usersTable } from "./users";
+import { hospitalsTable, departmentsTable } from "./hospitals";
+
+export const scheduleStatusEnum = pgEnum("schedule_status", ["upcoming", "active", "completed", "cancelled"]);
+
+export const schedulesTable = pgTable("schedules", {
+  id: text("id").primaryKey(),
+  title: text("title"),
+  hospitalId: text("hospital_id").notNull().references(() => hospitalsTable.id),
+  departmentId: text("department_id").notNull().references(() => departmentsTable.id),
+  ciId: text("ci_id").notNull().references(() => usersTable.id),
+  dutyDate: text("duty_date").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  gracePeriodMin: integer("grace_period_min").notNull().default(15),
+  status: scheduleStatusEnum("status").notNull().default("upcoming"),
+  notes: text("notes"),
+  createdBy: text("created_by").notNull().references(() => usersTable.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const scheduleStudentsTable = pgTable("schedule_students", {
+  scheduleId: text("schedule_id").notNull().references(() => schedulesTable.id, { onDelete: "cascade" }),
+  studentId: text("student_id").notNull().references(() => usersTable.id),
+});
+
+export type Schedule = typeof schedulesTable.$inferSelect;
+export type ScheduleStudent = typeof scheduleStudentsTable.$inferSelect;

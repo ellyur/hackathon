@@ -1,0 +1,2 @@
+- [ClinicalFlow arch](clinicalflow-arch.md) — session-cookie auth, mock-data backend, dual-mode frontend auth (real vs dev-mock)
+- [Orval params collision fix](orval-params-collision.md) — endpoints with BOTH path params AND query params collide; fix by moving path param to query
