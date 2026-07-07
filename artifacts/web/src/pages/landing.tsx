@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowRight, Stethoscope, Activity, ClipboardCheck, ShieldCheck, MapPin } from 'lucide-react';
 import { Link } from 'wouter';
@@ -85,7 +86,7 @@ export default function Landing() {
                 <p className="text-muted-foreground">Digital tracking of required cases and procedures with CI verification workflows.</p>
               </CardContent>
             </Card>
-            
+
             <Card className="bg-background border-none shadow-md">
               <CardContent className="pt-6">
                 <div className="w-12 h-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center mb-4">
@@ -171,5 +172,3 @@ export default function Landing() {
     </div>
   );
 }
-
-import { Badge } from '@/components/ui/badge';

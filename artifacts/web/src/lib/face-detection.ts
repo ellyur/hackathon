@@ -11,41 +11,83 @@
 import type { FaceLandmarker as FaceLandmarkerType } from '@mediapipe/tasks-vision';
 
 // Serve WASM and model locally to avoid CDN blocking in sandboxed environments.
-// Files are copied into public/mediapipe-wasm/ during setup.
-// Use import.meta.env.BASE_URL so paths stay correct when the app is hosted
-// at a subpath (e.g. BASE_PATH=/app → BASE_URL=/app/).
-const _base = import.meta.env.BASE_URL.replace(/\/$/, '');
-const WASM_PATH = `${_base}/mediapipe-wasm`;
-const MODEL_PATH = `${_base}/mediapipe-wasm/face_landmarker.task`;
+// Files are in public/mediapipe-wasm/ — Vite serves them at BASE_URL/mediapipe-wasm/.
+function buildPath(rel: string): string {
+  // import.meta.env.BASE_URL always ends with "/"; strip trailing slash then join.
+  return `${import.meta.env.BASE_URL.replace(/\/$/, '')}/${rel}`;
+}
 
-// Singleton cache
+export const WASM_PATH  = buildPath('mediapipe-wasm');
+export const MODEL_PATH = buildPath('mediapipe-wasm/face_landmarker.task');
+
+// Singleton cache — reset on failure so the next call retries cleanly.
 let _landmarker: FaceLandmarkerType | null = null;
-let _loading: Promise<FaceLandmarkerType> | null = null;
+let _loading:    Promise<FaceLandmarkerType> | null = null;
+
+/** Verify local WASM assets are reachable before handing off to MediaPipe. */
+async function assertAssetsReachable(): Promise<void> {
+  const checks = [
+    `${WASM_PATH}/vision_wasm_internal.wasm`,
+    MODEL_PATH,
+  ];
+  await Promise.all(
+    checks.map(async (url) => {
+      const res = await fetch(url, { method: 'HEAD' });
+      if (!res.ok) throw new Error(`Asset not reachable: ${url} (${res.status})`);
+    }),
+  );
+}
 
 /** Returns the cached FaceLandmarker, creating it if necessary. */
 export async function getFaceLandmarker(): Promise<FaceLandmarkerType> {
   if (_landmarker) return _landmarker;
-  if (_loading) return _loading;
+  if (_loading)    return _loading;
 
   _loading = (async () => {
-    const { FaceLandmarker, FilesetResolver } = await import(
-      '@mediapipe/tasks-vision'
-    );
-    const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
-    _landmarker = await FaceLandmarker.createFromOptions(vision, {
-      baseOptions: {
-        modelAssetPath: MODEL_PATH,
-        delegate: 'CPU',
-      },
-      runningMode: 'VIDEO',
-      numFaces: 1,
-      outputFaceBlendshapes: false,
-      outputFacialTransformationMatrixes: false,
-    });
-    return _landmarker;
+    try {
+      await assertAssetsReachable();
+
+      const { FaceLandmarker, FilesetResolver } = await import(
+        '@mediapipe/tasks-vision'
+      );
+      const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
+      const lm = await FaceLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: MODEL_PATH,
+          delegate: 'CPU',
+        },
+        runningMode: 'VIDEO',
+        numFaces: 1,
+        outputFaceBlendshapes: false,
+        outputFacialTransformationMatrixes: false,
+      });
+      _landmarker = lm;
+      return lm;
+    } catch (err) {
+      // Reset so the next call retries from scratch instead of returning
+      // the same rejected promise.
+      _loading = null;
+      throw err;
+    }
   })();
 
   return _loading;
+}
+
+/** Call after a failure so the next getFaceLandmarker() retries cleanly. */
+export function resetFaceLandmarker(): void {
+  _landmarker = null;
+  _loading    = null;
+}
+
+/**
+ * Warm the MediaPipe singleton in the background.
+ * Call this early (e.g. on component mount) so the model is already loaded
+ * when the user clicks "Start".  Errors are silently ignored here — they will
+ * surface properly when the user-initiated flow calls getFaceLandmarker().
+ */
+export function prefetchFaceLandmarker(): void {
+  getFaceLandmarker().catch(() => { /* silently retry on user action */ });
 }
 
 /**
@@ -60,12 +102,12 @@ export async function getFaceLandmarker(): Promise<FaceLandmarkerType> {
 export function extractDescriptor(
   landmarks: { x: number; y: number; z: number }[],
 ): number[] {
-  const nose = landmarks[4]; // nose tip
-  const leftEyeOuter = landmarks[33];
+  const nose         = landmarks[4];   // nose tip
+  const leftEyeOuter  = landmarks[33];
   const rightEyeOuter = landmarks[263];
   const eyeDist = Math.sqrt(
     (rightEyeOuter.x - leftEyeOuter.x) ** 2 +
-      (rightEyeOuter.y - leftEyeOuter.y) ** 2,
+    (rightEyeOuter.y - leftEyeOuter.y) ** 2,
   );
   const scale = eyeDist > 0.001 ? eyeDist : 1;
 
@@ -83,11 +125,9 @@ export function extractDescriptor(
  * Returns a value in [-1, 1]; same person ≈ 0.97–1.0.
  */
 export function descriptorSimilarity(a: number[], b: number[]): number {
-  let dot = 0;
-  let magA = 0;
-  let magB = 0;
+  let dot = 0, magA = 0, magB = 0;
   for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
+    dot  += a[i] * b[i];
     magA += a[i] * a[i];
     magB += b[i] * b[i];
   }
