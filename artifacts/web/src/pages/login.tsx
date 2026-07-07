@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -11,7 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 export function Login() {
   const [, setLocation] = useLocation();
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('password123');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -37,11 +37,6 @@ export function Login() {
       return;
     }
     loginMutation.mutate({ data: { email, password } });
-  };
-
-  const fillCredential = (role: string) => {
-    setEmail(`${role}@clinicalflow.com`);
-    setPassword('password123');
   };
 
   return (
@@ -101,50 +96,6 @@ export function Login() {
             </Button>
           </form>
         </CardContent>
-        <CardFooter className="flex flex-col bg-muted/50 p-6 border-t rounded-b-xl gap-3">
-          <div className="text-sm font-medium text-muted-foreground w-full mb-1">Demo Credentials:</div>
-          <div className="grid grid-cols-2 gap-2 w-full text-xs">
-            <button
-              type="button"
-              onClick={() => fillCredential('student')}
-              className="p-2 border bg-card rounded text-left hover:border-primary transition-colors"
-              data-testid="cred-student"
-            >
-              <div className="font-semibold text-foreground">Student</div>
-              <div className="text-muted-foreground">student@clinicalflow.com</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => fillCredential('ci')}
-              className="p-2 border bg-card rounded text-left hover:border-primary transition-colors"
-              data-testid="cred-ci"
-            >
-              <div className="font-semibold text-foreground">Instructor</div>
-              <div className="text-muted-foreground">ci@clinicalflow.com</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => fillCredential('scheduler')}
-              className="p-2 border bg-card rounded text-left hover:border-primary transition-colors"
-              data-testid="cred-scheduler"
-            >
-              <div className="font-semibold text-foreground">Scheduler</div>
-              <div className="text-muted-foreground">scheduler@clinicalflow.com</div>
-            </button>
-            <button
-              type="button"
-              onClick={() => fillCredential('admin')}
-              className="p-2 border bg-card rounded text-left hover:border-primary transition-colors"
-              data-testid="cred-admin"
-            >
-              <div className="font-semibold text-foreground">Admin</div>
-              <div className="text-muted-foreground">admin@clinicalflow.com</div>
-            </button>
-          </div>
-          <div className="text-xs text-muted-foreground text-center mt-2 w-full">
-            Password: password123
-          </div>
-        </CardFooter>
       </Card>
     </div>
   );

@@ -45,10 +45,18 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
+  const profile = await getUserProfile(user.id);
+
   req.session.userId = user.id;
   req.session.role = user.role;
 
-  const profile = await getUserProfile(user.id);
+  await new Promise<void>((resolve, reject) => {
+    req.session.save((err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+
   res.json(profile);
 });
 

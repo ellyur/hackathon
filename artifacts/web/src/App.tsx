@@ -3,7 +3,6 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
 import { Route, Switch, Router as WouterRouter } from 'wouter';
-import { DevRoleSwitcher } from '@/components/dev-role-switcher';
 import { ProtectedRoute } from '@/components/protected-route';
 import { AppShell } from '@/components/app-shell';
 
@@ -121,7 +120,6 @@ function App() {
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
           <Router />
-          <DevRoleSwitcher />
         </WouterRouter>
         <Toaster />
       </TooltipProvider>
