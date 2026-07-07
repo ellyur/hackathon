@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -11,6 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Loader2 } from 'lucide-react';
+import { useCreateUser } from '@workspace/api-client-react';
 
 const baseSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -22,7 +22,7 @@ const baseSchema = z.object({
   phone: z.string().optional(),
   // Student fields
   studentNumber: z.string().optional(),
-  yearLevel: z.string().optional(),
+  yearLevel: z.coerce.number().optional(),
   section: z.string().optional(),
   program: z.string().optional(),
   academicYear: z.string().optional(),
@@ -39,25 +39,44 @@ type FormData = z.infer<typeof baseSchema>;
 export function CreateUserPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
+  const createUser = useCreateUser();
 
   const form = useForm<FormData>({
     resolver: zodResolver(baseSchema),
     defaultValues: {
       firstName: '', lastName: '', email: '', password: '', confirmPassword: '',
-      role: 'student', phone: '', studentNumber: '', yearLevel: '', section: '',
-      program: '', academicYear: '', employeeId: '', specialization: '',
+      role: 'student', phone: '', studentNumber: '', section: '',
+      program: 'BSN', academicYear: '2024-2025', employeeId: '', specialization: '',
     },
   });
 
   const role = form.watch('role');
 
   const onSubmit = async (data: FormData) => {
-    setIsLoading(true);
-    await new Promise(r => setTimeout(r, 1200));
-    setIsLoading(false);
-    toast({ title: 'User created', description: `${data.firstName} ${data.lastName} has been added to the system.` });
-    navigate('/admin/users');
+    try {
+      await createUser.mutateAsync({
+        data: {
+          firstName: data.firstName,
+          lastName: data.lastName,
+          email: data.email,
+          password: data.password,
+          role: data.role as 'admin' | 'scheduler' | 'ci' | 'student',
+          phone: data.phone || undefined,
+          studentNumber: data.studentNumber || undefined,
+          yearLevel: data.yearLevel || undefined,
+          section: data.section || undefined,
+          program: data.program || undefined,
+          academicYear: data.academicYear || undefined,
+          employeeId: data.employeeId || undefined,
+          specialization: data.specialization || undefined,
+        },
+      });
+      toast({ title: 'User created', description: `${data.firstName} ${data.lastName} has been added to the system.` });
+      navigate('/admin/users');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to create user';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    }
   };
 
   return (
@@ -91,20 +110,25 @@ export function CreateUserPage() {
                 <FormField control={form.control} name="lastName" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Last Name</FormLabel>
-                    <FormControl><Input placeholder="Cruz" {...field} /></FormControl>
+                    <FormControl><Input placeholder="Dela Cruz" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
               </div>
-
               <FormField control={form.control} name="email" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Email Address</FormLabel>
-                  <FormControl><Input type="email" placeholder="user@clinicalflow.com" {...field} /></FormControl>
+                  <FormControl><Input type="email" placeholder="juan@university.edu" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
-
+              <FormField control={form.control} name="phone" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Phone <span className="text-muted-foreground text-xs">(optional)</span></FormLabel>
+                  <FormControl><Input placeholder="09171234567" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField control={form.control} name="password" render={({ field }) => (
                   <FormItem>
@@ -116,38 +140,28 @@ export function CreateUserPage() {
                 <FormField control={form.control} name="confirmPassword" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Confirm Password</FormLabel>
-                    <FormControl><Input type="password" placeholder="Re-enter password" {...field} /></FormControl>
+                    <FormControl><Input type="password" placeholder="Repeat password" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <FormField control={form.control} name="role" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Role</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="scheduler">Scheduler</SelectItem>
-                        <SelectItem value="ci">Clinical Instructor</SelectItem>
-                        <SelectItem value="student">Student</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="phone" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Phone <span className="text-muted-foreground text-xs">(optional)</span></FormLabel>
-                    <FormControl><Input type="tel" placeholder="+63 9XX XXX XXXX" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
+              <FormField control={form.control} name="role" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Role</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="student">Student</SelectItem>
+                      <SelectItem value="ci">Clinical Instructor</SelectItem>
+                      <SelectItem value="scheduler">Scheduler</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
             </CardContent>
           </Card>
 
@@ -162,23 +176,14 @@ export function CreateUserPage() {
                   <FormField control={form.control} name="studentNumber" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Student Number</FormLabel>
-                      <FormControl><Input placeholder="BSN-2024-001" {...field} /></FormControl>
+                      <FormControl><Input placeholder="2024-00001" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
-                  <FormField control={form.control} name="program" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Program</FormLabel>
-                      <FormControl><Input placeholder="BSN" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <FormField control={form.control} name="yearLevel" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Year Level</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={(v) => field.onChange(Number(v))} value={field.value?.toString()}>
                         <FormControl>
                           <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
                         </FormControl>
@@ -195,17 +200,14 @@ export function CreateUserPage() {
                   <FormField control={form.control} name="section" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Section</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger><SelectValue placeholder="Section" /></SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="A">Section A</SelectItem>
-                          <SelectItem value="B">Section B</SelectItem>
-                          <SelectItem value="C">Section C</SelectItem>
-                          <SelectItem value="D">Section D</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <FormControl><Input placeholder="A" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="program" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Program</FormLabel>
+                      <FormControl><Input placeholder="BSN" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -254,8 +256,8 @@ export function CreateUserPage() {
             <Button type="button" variant="outline" asChild>
               <Link href="/admin/users">Cancel</Link>
             </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            <Button type="submit" disabled={createUser.isPending}>
+              {createUser.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Create User
             </Button>
           </div>

@@ -10,37 +10,17 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Loader2, CalendarClock } from 'lucide-react';
-
-const HOSPITALS = [
-  { id: 'h1', name: "St. Luke's Medical Center" },
-  { id: 'h2', name: 'General Hospital' },
-  { id: 'h3', name: 'Medical City' },
-];
-
-const DEPARTMENTS: Record<string, { id: string; name: string }[]> = {
-  h1: [
-    { id: 'd1', name: 'Intensive Care Unit (ICU)' },
-    { id: 'd2', name: 'Emergency Room (ER)' },
-    { id: 'd3', name: 'Operating Room (OR)' },
-  ],
-  h2: [
-    { id: 'd4', name: 'OB-Gyn / Delivery Room' },
-    { id: 'd5', name: 'Pediatrics Ward' },
-    { id: 'd6', name: 'Emergency Room (ER)' },
-  ],
-  h3: [
-    { id: 'd7', name: 'Intensive Care Unit (ICU)' },
-    { id: 'd8', name: 'Operating Room (OR)' },
-    { id: 'd9', name: 'Pediatrics Ward' },
-  ],
-};
+import {
+  useCreateSlot,
+  useListHospitals,
+  useListDepartments,
+} from '@workspace/api-client-react';
 
 const schema = z.object({
-  hospital: z.string().min(1, 'Hospital is required'),
-  department: z.string().min(1, 'Department is required'),
+  hospitalId: z.string().min(1, 'Hospital is required'),
+  departmentId: z.string().min(1, 'Department is required'),
   date: z.string().min(1, 'Date is required'),
   startTime: z.string().min(1, 'Start time is required'),
   endTime: z.string().min(1, 'End time is required'),
@@ -55,7 +35,13 @@ export function CreateSlotPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [selectedHospital, setSelectedHospital] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { data: hospitals = [], isLoading: loadingHospitals } = useListHospitals();
+  const { data: departments = [], isLoading: loadingDepts } = useListDepartments(selectedHospital, {
+    query: { enabled: !!selectedHospital } as any,
+  });
+
+  const createSlot = useCreateSlot();
 
   const {
     register,
@@ -74,16 +60,27 @@ export function CreateSlotPage() {
 
   const isMakeup = watch('isMakeup');
 
-  function onSubmit(_data: FormValues) {
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+  async function onSubmit(data: FormValues) {
+    try {
+      await createSlot.mutateAsync({
+        data: {
+          hospitalId: data.hospitalId,
+          departmentId: data.departmentId,
+          dutyDate: data.date,
+          startTime: data.startTime,
+          endTime: data.endTime,
+          maxStudents: data.maxStudents,
+          isMakeup: data.isMakeup,
+          description: data.description || undefined,
+        },
+      });
       toast({ title: 'Duty slot created', description: 'Students can now apply for this slot.' });
       setLocation('/slots');
-    }, 1200);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to create slot';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    }
   }
-
-  const departments = selectedHospital ? (DEPARTMENTS[selectedHospital] ?? []) : [];
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -100,9 +97,7 @@ export function CreateSlotPage() {
           <CardTitle className="flex items-center gap-2">
             <CalendarClock className="w-5 h-5" /> Slot Details
           </CardTitle>
-          <CardDescription>
-            Students will see this slot in the available slots list and may apply.
-          </CardDescription>
+          <CardDescription>Students will see this slot in the available slots list and may apply.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
@@ -110,33 +105,34 @@ export function CreateSlotPage() {
             <div className="space-y-2">
               <Label>Hospital <span className="text-destructive">*</span></Label>
               <Select
+                disabled={loadingHospitals}
                 onValueChange={(val) => {
                   setSelectedHospital(val);
-                  setValue('hospital', val);
-                  setValue('department', '');
+                  setValue('hospitalId', val, { shouldValidate: true });
+                  setValue('departmentId', '', { shouldValidate: false });
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select hospital..." />
+                  <SelectValue placeholder={loadingHospitals ? 'Loading...' : 'Select hospital'} />
                 </SelectTrigger>
                 <SelectContent>
-                  {HOSPITALS.map((h) => (
+                  {hospitals.map((h) => (
                     <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {errors.hospital && <p className="text-xs text-destructive">{errors.hospital.message}</p>}
+              {errors.hospitalId && <p className="text-xs text-destructive">{errors.hospitalId.message}</p>}
             </div>
 
             {/* Department */}
             <div className="space-y-2">
               <Label>Department <span className="text-destructive">*</span></Label>
               <Select
-                disabled={!selectedHospital}
-                onValueChange={(val) => setValue('department', val)}
+                disabled={!selectedHospital || loadingDepts}
+                onValueChange={(val) => setValue('departmentId', val, { shouldValidate: true })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={selectedHospital ? 'Select department...' : 'Select a hospital first'} />
+                  <SelectValue placeholder={!selectedHospital ? 'Select hospital first' : loadingDepts ? 'Loading...' : 'Select department'} />
                 </SelectTrigger>
                 <SelectContent>
                   {departments.map((d) => (
@@ -144,12 +140,12 @@ export function CreateSlotPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {errors.department && <p className="text-xs text-destructive">{errors.department.message}</p>}
+              {errors.departmentId && <p className="text-xs text-destructive">{errors.departmentId.message}</p>}
             </div>
 
             {/* Date */}
             <div className="space-y-2">
-              <Label htmlFor="date">Date <span className="text-destructive">*</span></Label>
+              <Label htmlFor="date">Duty Date <span className="text-destructive">*</span></Label>
               <Input id="date" type="date" {...register('date')} />
               {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
             </div>
@@ -175,41 +171,31 @@ export function CreateSlotPage() {
               {errors.maxStudents && <p className="text-xs text-destructive">{errors.maxStudents.message}</p>}
             </div>
 
-            {/* Is Makeup */}
-            <div className="flex items-start gap-3 rounded-lg border p-4 bg-muted/30">
+            {/* Makeup */}
+            <div className="flex items-center gap-3">
               <Controller
-                name="isMakeup"
                 control={control}
+                name="isMakeup"
                 render={({ field }) => (
                   <Checkbox
                     id="isMakeup"
                     checked={field.value}
                     onCheckedChange={field.onChange}
-                    className="mt-0.5"
                   />
                 )}
               />
-              <div className="flex-1">
-                <Label htmlFor="isMakeup" className="cursor-pointer font-medium flex items-center gap-2">
-                  Makeup Slot
-                  {isMakeup && (
-                    <Badge className="bg-amber-500 text-white hover:bg-amber-600 text-xs">MAKEUP ELIGIBLE</Badge>
-                  )}
-                </Label>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Makeup slots are prioritized for students who have missed previous duties and need to make up hours.
-                </p>
-              </div>
+              <Label htmlFor="isMakeup" className="cursor-pointer">
+                This is a makeup duty slot
+                {isMakeup && <span className="ml-2 text-xs text-amber-600 font-medium">Students flagged for makeup will be prioritised</span>}
+              </Label>
             </div>
 
             {/* Description */}
             <div className="space-y-2">
-              <Label htmlFor="description">
-                Description / Notes <span className="text-muted-foreground text-xs">(optional)</span>
-              </Label>
+              <Label htmlFor="description">Description <span className="text-muted-foreground text-xs">(optional)</span></Label>
               <Textarea
                 id="description"
-                placeholder="Any special instructions, requirements, or notes for students applying..."
+                placeholder="Any additional notes for students..."
                 rows={3}
                 {...register('description')}
               />
@@ -219,12 +205,8 @@ export function CreateSlotPage() {
               <Button variant="outline" asChild>
                 <Link href="/slots">Cancel</Link>
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</>
-                ) : (
-                  'Create Slot'
-                )}
+              <Button type="submit" disabled={createSlot.isPending}>
+                {createSlot.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</> : 'Create Slot'}
               </Button>
             </div>
           </form>

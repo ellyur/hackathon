@@ -1,74 +1,11 @@
-import { useState } from 'react';
 import { Link } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
-import { Calendar, Clock, Users, Building2, ClipboardCheck, CheckSquare } from 'lucide-react';
-
-const DUTIES = [
-  {
-    id: '1',
-    hospital: "St. Luke's Medical Center",
-    department: 'Intensive Care Unit (ICU)',
-    date: 'Today, Oct 15',
-    time: '08:00 AM – 04:00 PM',
-    students: 7,
-    status: 'active',
-    tab: 'today',
-  },
-  {
-    id: '2',
-    hospital: 'General Hospital',
-    department: 'Emergency Room (ER)',
-    date: 'Today, Oct 15',
-    time: '04:00 PM – 12:00 MN',
-    students: 5,
-    status: 'upcoming',
-    tab: 'today',
-  },
-  {
-    id: '3',
-    hospital: 'Medical City',
-    department: 'Pediatrics Ward',
-    date: 'Wed, Oct 16',
-    time: '08:00 AM – 04:00 PM',
-    students: 8,
-    status: 'upcoming',
-    tab: 'week',
-  },
-  {
-    id: '4',
-    hospital: "St. Luke's Medical Center",
-    department: 'Operating Room (OR)',
-    date: 'Thu, Oct 17',
-    time: '06:00 AM – 02:00 PM',
-    students: 6,
-    status: 'upcoming',
-    tab: 'week',
-  },
-  {
-    id: '5',
-    hospital: 'General Hospital',
-    department: 'OB-Gyn / Delivery Room',
-    date: 'Fri, Oct 18',
-    time: '08:00 AM – 04:00 PM',
-    students: 4,
-    status: 'upcoming',
-    tab: 'week',
-  },
-  {
-    id: '6',
-    hospital: 'Medical City',
-    department: 'Intensive Care Unit (ICU)',
-    date: 'Mon, Oct 13',
-    time: '08:00 AM – 04:00 PM',
-    students: 8,
-    status: 'completed',
-    tab: 'all',
-  },
-];
+import { Calendar, Clock, Users, Building2, ClipboardCheck, CheckSquare, Loader2 } from 'lucide-react';
+import { useGetTodayDuties, useListSchedules } from '@workspace/api-client-react';
+import type { Schedule } from '@workspace/api-client-react';
 
 function statusBadge(status: string) {
   if (status === 'active')
@@ -78,30 +15,30 @@ function statusBadge(status: string) {
   return <Badge variant="outline">Completed</Badge>;
 }
 
-function DutyCard({ duty }: { duty: typeof DUTIES[0] }) {
+function DutyCard({ duty }: { duty: Schedule }) {
   return (
     <Card className="flex flex-col md:flex-row md:items-center gap-4 p-5">
       <div className="flex-1 space-y-1.5">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-semibold text-base">{duty.hospital}</span>
+          <span className="font-semibold text-base">{duty.hospital?.name ?? duty.hospitalId}</span>
           {statusBadge(duty.status)}
         </div>
         <p className="text-sm text-muted-foreground flex items-center gap-1">
           <Building2 className="w-3.5 h-3.5" />
-          {duty.department}
+          {duty.department?.name ?? duty.departmentId}
         </p>
         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mt-1">
           <span className="flex items-center gap-1">
             <Calendar className="w-3.5 h-3.5" />
-            {duty.date}
+            {duty.dutyDate}
           </span>
           <span className="flex items-center gap-1">
             <Clock className="w-3.5 h-3.5" />
-            {duty.time}
+            {duty.startTime} – {duty.endTime}
           </span>
           <span className="flex items-center gap-1">
             <Users className="w-3.5 h-3.5" />
-            {duty.students} students
+            {duty.students?.length ?? 0} students
           </span>
         </div>
       </div>
@@ -124,9 +61,14 @@ function DutyCard({ duty }: { duty: typeof DUTIES[0] }) {
 }
 
 export function MyDutiesPage() {
-  const todayDuties = DUTIES.filter((d) => d.tab === 'today' || d.status === 'active');
-  const weekDuties = DUTIES.filter((d) => d.tab === 'week' || d.tab === 'today');
-  const allDuties = DUTIES;
+  const { data: todayDuties = [], isLoading: loadingToday } = useGetTodayDuties();
+  const { data: allDuties = [], isLoading: loadingAll } = useListSchedules();
+
+  const today = new Date().toISOString().split('T')[0];
+  const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const weekDuties = allDuties.filter((d) => d.dutyDate >= today && d.dutyDate <= weekEnd);
+
+  const isLoading = loadingToday || loadingAll;
 
   return (
     <div className="space-y-6">
@@ -143,7 +85,7 @@ export function MyDutiesPage() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">{todayDuties.length}</p>
-            <p className="text-xs text-muted-foreground mt-1">Oct 15, 2024</p>
+            <p className="text-xs text-muted-foreground mt-1">{today}</p>
           </CardContent>
         </Card>
         <Card>
@@ -152,7 +94,7 @@ export function MyDutiesPage() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">{weekDuties.length}</p>
-            <p className="text-xs text-muted-foreground mt-1">Oct 14 – 18, 2024</p>
+            <p className="text-xs text-muted-foreground mt-1">Next 7 days</p>
           </CardContent>
         </Card>
         <Card>
@@ -160,7 +102,7 @@ export function MyDutiesPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Upcoming</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{DUTIES.filter((d) => d.status === 'upcoming').length}</p>
+            <p className="text-3xl font-bold">{allDuties.filter((d) => d.status === 'upcoming').length}</p>
             <p className="text-xs text-muted-foreground mt-1">Scheduled ahead</p>
           </CardContent>
         </Card>
@@ -174,7 +116,11 @@ export function MyDutiesPage() {
         </TabsList>
 
         <TabsContent value="today" className="space-y-3 mt-4">
-          {todayDuties.length === 0 ? (
+          {isLoading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : todayDuties.length === 0 ? (
             <p className="text-muted-foreground text-sm">No duties today.</p>
           ) : (
             todayDuties.map((d) => <DutyCard key={d.id} duty={d} />)
@@ -182,11 +128,27 @@ export function MyDutiesPage() {
         </TabsContent>
 
         <TabsContent value="week" className="space-y-3 mt-4">
-          {weekDuties.map((d) => <DutyCard key={d.id} duty={d} />)}
+          {isLoading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : weekDuties.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No duties this week.</p>
+          ) : (
+            weekDuties.map((d) => <DutyCard key={d.id} duty={d} />)
+          )}
         </TabsContent>
 
         <TabsContent value="all" className="space-y-3 mt-4">
-          {allDuties.map((d) => <DutyCard key={d.id} duty={d} />)}
+          {loadingAll ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : allDuties.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No duties found.</p>
+          ) : (
+            allDuties.map((d) => <DutyCard key={d.id} duty={d} />)
+          )}
         </TabsContent>
       </Tabs>
     </div>

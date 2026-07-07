@@ -15,61 +15,84 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, CheckCircle, XCircle, User, FileText, MapPin, ImageIcon } from 'lucide-react';
-
-const mockVerification = {
-  id: '3',
-  student: {
-    name: 'Ana Reyes',
-    studentNo: '2021-00003',
-    year: 3,
-    section: 'B',
-    program: 'BSN',
-  },
-  case: {
-    name: 'OB-GYN Delivery Assist #1',
-    category: 'Obstetrics & Gynecology',
-    requiredCount: 5,
-    currentCount: 4,
-  },
-  submission: {
-    submittedAt: 'October 7, 2024 at 10:32 AM',
-    schedule: 'October 6, 2024 — Day Shift (08:00–16:00)',
-    hospital: 'St. Luke\'s Medical Center',
-    department: 'OB-GYN Ward',
-    notes:
-      'Assisted with a normal spontaneous vaginal delivery. Patient was a 28-year-old G2P1 at 39 weeks AOG. All vital signs were within normal range. Placenta was delivered completely.',
-    hasPhoto: false,
-  },
-};
+import { ArrowLeft, CheckCircle, XCircle, User, FileText, MapPin, Loader2 } from 'lucide-react';
+import {
+  useListCaseCompletions,
+  useVerifyCaseCompletion,
+  useRejectCaseCompletion,
+} from '@workspace/api-client-react';
 
 export function ReviewVerificationPage() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const [, params] = useRoute('/verifications/:id');
+  const completionId = params?.id ?? '';
+
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [done, setDone] = useState(false);
 
-  const s = mockVerification.student;
-  const initials = s.name.split(' ').map((n) => n[0]).join('');
+  // Load the list of pending completions and find the one matching the route id
+  const { data: completions = [], isLoading } = useListCaseCompletions({ status: 'pending' });
+  const completion = completions.find((c) => c.id === completionId);
 
-  function handleVerify() {
-    toast({ title: 'Case Verified ✓', description: `${mockVerification.case.name} has been verified for ${s.name}.` });
-    setDone(true);
-    setTimeout(() => setLocation('/verifications'), 1500);
+  const verify = useVerifyCaseCompletion();
+  const reject = useRejectCaseCompletion();
+
+  async function handleVerify() {
+    try {
+      await verify.mutateAsync({ id: completionId });
+      toast({ title: 'Case Verified ✓', description: 'The case completion has been verified.' });
+      setDone(true);
+      setTimeout(() => setLocation('/verifications'), 1500);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to verify';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    }
   }
 
-  function handleRejectSubmit() {
+  async function handleRejectSubmit() {
     if (!rejectReason.trim()) return;
-    toast({
-      title: 'Case Rejected',
-      description: `Verification rejected. Reason sent to ${s.name}.`,
-      variant: 'destructive',
-    });
-    setRejectOpen(false);
-    setDone(true);
-    setTimeout(() => setLocation('/verifications'), 1500);
+    try {
+      await reject.mutateAsync({ id: completionId, data: { rejectionReason: rejectReason } });
+      toast({
+        title: 'Case Rejected',
+        description: 'Rejection reason has been sent to the student.',
+        variant: 'destructive',
+      });
+      setRejectOpen(false);
+      setDone(true);
+      setTimeout(() => setLocation('/verifications'), 1500);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to reject';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    }
   }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!completion) {
+    return (
+      <div className="text-center py-20 text-muted-foreground space-y-4">
+        <p>Submission not found or already reviewed.</p>
+        <Button asChild variant="outline">
+          <Link href="/verifications">Back to Pending Verifications</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  const student = completion.student;
+  const studentName = student ? `${student.firstName} ${student.lastName}` : completion.studentId;
+  const initials = student
+    ? `${student.firstName[0]}${student.lastName[0]}`
+    : '??';
 
   return (
     <div className="space-y-6">
@@ -101,10 +124,8 @@ export function ReviewVerificationPage() {
                   <AvatarFallback className="bg-primary text-primary-foreground font-bold">{initials}</AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="font-semibold text-lg">{s.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {s.studentNo} · Year {s.year}, Section {s.section} · {s.program}
-                  </p>
+                  <p className="font-semibold text-lg">{studentName}</p>
+                  <p className="text-sm text-muted-foreground">{completion.studentId}</p>
                 </div>
               </div>
             </CardContent>
@@ -118,109 +139,80 @@ export function ReviewVerificationPage() {
                 Case Details
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Case Name</p>
-                  <p className="font-medium mt-0.5">{mockVerification.case.name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Category</p>
-                  <p className="font-medium mt-0.5">{mockVerification.case.category}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Required Count</p>
-                  <p className="font-medium mt-0.5">{mockVerification.case.requiredCount}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Current Count</p>
-                  <p className="font-medium mt-0.5">{mockVerification.case.currentCount} <span className="text-muted-foreground text-sm">(before this submission)</span></p>
-                </div>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Case Name</p>
+                <p className="font-medium">{completion.clinicalCase?.name ?? completion.clinicalCaseId}</p>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Submission Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <MapPin className="h-4 w-4" />
-                Submission Details
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-4">
+              {completion.clinicalCase?.category && (
                 <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Submitted At</p>
-                  <p className="font-medium mt-0.5">{mockVerification.submission.submittedAt}</p>
+                  <p className="text-sm text-muted-foreground">Category</p>
+                  <p className="font-medium">{completion.clinicalCase.category}</p>
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Schedule</p>
-                  <p className="font-medium mt-0.5">{mockVerification.submission.schedule}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Hospital</p>
-                  <p className="font-medium mt-0.5">{mockVerification.submission.hospital}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Department</p>
-                  <p className="font-medium mt-0.5">{mockVerification.submission.department}</p>
-                </div>
-              </div>
+              )}
               <Separator />
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Student Notes</p>
-                <p className="text-sm leading-relaxed bg-muted/50 rounded-lg p-3">{mockVerification.submission.notes}</p>
+                <p className="text-sm text-muted-foreground">Submitted At</p>
+                <p className="font-medium">{new Date(completion.submittedAt).toLocaleString()}</p>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Right column */}
-        <div className="space-y-4">
-          {/* Photo Evidence */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ImageIcon className="h-4 w-4" />
-                Photo Evidence
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {mockVerification.submission.hasPhoto ? (
-                <img src="" alt="Evidence" className="w-full rounded-lg" />
-              ) : (
-                <div className="flex flex-col items-center justify-center h-40 bg-muted rounded-lg text-muted-foreground gap-2">
-                  <ImageIcon className="h-8 w-8 opacity-30" />
-                  <p className="text-sm">No photo submitted</p>
+              {completion.notes && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Notes</p>
+                  <p className="text-sm border rounded-md p-3 bg-muted/30">{completion.notes}</p>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Actions */}
+          {/* Location */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Actions</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <MapPin className="h-4 w-4" />
+                Location
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div>
+                <p className="text-sm text-muted-foreground">Hospital</p>
+                <p className="font-medium">{completion.hospital?.name ?? completion.hospitalId ?? '—'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Department</p>
+                <p className="font-medium">{completion.department?.name ?? completion.departmentId ?? '—'}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right column — Actions */}
+        <div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Verification Decision</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              <Badge variant="secondary" className="w-full justify-center py-1">
+                Status: Pending Review
+              </Badge>
+              <Separator />
               {done ? (
-                <div className="text-center py-4">
-                  <p className="text-sm text-muted-foreground">Action submitted. Redirecting…</p>
-                </div>
+                <p className="text-sm text-muted-foreground text-center py-4">Redirecting…</p>
               ) : (
                 <>
                   <Button
-                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white gap-2"
+                    className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700"
                     onClick={handleVerify}
+                    disabled={verify.isPending || reject.isPending}
                   >
-                    <CheckCircle className="h-4 w-4" />
+                    {verify.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
                     Verify ✓
                   </Button>
                   <Button
                     variant="destructive"
                     className="w-full gap-2"
                     onClick={() => setRejectOpen(true)}
+                    disabled={verify.isPending || reject.isPending}
                   >
                     <XCircle className="h-4 w-4" />
                     Reject ✗
@@ -254,7 +246,12 @@ export function ReviewVerificationPage() {
             <Button variant="outline" onClick={() => setRejectOpen(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleRejectSubmit} disabled={!rejectReason.trim()}>
+            <Button
+              variant="destructive"
+              onClick={handleRejectSubmit}
+              disabled={!rejectReason.trim() || reject.isPending}
+            >
+              {reject.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Confirm Rejection
             </Button>
           </DialogFooter>

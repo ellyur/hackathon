@@ -1,8 +1,7 @@
-import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Camera, Loader2, User } from 'lucide-react';
+import { Camera, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,18 +9,17 @@ import { Separator } from '@/components/ui/separator';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import { useUpdateUser } from '@workspace/api-client-react';
 import type { AuthUser } from '@workspace/api-client-react';
 
 const profileSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
-  email: z.string().email(),
   phone: z.string().optional(),
 });
 
 const passwordSchema = z
   .object({
-    currentPassword: z.string().min(1, 'Current password is required'),
     newPassword: z.string().min(8, 'Password must be at least 8 characters'),
     confirmPassword: z.string().min(1, 'Please confirm your password'),
   })
@@ -37,49 +35,58 @@ export function ProfileSettingsPage() {
   const { user: rawUser } = useAuth();
   const user = rawUser as AuthUser | undefined;
   const { toast } = useToast();
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [savingPassword, setSavingPassword] = useState(false);
+  const updateUser = useUpdateUser();
 
   const profileForm = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      firstName: user?.firstName ?? 'Juan',
-      lastName: user?.lastName ?? 'Dela Cruz',
-      email: user?.email ?? 'juan.delacruz@university.edu',
-      phone: '09171234567',
+      firstName: user?.firstName ?? '',
+      lastName: user?.lastName ?? '',
+      phone: user?.phone ?? '',
     },
   });
 
   const passwordForm = useForm<PasswordFormValues>({
     resolver: zodResolver(passwordSchema),
-    defaultValues: { currentPassword: '', newPassword: '', confirmPassword: '' },
+    defaultValues: { newPassword: '', confirmPassword: '' },
   });
 
-  const onSaveProfile = async (_values: ProfileFormValues) => {
-    setSavingProfile(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    setSavingProfile(false);
-    toast({ title: 'Profile updated successfully.' });
+  const onSaveProfile = async (values: ProfileFormValues) => {
+    if (!user) return;
+    try {
+      await updateUser.mutateAsync({
+        id: user.id,
+        data: {
+          firstName: values.firstName,
+          lastName: values.lastName,
+          phone: values.phone || undefined,
+        },
+      });
+      toast({ title: 'Profile updated successfully.' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update profile';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    }
   };
 
-  const onSavePassword = async (_values: PasswordFormValues) => {
-    setSavingPassword(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    setSavingPassword(false);
-    passwordForm.reset();
-    toast({ title: 'Password changed successfully.' });
+  const onSavePassword = async (values: PasswordFormValues) => {
+    if (!user) return;
+    try {
+      await updateUser.mutateAsync({
+        id: user.id,
+        data: { password: values.newPassword },
+      });
+      passwordForm.reset();
+      toast({ title: 'Password changed successfully.' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to change password';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    }
   };
 
-  const initials = `${user?.firstName?.[0] ?? 'J'}${user?.lastName?.[0] ?? 'D'}`.toUpperCase();
+  const initials = `${user?.firstName?.[0] ?? '?'}${user?.lastName?.[0] ?? '?'}`.toUpperCase();
   const isStudent = user?.role === 'student';
-
-  const studentProfile = user?.studentProfile ?? {
-    studentNumber: '2021-0001',
-    yearLevel: '3rd Year',
-    section: 'A',
-    program: 'BS Nursing',
-    academicYear: '2024-2025',
-  };
+  const studentProfile = user?.studentProfile;
 
   return (
     <div className="space-y-6">
@@ -100,66 +107,50 @@ export function ProfileSettingsPage() {
               <div className="w-24 h-24 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-2xl font-bold select-none">
                 {initials}
               </div>
-              <Button variant="outline" size="sm" className="gap-2" disabled>
-                <Camera className="h-4 w-4" />
-                Upload Photo
+              <Button variant="outline" size="sm" disabled className="gap-2 text-xs">
+                <Camera className="h-3.5 w-3.5" />
+                Change Photo
               </Button>
-              <p className="text-xs text-muted-foreground text-center">JPG, PNG up to 2MB</p>
+              <p className="text-xs text-muted-foreground text-center">Photo upload coming soon</p>
             </div>
 
             {/* Form column */}
             <div className="md:col-span-2">
               <Form {...profileForm}>
                 <form onSubmit={profileForm.handleSubmit(onSaveProfile)} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <FormField
-                      control={profileForm.control}
-                      name="firstName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>First Name</FormLabel>
-                          <FormControl><Input {...field} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={profileForm.control}
-                      name="lastName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Last Name</FormLabel>
-                          <FormControl><Input {...field} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField control={profileForm.control} name="firstName" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>First Name</FormLabel>
+                        <FormControl><Input {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={profileForm.control} name="lastName" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Last Name</FormLabel>
+                        <FormControl><Input {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
                   </div>
-                  <FormField
-                    control={profileForm.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email Address</FormLabel>
-                        <FormControl><Input {...field} disabled className="bg-muted" /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={profileForm.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Phone Number</FormLabel>
-                        <FormControl><Input placeholder="09XXXXXXXXX" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <FormItem>
+                    <FormLabel>Email Address</FormLabel>
+                    <FormControl>
+                      <Input value={user?.email ?? ''} disabled className="bg-muted" />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">Email cannot be changed here.</p>
+                  </FormItem>
+                  <FormField control={profileForm.control} name="phone" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone Number</FormLabel>
+                      <FormControl><Input placeholder="09171234567" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
                   <div className="flex justify-end">
-                    <Button type="submit" disabled={savingProfile}>
-                      {savingProfile && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    <Button type="submit" disabled={updateUser.isPending}>
+                      {updateUser.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                       Save Changes
                     </Button>
                   </div>
@@ -170,6 +161,37 @@ export function ProfileSettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Student Info (read-only) */}
+      {isStudent && studentProfile && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Academic Profile</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <p className="text-muted-foreground">Student No.</p>
+                <p className="font-medium font-mono">{studentProfile.studentNumber}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Year Level</p>
+                <p className="font-medium">{studentProfile.yearLevel ? `Year ${studentProfile.yearLevel}` : '—'}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Section</p>
+                <p className="font-medium">{studentProfile.section ?? '—'}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Program</p>
+                <p className="font-medium">{studentProfile.program ?? '—'}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Separator />
+
       {/* Change Password */}
       <Card>
         <CardHeader>
@@ -178,79 +200,30 @@ export function ProfileSettingsPage() {
         <CardContent>
           <Form {...passwordForm}>
             <form onSubmit={passwordForm.handleSubmit(onSavePassword)} className="space-y-4 max-w-md">
-              <FormField
-                control={passwordForm.control}
-                name="currentPassword"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Current Password</FormLabel>
-                    <FormControl><Input type="password" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={passwordForm.control}
-                name="newPassword"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>New Password</FormLabel>
-                    <FormControl><Input type="password" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={passwordForm.control}
-                name="confirmPassword"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Confirm New Password</FormLabel>
-                    <FormControl><Input type="password" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <FormField control={passwordForm.control} name="newPassword" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>New Password</FormLabel>
+                  <FormControl><Input type="password" placeholder="Min. 8 characters" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={passwordForm.control} name="confirmPassword" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Confirm New Password</FormLabel>
+                  <FormControl><Input type="password" placeholder="Repeat new password" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
               <div className="flex justify-end">
-                <Button type="submit" variant="outline" disabled={savingPassword}>
-                  {savingPassword && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Update Password
+                <Button type="submit" disabled={updateUser.isPending}>
+                  {updateUser.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Change Password
                 </Button>
               </div>
             </form>
           </Form>
         </CardContent>
       </Card>
-
-      {/* Student Profile (read-only) */}
-      {isStudent && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <User className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base">Student Information</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {[
-                { label: 'Student Number', value: studentProfile.studentNumber },
-                { label: 'Year Level', value: studentProfile.yearLevel },
-                { label: 'Section', value: studentProfile.section },
-                { label: 'Program', value: studentProfile.program },
-                { label: 'Academic Year', value: studentProfile.academicYear },
-              ].map(({ label, value }) => (
-                <div key={label}>
-                  <p className="text-xs text-muted-foreground">{label}</p>
-                  <p className="text-sm font-medium mt-0.5">{value}</p>
-                </div>
-              ))}
-            </div>
-            <Separator className="mt-4 mb-2" />
-            <p className="text-xs text-muted-foreground">Student information is managed by the administration. Contact your coordinator to request changes.</p>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

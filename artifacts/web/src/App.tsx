@@ -20,10 +20,24 @@ import { AttendanceRosterPage } from '@/pages/attendance-roster';
 import { AdminUsersPage } from '@/pages/admin-users';
 import { MySchedulePage } from '@/pages/my-schedule';
 import { FaceSetupPage } from '@/pages/face-setup';
+import { MyDutiesPage } from '@/pages/duties';
+import { CreateSchedulePage } from '@/pages/create-schedule';
+import { EditSchedulePage } from '@/pages/edit-schedule';
+import { StudentRosterPage } from '@/pages/students';
+import { StudentProfilePage } from '@/pages/student-profile';
+import { CreateSlotPage } from '@/pages/create-slot';
+import { SlotApplicationsPage } from '@/pages/slot-applications';
+import { MakeupDutiesQueuePage } from '@/pages/makeup-duties';
+import { CaseGapsMatrixPage } from '@/pages/case-gaps';
+import { PendingVerificationsPage } from '@/pages/verifications';
+import { ReviewVerificationPage } from '@/pages/review-verification';
+import { CreateUserPage } from '@/pages/create-user';
+import { AdminAnalyticsPage } from '@/pages/admin-analytics';
+import { ProfileSettingsPage } from '@/pages/profile-settings';
 
 const queryClient = new QueryClient();
 
-// Scaffold for missing pages
+// Scaffold for remaining unimplemented pages
 const PlaceholderPage = ({ title }: { title: string }) => (
   <div className="h-full flex items-center justify-center p-8 text-center text-muted-foreground border-2 border-dashed rounded-xl">
     <div className="space-y-2">
@@ -48,7 +62,7 @@ function Router() {
               
               <Route path="/notifications"><PlaceholderPage title="Notification Center" /></Route>
               <Route path="/announcements"><PlaceholderPage title="Announcements" /></Route>
-              <Route path="/settings/profile"><PlaceholderPage title="Profile Settings" /></Route>
+              <Route path="/settings/profile" component={ProfileSettingsPage} />
 
               {/* Student */}
               <Route path="/schedule" component={MySchedulePage} />
@@ -61,33 +75,33 @@ function Router() {
               <Route path="/slots/my-applications"><PlaceholderPage title="My Applications" /></Route>
 
               {/* CI */}
-              <Route path="/duties"><PlaceholderPage title="My Duties" /></Route>
+              <Route path="/duties" component={MyDutiesPage} />
               <Route path="/duties/:id/attendance" component={AttendanceRosterPage} />
               <Route path="/duties/:id/verify"><PlaceholderPage title="Verify Student Case" /></Route>
 
               {/* Scheduler */}
               <Route path="/schedules" component={MasterSchedulePage} />
-              <Route path="/schedules/create"><PlaceholderPage title="Create Schedule" /></Route>
-              <Route path="/schedules/:id/edit"><PlaceholderPage title="Edit Schedule" /></Route>
+              <Route path="/schedules/create" component={CreateSchedulePage} />
+              <Route path="/schedules/:id/edit" component={EditSchedulePage} />
               <Route path="/schedules/:id/recommendations"><PlaceholderPage title="Student Recommendations" /></Route>
-              <Route path="/students"><PlaceholderPage title="Student Roster" /></Route>
-              <Route path="/students/:id"><PlaceholderPage title="Student Profile" /></Route>
-              <Route path="/slots/create"><PlaceholderPage title="Create Slot" /></Route>
-              <Route path="/slots/:id/applications"><PlaceholderPage title="Slot Applications" /></Route>
-              <Route path="/makeup-duties"><PlaceholderPage title="Makeup Duties Queue" /></Route>
-              <Route path="/case-gaps"><PlaceholderPage title="Case Gaps Matrix" /></Route>
-              <Route path="/verifications"><PlaceholderPage title="Pending Verifications" /></Route>
-              <Route path="/verifications/:id"><PlaceholderPage title="Review Verification" /></Route>
+              <Route path="/students" component={StudentRosterPage} />
+              <Route path="/students/:id" component={StudentProfilePage} />
+              <Route path="/slots/create" component={CreateSlotPage} />
+              <Route path="/slots/:id/applications" component={SlotApplicationsPage} />
+              <Route path="/makeup-duties" component={MakeupDutiesQueuePage} />
+              <Route path="/case-gaps" component={CaseGapsMatrixPage} />
+              <Route path="/verifications" component={PendingVerificationsPage} />
+              <Route path="/verifications/:id" component={ReviewVerificationPage} />
               <Route path="/announcements/manage"><PlaceholderPage title="Manage Announcements" /></Route>
 
               {/* Admin */}
               <Route path="/admin/users" component={AdminUsersPage} />
-              <Route path="/admin/users/create"><PlaceholderPage title="Create User" /></Route>
+              <Route path="/admin/users/create" component={CreateUserPage} />
               <Route path="/admin/hospitals"><PlaceholderPage title="Manage Hospitals" /></Route>
               <Route path="/admin/hospitals/:id/departments"><PlaceholderPage title="Manage Departments" /></Route>
               <Route path="/admin/cases"><PlaceholderPage title="Clinical Cases Library" /></Route>
               <Route path="/admin/recommendation-weights"><PlaceholderPage title="Recommendation Weights" /></Route>
-              <Route path="/admin/analytics"><PlaceholderPage title="Full Analytics" /></Route>
+              <Route path="/admin/analytics" component={AdminAnalyticsPage} />
               <Route path="/admin/reports"><PlaceholderPage title="Generate Reports" /></Route>
               <Route path="/admin/audit"><PlaceholderPage title="Audit Logs" /></Route>
               <Route path="/admin/settings"><PlaceholderPage title="System Settings" /></Route>

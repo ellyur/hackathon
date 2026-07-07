@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useRoute } from 'wouter';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -21,104 +21,136 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Loader2, Pencil, Trash2 } from 'lucide-react';
-
-const HOSPITALS = [
-  { id: 'h1', name: "St. Luke's Medical Center" },
-  { id: 'h2', name: 'General Hospital' },
-  { id: 'h3', name: 'Medical City' },
-];
-
-const DEPARTMENTS: Record<string, { id: string; name: string }[]> = {
-  h1: [
-    { id: 'd1', name: 'Intensive Care Unit (ICU)' },
-    { id: 'd2', name: 'Emergency Room (ER)' },
-    { id: 'd3', name: 'Operating Room (OR)' },
-  ],
-  h2: [
-    { id: 'd4', name: 'OB-Gyn / Delivery Room' },
-    { id: 'd5', name: 'Pediatrics Ward' },
-    { id: 'd6', name: 'Emergency Room (ER)' },
-  ],
-  h3: [
-    { id: 'd7', name: 'Intensive Care Unit (ICU)' },
-    { id: 'd8', name: 'Operating Room (OR)' },
-    { id: 'd9', name: 'Pediatrics Ward' },
-  ],
-};
-
-const CIS = [
-  { id: 'ci1', name: 'Dr. James Wilson' },
-  { id: 'ci2', name: 'Dr. Sarah Smith' },
-  { id: 'ci3', name: 'Dr. Maria Santos' },
-  { id: 'ci4', name: 'Dr. Robert Lee' },
-];
-
-// Mock pre-filled data for the schedule being edited
-const MOCK_SCHEDULE = {
-  title: 'Morning ICU Rotation',
-  hospital: 'h1',
-  department: 'd1',
-  ci: 'ci1',
-  date: '2024-10-20',
-  startTime: '08:00',
-  endTime: '16:00',
-  maxStudents: 8,
-};
+import {
+  useGetSchedule,
+  useUpdateSchedule,
+  useCancelSchedule,
+  useListHospitals,
+  useListDepartments,
+  useListUsers,
+} from '@workspace/api-client-react';
 
 const schema = z.object({
   title: z.string().optional(),
-  hospital: z.string().min(1, 'Hospital is required'),
-  department: z.string().min(1, 'Department is required'),
-  ci: z.string().min(1, 'Clinical Instructor is required'),
+  hospitalId: z.string().min(1, 'Hospital is required'),
+  departmentId: z.string().min(1, 'Department is required'),
+  ciId: z.string().min(1, 'Clinical Instructor is required'),
   date: z.string().min(1, 'Date is required'),
   startTime: z.string().min(1, 'Start time is required'),
   endTime: z.string().min(1, 'End time is required'),
-  maxStudents: z.coerce.number().min(1).max(20),
+  gracePeriodMin: z.coerce.number().min(0).default(15),
+  notes: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
 
 export function EditSchedulePage() {
   const [, params] = useRoute('/schedules/:id/edit');
+  const scheduleId = params?.id ?? '';
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [selectedHospital, setSelectedHospital] = useState(MOCK_SCHEDULE.hospital);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCancelling, setIsCancelling] = useState(false);
+  const [selectedHospital, setSelectedHospital] = useState('');
+
+  const { data: schedule, isLoading: loadingSchedule } = useGetSchedule(scheduleId, {
+    query: { enabled: !!scheduleId },
+  });
+  const { data: hospitals = [], isLoading: loadingHospitals } = useListHospitals();
+  const { data: departments = [], isLoading: loadingDepts } = useListDepartments(
+    selectedHospital || schedule?.hospitalId || '',
+    { query: { enabled: !!(selectedHospital || schedule?.hospitalId) } }
+  );
+  const { data: allUsers = [], isLoading: loadingCIs } = useListUsers({ role: 'ci' });
+  const ciList = allUsers.filter((u) => u.role === 'ci' && u.isActive);
+
+  const updateSchedule = useUpdateSchedule();
+  const cancelSchedule = useCancelSchedule();
 
   const {
     register,
     handleSubmit,
     setValue,
+    reset,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: MOCK_SCHEDULE,
+    defaultValues: { gracePeriodMin: 15 },
   });
 
-  function onSubmit(_data: FormValues) {
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+  // Pre-fill form once schedule data arrives
+  useEffect(() => {
+    if (schedule) {
+      reset({
+        title: schedule.title ?? '',
+        hospitalId: schedule.hospitalId ?? '',
+        departmentId: schedule.departmentId ?? '',
+        ciId: schedule.ciId ?? '',
+        date: schedule.dutyDate,
+        startTime: schedule.startTime,
+        endTime: schedule.endTime,
+        gracePeriodMin: schedule.gracePeriodMin,
+        notes: schedule.notes ?? '',
+      });
+      setSelectedHospital(schedule.hospitalId ?? '');
+    }
+  }, [schedule, reset]);
+
+  async function onSubmit(data: FormValues) {
+    try {
+      await updateSchedule.mutateAsync({
+        id: scheduleId,
+        data: {
+          title: data.title || undefined,
+          hospitalId: data.hospitalId,
+          departmentId: data.departmentId,
+          ciId: data.ciId,
+          dutyDate: data.date,
+          startTime: data.startTime,
+          endTime: data.endTime,
+          gracePeriodMin: data.gracePeriodMin,
+          notes: data.notes || undefined,
+        },
+      });
       toast({ title: 'Schedule updated', description: 'Your changes have been saved.' });
       setLocation('/schedules');
-    }, 1200);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update schedule';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    }
   }
 
-  function handleCancelSchedule() {
-    setIsCancelling(true);
-    setTimeout(() => {
-      setIsCancelling(false);
+  async function handleCancelSchedule() {
+    try {
+      await cancelSchedule.mutateAsync({ id: scheduleId });
       toast({
         title: 'Schedule cancelled',
         description: 'The schedule has been cancelled and students notified.',
         variant: 'destructive',
       });
       setLocation('/schedules');
-    }, 1000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to cancel schedule';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    }
   }
 
-  const departments = selectedHospital ? (DEPARTMENTS[selectedHospital] ?? []) : [];
+  if (loadingSchedule) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!schedule) {
+    return (
+      <div className="text-center py-20 text-muted-foreground">
+        Schedule not found.{' '}
+        <Link href="/schedules" className="underline text-foreground">Back to schedules</Link>
+      </div>
+    );
+  }
+
+  const effectiveHospital = selectedHospital || schedule.hospitalId || '';
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -126,60 +158,59 @@ export function EditSchedulePage() {
         <Link href="/schedules" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-3">
           <ArrowLeft className="w-4 h-4" /> Back to Schedules
         </Link>
-        <h2 className="text-3xl font-bold tracking-tight">Edit Schedule</h2>
-        <p className="text-muted-foreground mt-1">
-          Editing schedule {params?.id ?? ''} — changes will notify assigned students.
-        </p>
+        <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+          <Pencil className="w-6 h-6" /> Edit Schedule
+        </h2>
+        <p className="text-muted-foreground mt-1">Update the details of this clinical rotation.</p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Pencil className="w-5 h-5" /> Schedule Details
-          </CardTitle>
-          <CardDescription>Update the fields below and save.</CardDescription>
+          <CardTitle>Schedule Details</CardTitle>
+          <CardDescription>All fields are required unless marked optional.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             {/* Title */}
             <div className="space-y-2">
               <Label htmlFor="title">Title <span className="text-muted-foreground text-xs">(optional)</span></Label>
-              <Input id="title" placeholder="e.g., Morning ICU Rotation" {...register('title')} />
+              <Input id="title" placeholder="e.g. Morning ICU Rotation" {...register('title')} />
             </div>
 
             {/* Hospital */}
             <div className="space-y-2">
               <Label>Hospital <span className="text-destructive">*</span></Label>
               <Select
-                defaultValue={MOCK_SCHEDULE.hospital}
+                disabled={loadingHospitals}
+                value={effectiveHospital}
                 onValueChange={(val) => {
                   setSelectedHospital(val);
-                  setValue('hospital', val);
-                  setValue('department', '');
+                  setValue('hospitalId', val, { shouldValidate: true });
+                  setValue('departmentId', '', { shouldValidate: false });
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select hospital..." />
+                  <SelectValue placeholder={loadingHospitals ? 'Loading...' : 'Select hospital'} />
                 </SelectTrigger>
                 <SelectContent>
-                  {HOSPITALS.map((h) => (
+                  {hospitals.map((h) => (
                     <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {errors.hospital && <p className="text-xs text-destructive">{errors.hospital.message}</p>}
+              {errors.hospitalId && <p className="text-xs text-destructive">{errors.hospitalId.message}</p>}
             </div>
 
             {/* Department */}
             <div className="space-y-2">
               <Label>Department <span className="text-destructive">*</span></Label>
               <Select
-                defaultValue={MOCK_SCHEDULE.department}
-                disabled={!selectedHospital}
-                onValueChange={(val) => setValue('department', val)}
+                disabled={!effectiveHospital || loadingDepts}
+                value={schedule.departmentId}
+                onValueChange={(val) => setValue('departmentId', val, { shouldValidate: true })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select department..." />
+                  <SelectValue placeholder={!effectiveHospital ? 'Select hospital first' : loadingDepts ? 'Loading...' : 'Select department'} />
                 </SelectTrigger>
                 <SelectContent>
                   {departments.map((d) => (
@@ -187,26 +218,27 @@ export function EditSchedulePage() {
                   ))}
                 </SelectContent>
               </Select>
-              {errors.department && <p className="text-xs text-destructive">{errors.department.message}</p>}
+              {errors.departmentId && <p className="text-xs text-destructive">{errors.departmentId.message}</p>}
             </div>
 
-            {/* Clinical Instructor */}
+            {/* CI */}
             <div className="space-y-2">
               <Label>Clinical Instructor <span className="text-destructive">*</span></Label>
               <Select
-                defaultValue={MOCK_SCHEDULE.ci}
-                onValueChange={(val) => setValue('ci', val)}
+                disabled={loadingCIs}
+                value={schedule.ciId}
+                onValueChange={(val) => setValue('ciId', val, { shouldValidate: true })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Assign a CI..." />
+                  <SelectValue placeholder={loadingCIs ? 'Loading...' : 'Select clinical instructor'} />
                 </SelectTrigger>
                 <SelectContent>
-                  {CIS.map((ci) => (
-                    <SelectItem key={ci.id} value={ci.id}>{ci.name}</SelectItem>
+                  {ciList.map((ci) => (
+                    <SelectItem key={ci.id} value={ci.id}>{ci.firstName} {ci.lastName}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {errors.ci && <p className="text-xs text-destructive">{errors.ci.message}</p>}
+              {errors.ciId && <p className="text-xs text-destructive">{errors.ciId.message}</p>}
             </div>
 
             {/* Date */}
@@ -230,19 +262,24 @@ export function EditSchedulePage() {
               </div>
             </div>
 
-            {/* Max Students */}
+            {/* Grace Period */}
             <div className="space-y-2">
-              <Label htmlFor="maxStudents">Max Students <span className="text-destructive">*</span></Label>
-              <Input id="maxStudents" type="number" min={1} max={20} {...register('maxStudents')} />
-              {errors.maxStudents && <p className="text-xs text-destructive">{errors.maxStudents.message}</p>}
+              <Label htmlFor="gracePeriodMin">Grace Period (minutes)</Label>
+              <Input id="gracePeriodMin" type="number" min={0} max={60} {...register('gracePeriodMin')} />
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Input id="notes" placeholder="Any special instructions..." {...register('notes')} />
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="outline" asChild>
                 <Link href="/schedules">Cancel</Link>
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : 'Save Changes'}
+              <Button type="submit" disabled={updateSchedule.isPending}>
+                {updateSchedule.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : 'Save Changes'}
               </Button>
             </div>
           </form>
@@ -260,8 +297,8 @@ export function EditSchedulePage() {
         <CardContent>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive" disabled={isCancelling}>
-                {isCancelling ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Cancelling...</> : 'Cancel This Schedule'}
+              <Button variant="destructive" disabled={cancelSchedule.isPending}>
+                {cancelSchedule.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Cancelling...</> : 'Cancel This Schedule'}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>

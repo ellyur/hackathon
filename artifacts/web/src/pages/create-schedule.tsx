@@ -10,47 +10,23 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Loader2, CalendarPlus } from 'lucide-react';
-
-const HOSPITALS = [
-  { id: 'h1', name: "St. Luke's Medical Center" },
-  { id: 'h2', name: 'General Hospital' },
-  { id: 'h3', name: 'Medical City' },
-];
-
-const DEPARTMENTS: Record<string, { id: string; name: string }[]> = {
-  h1: [
-    { id: 'd1', name: 'Intensive Care Unit (ICU)' },
-    { id: 'd2', name: 'Emergency Room (ER)' },
-    { id: 'd3', name: 'Operating Room (OR)' },
-  ],
-  h2: [
-    { id: 'd4', name: 'OB-Gyn / Delivery Room' },
-    { id: 'd5', name: 'Pediatrics Ward' },
-    { id: 'd6', name: 'Emergency Room (ER)' },
-  ],
-  h3: [
-    { id: 'd7', name: 'Intensive Care Unit (ICU)' },
-    { id: 'd8', name: 'Operating Room (OR)' },
-    { id: 'd9', name: 'Pediatrics Ward' },
-  ],
-};
-
-const CIS = [
-  { id: 'ci1', name: 'Dr. James Wilson' },
-  { id: 'ci2', name: 'Dr. Sarah Smith' },
-  { id: 'ci3', name: 'Dr. Maria Santos' },
-  { id: 'ci4', name: 'Dr. Robert Lee' },
-];
+import {
+  useCreateSchedule,
+  useListHospitals,
+  useListDepartments,
+  useListUsers,
+} from '@workspace/api-client-react';
 
 const schema = z.object({
   title: z.string().optional(),
-  hospital: z.string().min(1, 'Hospital is required'),
-  department: z.string().min(1, 'Department is required'),
-  ci: z.string().min(1, 'Clinical Instructor is required'),
+  hospitalId: z.string().min(1, 'Hospital is required'),
+  departmentId: z.string().min(1, 'Department is required'),
+  ciId: z.string().min(1, 'Clinical Instructor is required'),
   date: z.string().min(1, 'Date is required'),
   startTime: z.string().min(1, 'Start time is required'),
   endTime: z.string().min(1, 'End time is required'),
-  maxStudents: z.coerce.number().min(1).max(20),
+  gracePeriodMin: z.coerce.number().min(0).default(15),
+  notes: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -59,7 +35,15 @@ export function CreateSchedulePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [selectedHospital, setSelectedHospital] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { data: hospitals = [], isLoading: loadingHospitals } = useListHospitals();
+  const { data: departments = [], isLoading: loadingDepts } = useListDepartments(selectedHospital, {
+    query: { enabled: !!selectedHospital } as any,
+  });
+  const { data: allUsers = [], isLoading: loadingCIs } = useListUsers({ role: 'ci' });
+  const ciList = allUsers.filter((u) => u.role === 'ci' && u.isActive);
+
+  const createSchedule = useCreateSchedule();
 
   const {
     register,
@@ -68,19 +52,32 @@ export function CreateSchedulePage() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { maxStudents: 8 },
+    defaultValues: { gracePeriodMin: 15 },
   });
 
-  function onSubmit(_data: FormValues) {
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+  async function onSubmit(data: FormValues) {
+    try {
+      await createSchedule.mutateAsync({
+        data: {
+          title: data.title || undefined,
+          hospitalId: data.hospitalId,
+          departmentId: data.departmentId,
+          ciId: data.ciId,
+          dutyDate: data.date,
+          startTime: data.startTime,
+          endTime: data.endTime,
+          gracePeriodMin: data.gracePeriodMin,
+          notes: data.notes || undefined,
+          studentIds: [],
+        },
+      });
       toast({ title: 'Schedule created successfully', description: 'The new rotation has been added.' });
       setLocation('/schedules');
-    }, 1200);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to create schedule';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    }
   }
-
-  const departments = selectedHospital ? (DEPARTMENTS[selectedHospital] ?? []) : [];
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -104,40 +101,41 @@ export function CreateSchedulePage() {
             {/* Title */}
             <div className="space-y-2">
               <Label htmlFor="title">Title <span className="text-muted-foreground text-xs">(optional)</span></Label>
-              <Input id="title" placeholder="e.g., Morning ICU Rotation" {...register('title')} />
+              <Input id="title" placeholder="e.g. Morning ICU Rotation" {...register('title')} />
             </div>
 
             {/* Hospital */}
             <div className="space-y-2">
               <Label>Hospital <span className="text-destructive">*</span></Label>
               <Select
+                disabled={loadingHospitals}
                 onValueChange={(val) => {
                   setSelectedHospital(val);
-                  setValue('hospital', val);
-                  setValue('department', '');
+                  setValue('hospitalId', val, { shouldValidate: true });
+                  setValue('departmentId', '', { shouldValidate: false });
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select hospital..." />
+                  <SelectValue placeholder={loadingHospitals ? 'Loading...' : 'Select hospital'} />
                 </SelectTrigger>
                 <SelectContent>
-                  {HOSPITALS.map((h) => (
+                  {hospitals.map((h) => (
                     <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {errors.hospital && <p className="text-xs text-destructive">{errors.hospital.message}</p>}
+              {errors.hospitalId && <p className="text-xs text-destructive">{errors.hospitalId.message}</p>}
             </div>
 
             {/* Department */}
             <div className="space-y-2">
               <Label>Department <span className="text-destructive">*</span></Label>
               <Select
-                disabled={!selectedHospital}
-                onValueChange={(val) => setValue('department', val)}
+                disabled={!selectedHospital || loadingDepts}
+                onValueChange={(val) => setValue('departmentId', val, { shouldValidate: true })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={selectedHospital ? 'Select department...' : 'Select a hospital first'} />
+                  <SelectValue placeholder={!selectedHospital ? 'Select hospital first' : loadingDepts ? 'Loading...' : 'Select department'} />
                 </SelectTrigger>
                 <SelectContent>
                   {departments.map((d) => (
@@ -145,23 +143,26 @@ export function CreateSchedulePage() {
                   ))}
                 </SelectContent>
               </Select>
-              {errors.department && <p className="text-xs text-destructive">{errors.department.message}</p>}
+              {errors.departmentId && <p className="text-xs text-destructive">{errors.departmentId.message}</p>}
             </div>
 
-            {/* Clinical Instructor */}
+            {/* CI */}
             <div className="space-y-2">
               <Label>Clinical Instructor <span className="text-destructive">*</span></Label>
-              <Select onValueChange={(val) => setValue('ci', val)}>
+              <Select
+                disabled={loadingCIs}
+                onValueChange={(val) => setValue('ciId', val, { shouldValidate: true })}
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder="Assign a CI..." />
+                  <SelectValue placeholder={loadingCIs ? 'Loading...' : 'Select clinical instructor'} />
                 </SelectTrigger>
                 <SelectContent>
-                  {CIS.map((ci) => (
-                    <SelectItem key={ci.id} value={ci.id}>{ci.name}</SelectItem>
+                  {ciList.map((ci) => (
+                    <SelectItem key={ci.id} value={ci.id}>{ci.firstName} {ci.lastName}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {errors.ci && <p className="text-xs text-destructive">{errors.ci.message}</p>}
+              {errors.ciId && <p className="text-xs text-destructive">{errors.ciId.message}</p>}
             </div>
 
             {/* Date */}
@@ -185,19 +186,24 @@ export function CreateSchedulePage() {
               </div>
             </div>
 
-            {/* Max Students */}
+            {/* Grace Period */}
             <div className="space-y-2">
-              <Label htmlFor="maxStudents">Max Students <span className="text-destructive">*</span></Label>
-              <Input id="maxStudents" type="number" min={1} max={20} {...register('maxStudents')} />
-              {errors.maxStudents && <p className="text-xs text-destructive">{errors.maxStudents.message}</p>}
+              <Label htmlFor="gracePeriodMin">Grace Period (minutes)</Label>
+              <Input id="gracePeriodMin" type="number" min={0} max={60} {...register('gracePeriodMin')} />
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Input id="notes" placeholder="Any special instructions..." {...register('notes')} />
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="outline" asChild>
                 <Link href="/schedules">Cancel</Link>
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</> : 'Create Schedule'}
+              <Button type="submit" disabled={createSchedule.isPending}>
+                {createSchedule.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</> : 'Create Schedule'}
               </Button>
             </div>
           </form>

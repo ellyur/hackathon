@@ -1,22 +1,16 @@
-import { useState } from 'react';
 import { Link } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useToast } from '@/hooks/use-toast';
-import { Clock, CheckCircle, ExternalLink } from 'lucide-react';
+import { Clock, CheckCircle, ExternalLink, Loader2 } from 'lucide-react';
+import { useListCaseCompletions } from '@workspace/api-client-react';
 
-const mockVerifications = [
-  { id: '1', student: 'Maria Santos',    studentNo: '2021-00001', caseName: 'Medical-Surgical Case #3',    submittedAt: 'Oct 13, 2024',  daysWaiting: 3, hospital: 'St. Luke\'s',     dept: 'ICU',        status: 'pending' },
-  { id: '2', student: 'Juan Dela Cruz',  studentNo: '2021-00002', caseName: 'Pediatric Assessment #2',     submittedAt: 'Oct 9, 2024',   daysWaiting: 7, hospital: 'Medical City',   dept: 'Pediatrics', status: 'pending' },
-  { id: '3', student: 'Ana Reyes',       studentNo: '2021-00003', caseName: 'OB-GYN Delivery Assist #1',   submittedAt: 'Oct 7, 2024',   daysWaiting: 9, hospital: 'St. Luke\'s',     dept: 'OB-GYN',     status: 'pending' },
-  { id: '4', student: 'Carlos Garcia',   studentNo: '2021-00004', caseName: 'Emergency Triage #4',         submittedAt: 'Oct 12, 2024',  daysWaiting: 4, hospital: 'General Hospital', dept: 'ER',         status: 'pending' },
-  { id: '5', student: 'Liza Manalo',     studentNo: '2021-00005', caseName: 'Psychiatric Eval #2',         submittedAt: 'Oct 8, 2024',   daysWaiting: 8, hospital: 'PGH',             dept: 'Psychiatry', status: 'pending' },
-  { id: '6', student: 'Robert Cruz',     studentNo: '2021-00006', caseName: 'Community Health Visit #3',   submittedAt: 'Oct 14, 2024',  daysWaiting: 2, hospital: 'Barangay HC',     dept: 'Community',  status: 'pending' },
-  { id: '7', student: 'Sophia Bautista', studentNo: '2021-00009', caseName: 'Medical-Surgical Case #1',    submittedAt: 'Oct 5, 2024',   daysWaiting: 11, hospital: 'General Hospital', dept: 'Med-Surg',  status: 'pending' },
-  { id: '8', student: 'Daniel Ramos',    studentNo: '2021-00010', caseName: 'Pediatric Assessment #1',     submittedAt: 'Oct 10, 2024',  daysWaiting: 6, hospital: 'Medical City',   dept: 'Pediatrics', status: 'pending' },
-];
+function daysSince(dateStr: string) {
+  const submitted = new Date(dateStr);
+  const now = new Date();
+  return Math.floor((now.getTime() - submitted.getTime()) / (1000 * 60 * 60 * 24));
+}
 
 function getRowClass(days: number) {
   if (days > 7) return 'bg-red-50/50';
@@ -31,23 +25,17 @@ function WaitBadge({ days }: { days: number }) {
 }
 
 export function PendingVerificationsPage() {
-  const { toast } = useToast();
-  const [verifications, setVerifications] = useState(mockVerifications);
+  const { data: completions = [], isLoading } = useListCaseCompletions({ status: 'pending' });
 
-  const avgWait = Math.round(
-    verifications.reduce((sum, v) => sum + v.daysWaiting, 0) / verifications.length
-  );
+  // Enrich with computed daysWaiting
+  const verifications = completions.map((v) => ({
+    ...v,
+    daysWaiting: daysSince(v.submittedAt),
+  }));
 
-  function handleBulkApprove() {
-    const topThree = verifications
-      .sort((a, b) => b.daysWaiting - a.daysWaiting)
-      .slice(0, 3)
-      .map((v) => v.id);
-    toast({
-      title: 'Bulk Approve Initiated',
-      description: `Approving top 3 longest-waiting verifications (IDs: ${topThree.join(', ')}).`,
-    });
-  }
+  const avgWait = verifications.length > 0
+    ? Math.round(verifications.reduce((sum, v) => sum + v.daysWaiting, 0) / verifications.length)
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -56,7 +44,7 @@ export function PendingVerificationsPage() {
           <h2 className="text-3xl font-bold tracking-tight">Pending Verifications</h2>
           <p className="text-muted-foreground mt-1">Review and approve submitted clinical case completions.</p>
         </div>
-        <Button onClick={handleBulkApprove}>
+        <Button disabled className="gap-2">
           <CheckCircle className="h-4 w-4 mr-2" />
           Bulk Approve Top 3
         </Button>
@@ -110,29 +98,47 @@ export function PendingVerificationsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {verifications.map((v) => (
-                <TableRow key={v.id} className={getRowClass(v.daysWaiting)}>
-                  <TableCell>
-                    <p className="font-medium">{v.student}</p>
-                    <p className="text-xs text-muted-foreground font-mono">{v.studentNo}</p>
-                  </TableCell>
-                  <TableCell className="text-sm">{v.caseName}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{v.submittedAt}</TableCell>
-                  <TableCell><WaitBadge days={v.daysWaiting} /></TableCell>
-                  <TableCell>
-                    <p className="text-sm">{v.hospital}</p>
-                    <p className="text-xs text-muted-foreground">{v.dept}</p>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Link href={`/verifications/${v.id}`}>
-                      <Button size="sm" variant="outline" className="gap-1">
-                        <ExternalLink className="h-3 w-3" />
-                        Review
-                      </Button>
-                    </Link>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-10">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : verifications.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+                    No pending verifications. You're all caught up!
+                  </TableCell>
+                </TableRow>
+              ) : (
+                verifications.map((v) => (
+                  <TableRow key={v.id} className={getRowClass(v.daysWaiting)}>
+                    <TableCell>
+                      <p className="font-medium">
+                        {v.student ? `${v.student.firstName} ${v.student.lastName}` : v.studentId}
+                      </p>
+                      <p className="text-xs text-muted-foreground font-mono">{v.studentId}</p>
+                    </TableCell>
+                    <TableCell className="text-sm">{v.clinicalCase?.name ?? v.clinicalCaseId}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(v.submittedAt).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell><WaitBadge days={v.daysWaiting} /></TableCell>
+                    <TableCell>
+                      <p className="text-sm">{v.hospital?.name ?? '—'}</p>
+                      <p className="text-xs text-muted-foreground">{v.department?.name ?? '—'}</p>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Link href={`/verifications/${v.id}`}>
+                        <Button size="sm" variant="outline" className="gap-1">
+                          <ExternalLink className="h-3 w-3" />
+                          Review
+                        </Button>
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
