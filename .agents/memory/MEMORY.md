@@ -1,2 +1,2 @@
-- [ClinicalFlow arch](clinicalflow-arch.md) — session-cookie auth, mock-data backend, dual-mode frontend auth (real vs dev-mock)
+- [ClinicalFlow arch](clinicalflow-arch.md) — JWT Bearer auth (cookies fail in Replit iframe); token in localStorage; Bearer header on every request
 - [Orval params collision fix](orval-params-collision.md) — endpoints with BOTH path params AND query params collide; fix by moving path param to query

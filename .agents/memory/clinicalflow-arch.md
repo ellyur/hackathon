@@ -1,32 +1,41 @@
 ---
 name: ClinicalFlow architecture
-description: Auth, DB layer, dual-mode frontend auth, and DB migration status
+description: Auth approach, frontend/backend wiring, and Replit-specific cookie gotchas
 ---
 
-## Auth
-- Session-cookie auth via express-session + SESSION_SECRET env var
-- Sessions in-memory (no pg session store yet — acceptable for dev)
-- bcrypt@6 with cost factor 12 for all password hashing
-- All routes use `requireAuth` / `requireRole` middlewares from `middlewares/auth.js`
+# ClinicalFlow Architecture
 
-## DB layer
-- Drizzle ORM + pg Pool; client exported from `@workspace/db` (lib/db/src/index.ts)
-- All 9 schema files pushed to PostgreSQL; schema is in sync
-- Seed: run `DATABASE_URL=... pnpm dlx tsx scripts/seed.ts` (idempotent via onConflictDoNothing)
+## Auth — switched to JWT (localStorage + Bearer header)
 
-## Migration status (complete as of 2026-07-07)
-All route files now use real DB queries — mock data is fully replaced:
-- auth.ts, users.ts, hospitals.ts, cases.ts, schedules.ts, attendance.ts
-- slots.ts, notifications.ts, announcements.ts, analytics.ts, recommendations.ts, students.ts
-- mockData.ts remains for reference only (not imported by any route)
+**Why cookies fail on Replit:** The Replit IDE preview pane is an iframe on `replit.com` embedding `*.replit.dev`. Chrome blocks third-party cookies in iframes even with `SameSite=None; Secure`. Every cookie-based session attempt returns 401 on `/api/auth/me` immediately after a successful login.
 
-## Security decisions applied
-- PATCH /users/:id — self-only or admin; `isActive` field is admin-only
-- GET /schedules/:id — students blocked to non-assigned; CIs blocked to non-owned
-- POST /attendance/time-in — requires schedule assignment + gps+face+liveness all true
-- POST /attendance/ci-assisted — CI must own schedule; student must be assigned to it
-- GET /attendance — CIs scoped to their own schedules only
-- analytics/hospital-utilization — uses Drizzle inArray (no sql.raw)
+**Fix:** Switched to JWT tokens stored in `localStorage`, sent via `Authorization: Bearer <token>` on every request.
 
-## Frontend auth modes
-Dual-mode: real session auth (prod) and dev-mock pass-through (dev)
+**How it works:**
+- Backend: `artifacts/api-server/src/lib/jwt.ts` — `signToken` / `verifyToken` using `SESSION_SECRET`
+- Backend: `artifacts/api-server/src/routes/auth.ts` login handler signs a token and returns `{ ...userProfile, token }`
+- Backend: `artifacts/api-server/src/middlewares/auth.ts` — `requireAuth` checks Bearer token first, session cookie second
+- Frontend: `artifacts/web/src/hooks/use-auth.ts` calls `setAuthTokenGetter(() => localStorage.getItem('authToken'))` at module load so every fetch carries the token
+- Frontend: `artifacts/web/src/pages/login.tsx` stores `data.token` in localStorage and calls `setAuthTokenGetter` after successful login
+- Frontend: logout clears `localStorage.removeItem('authToken')` and calls `setAuthTokenGetter(null)`
+
+**Additional Replit proxy notes (now moot but kept for reference):**
+- Replit's internal proxy does NOT forward `X-Forwarded-Proto: https` to backend services
+- `app.set('trust proxy', 1)` alone is not enough for secure cookies
+- A middleware injecting the header works for curl but Chrome still blocks the cross-site cookie
+
+## OpenAPI / codegen note
+
+- `allOf` schemas in `openapi.yaml` can cause TypeScript naming conflicts in `lib/api-zod` when the same name is exported from both `generated/api.ts` (Zod schema) and `generated/types.ts` (TS type). Workaround: add optional fields directly to the existing schema instead of creating a new `allOf` schema.
+- `token` was added as optional field to `AuthUser` schema (only populated by login response, not by `getMe`)
+
+## Frontend auth hook
+
+`artifacts/web/src/hooks/use-auth.ts` supports two modes:
+1. Real JWT auth (token in localStorage)
+2. Mock mode (mockRole in localStorage, for dev without backend — still present but DevRoleSwitcher UI removed)
+
+## Dev role switcher
+
+`DevRoleSwitcher` component exists but is no longer mounted in `App.tsx` — removed as requested.
+Demo credentials footer was removed from `login.tsx`.

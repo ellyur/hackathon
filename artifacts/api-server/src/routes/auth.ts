@@ -3,6 +3,7 @@ import { db, usersTable, studentProfilesTable, ciProfilesTable } from "@workspac
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { requireAuth } from "../middlewares/auth.js";
+import { signToken } from "../lib/jwt.js";
 
 const router: IRouter = Router();
 
@@ -46,18 +47,14 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   }
 
   const profile = await getUserProfile(user.id);
+  const token = signToken({ userId: user.id, role: user.role });
 
+  // Best-effort session save (may not work in all proxy environments)
   req.session.userId = user.id;
   req.session.role = user.role;
+  await new Promise<void>((resolve) => req.session.save(() => resolve()));
 
-  await new Promise<void>((resolve, reject) => {
-    req.session.save((err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-
-  res.json(profile);
+  res.json({ ...profile, token });
 });
 
 router.post("/auth/logout", (req, res): void => {

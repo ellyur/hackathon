@@ -61,6 +61,8 @@ export interface AuthUser {
   /** @nullable */
   avatarUrl?: string | null;
   isActive: boolean;
+  /** JWT bearer token — only present in login response */
+  token?: string;
   studentProfile?: StudentProfile;
   ciProfile?: CIProfile;
 }

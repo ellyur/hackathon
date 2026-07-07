@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Stethoscope, AlertCircle } from 'lucide-react';
 import { useLogin } from '@workspace/api-client-react';
+import { setAuthTokenGetter } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 
 export function Login() {
@@ -17,8 +18,12 @@ export function Login() {
 
   const loginMutation = useLogin({
     mutation: {
-      onSuccess: () => {
-        // Clear any stale mock role so real session takes over
+      onSuccess: (data) => {
+        // Store JWT so every subsequent request uses Authorization: Bearer
+        if (data.token) {
+          localStorage.setItem('authToken', data.token);
+          setAuthTokenGetter(() => localStorage.getItem('authToken'));
+        }
         localStorage.removeItem('mockRole');
         queryClient.invalidateQueries();
         setLocation('/dashboard');

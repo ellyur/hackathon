@@ -8,8 +8,18 @@ import { sessionMiddleware } from "./lib/session.js";
 const app: Express = express();
 
 // Trust the first proxy (Replit's HTTPS reverse proxy).
-// Required so req.secure === true and SameSite=None; Secure cookies are sent.
 app.set("trust proxy", 1);
+
+// Replit always terminates TLS at its edge proxy but does NOT forward
+// X-Forwarded-Proto to backend services. Without it, req.secure is false and
+// express-session refuses to set Secure cookies (required for SameSite=None).
+// Inject the header here so the session middleware sees a secure context.
+if (process.env["REPL_ID"]) {
+  app.use((req, _res, next) => {
+    req.headers["x-forwarded-proto"] = "https";
+    next();
+  });
+}
 
 app.use(
   pinoHttp({

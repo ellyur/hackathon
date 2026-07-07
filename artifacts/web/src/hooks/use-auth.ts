@@ -1,5 +1,9 @@
-import { useGetMe, useLogout, getGetMeQueryKey } from '@workspace/api-client-react';
+import { useGetMe, useLogout, getGetMeQueryKey, setAuthTokenGetter } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
+
+// Initialise JWT getter immediately on module load so every fetch
+// (including the very first /api/auth/me on page load) carries the token.
+setAuthTokenGetter(() => localStorage.getItem('authToken'));
 
 // Mock user shapes for the dev role switcher (mock mode only)
 const MOCK_USERS: Record<string, object> = {
@@ -79,7 +83,9 @@ export function useAuth() {
   const logoutMutation = useLogout({
     mutation: {
       onSettled: () => {
+        localStorage.removeItem('authToken');
         localStorage.removeItem('mockRole');
+        setAuthTokenGetter(null);
         queryClient.clear();
         window.location.href = '/login';
       },

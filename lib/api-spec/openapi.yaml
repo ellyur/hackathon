@@ -1309,6 +1309,9 @@ components:
           type: ["string", "null"]
         isActive:
           type: boolean
+        token:
+          type: string
+          description: JWT bearer token — only present in login response
         studentProfile:
           $ref: "#/components/schemas/StudentProfile"
         ciProfile:

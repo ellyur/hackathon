@@ -36,6 +36,7 @@ export const LoginResponse = zod.object({
   "phone": zod.string().nullish(),
   "avatarUrl": zod.string().nullish(),
   "isActive": zod.boolean(),
+  "token": zod.string().optional().describe('JWT bearer token — only present in login response'),
   "studentProfile": zod.object({
   "id": zod.string(),
   "userId": zod.string(),
@@ -74,6 +75,7 @@ export const GetMeResponse = zod.object({
   "phone": zod.string().nullish(),
   "avatarUrl": zod.string().nullish(),
   "isActive": zod.boolean(),
+  "token": zod.string().optional().describe('JWT bearer token — only present in login response'),
   "studentProfile": zod.object({
   "id": zod.string(),
   "userId": zod.string(),
