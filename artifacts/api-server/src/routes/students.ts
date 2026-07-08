@@ -12,14 +12,14 @@ import { requireAuth, requireRole } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
 
-// ── Face enrollment (Luxand.cloud) ───────────────────────────────────────────
+// ── Face enrollment (face-api.js, client-side embeddings) ────────────────────
 
-import {
-  createPerson,
-  addPhotoToPerson,
-  deletePerson,
-} from "../lib/luxand.js";
+import { isValidDescriptor } from "../lib/face-recognition.js";
 
+/**
+ * GET /api/students/me/face-descriptor
+ * Returns whether the student has a stored face descriptor.
+ */
 router.get("/students/me/face-descriptor", requireAuth, requireRole("student"), async (req, res): Promise<void> => {
   const [profile] = await db
     .select()
@@ -31,31 +31,21 @@ router.get("/students/me/face-descriptor", requireAuth, requireRole("student"), 
     return;
   }
 
-  res.json({
-    enrolled: !!profile.luxandPersonUuid,
-    descriptor: null, // descriptor is now managed server-side via Luxand
-  });
+  res.json({ enrolled: Array.isArray(profile.faceDescriptor) && profile.faceDescriptor.length === 128 });
 });
 
 /**
  * POST /api/students/me/face-enroll
- * Body: { image: string }  — base64-encoded JPEG (no data-URL prefix)
+ * Body: { descriptor: number[] }  — 128-element face embedding from face-api.js
  *
- * Enrolls or re-enrolls the student's face using Luxand.cloud.
- * If the student already has a Luxand person UUID, the old entry is deleted
- * and a fresh one is created so the student gets a clean reference photo.
+ * Stores the client-computed face descriptor for future verification.
+ * Re-enrollment simply overwrites the stored descriptor.
  */
 router.post("/students/me/face-enroll", requireAuth, requireRole("student"), async (req, res): Promise<void> => {
-  const { image } = req.body as { image?: string };
+  const { descriptor } = req.body as { descriptor?: unknown };
 
-  if (!image || typeof image !== "string") {
-    res.status(400).json({ error: "image (base64 JPEG) is required" });
-    return;
-  }
-
-  const imageBuffer = Buffer.from(image, "base64");
-  if (imageBuffer.length < 1000) {
-    res.status(400).json({ error: "Image is too small or malformed" });
+  if (!isValidDescriptor(descriptor)) {
+    res.status(400).json({ error: "descriptor must be an array of 128 finite numbers" });
     return;
   }
 
@@ -70,28 +60,15 @@ router.post("/students/me/face-enroll", requireAuth, requireRole("student"), asy
   }
 
   try {
-    // Delete old Luxand person on re-enroll so the student starts clean
-    if (profile.luxandPersonUuid) {
-      await deletePerson(profile.luxandPersonUuid).catch(() => {/* ignore – may already be deleted */});
-    }
-
-    // Create a new Luxand person keyed by student number for traceability
-    const personName = `${profile.studentNumber ?? req.session.userId}`;
-    const personUuid = await createPerson(personName);
-
-    // Add the captured photo as the reference face
-    await addPhotoToPerson(personUuid, imageBuffer);
-
-    // Persist the UUID
     await db
       .update(studentProfilesTable)
-      .set({ luxandPersonUuid: personUuid })
+      .set({ faceDescriptor: descriptor })
       .where(eq(studentProfilesTable.userId, req.session.userId!));
 
     res.json({ enrolled: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    res.status(502).json({ error: `Face enrollment failed: ${msg}` });
+    res.status(500).json({ error: `Face enrollment failed: ${msg}` });
   }
 });
 

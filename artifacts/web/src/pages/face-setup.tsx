@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useGetMyFaceDescriptor } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
+import { loadFaceApiModels, detectFaceDescriptor } from '@/lib/face-detection';
 
 type Step =
   | 'idle'
@@ -94,25 +95,19 @@ export function FaceSetupPage() {
       return;
     }
 
-    // Snapshot the current frame
-    const canvas = document.createElement('canvas');
-    canvas.width  = vid.videoWidth  || 640;
-    canvas.height = vid.videoHeight || 480;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) { setError('Canvas not supported.'); return; }
-    // Mirror to match the mirrored video display
-    ctx.translate(canvas.width, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(vid, 0, 0);
-
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-    const base64  = dataUrl.split(',')[1];
-    if (!base64) { setError('Failed to capture image.'); return; }
-
     stopCamera();
     setStep('uploading');
 
     try {
+      // Load face-api.js models (cached after first load)
+      await loadFaceApiModels();
+
+      // Extract 128-element face descriptor from the video frame
+      const descriptor = await detectFaceDescriptor(vid);
+      if (!descriptor) {
+        throw new Error('No face detected. Make sure your face is clearly visible and well-lit, then try again.');
+      }
+
       const res = await fetch('/api/students/me/face-enroll', {
         method:  'POST',
         headers: {
@@ -122,7 +117,7 @@ export function FaceSetupPage() {
             : {}),
         },
         credentials: 'include',
-        body: JSON.stringify({ image: base64 }),
+        body: JSON.stringify({ descriptor }),
       });
 
       if (!res.ok) {
@@ -196,7 +191,7 @@ export function FaceSetupPage() {
         <CardHeader>
           <CardTitle>{isEnrolled ? 'Re-enroll Your Face' : 'Enroll Your Face'}</CardTitle>
           <CardDescription>
-            Face recognition is handled securely in the cloud — no photos are stored permanently.
+            Face recognition runs locally on your device — no photos leave your browser.
           </CardDescription>
         </CardHeader>
 
@@ -278,7 +273,7 @@ export function FaceSetupPage() {
             <div className="flex flex-col items-center justify-center py-10 gap-4 bg-muted/30 rounded-xl border">
               <Loader2 className="w-10 h-10 text-primary animate-spin" />
               <p className="font-medium">Enrolling your face…</p>
-              <p className="text-xs text-muted-foreground">Securely processing via Luxand.cloud</p>
+              <p className="text-xs text-muted-foreground">Analysing facial features locally…</p>
             </div>
           )}
 

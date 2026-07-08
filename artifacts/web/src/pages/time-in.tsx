@@ -8,6 +8,7 @@ import { useRoute, Link } from 'wouter';
 import { getDistance } from 'geolib';
 import { useGetSchedule, useRecordTimeIn, useGetMyFaceDescriptor } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
+import { loadFaceApiModels, detectFaceDescriptor } from '@/lib/face-detection';
 
 type Step = 'idle' | 'gps-checking' | 'gps-ok' | 'gps-error' | 'face-loading' | 'face-scanning' | 'face-ok' | 'face-error' | 'face-no-match' | 'submitting' | 'done' | 'submit-error';
 
@@ -123,7 +124,7 @@ export function TimeInSimulatorPage() {
     processingRef.current = false;
   }, []);
 
-  // ── Server-side face verification via Luxand.cloud ───────────────────────
+  // ── Client-side face verification via face-api.js ────────────────────────
   const captureAndVerify = useCallback(async () => {
     const vid = videoRef.current;
     if (!vid || vid.readyState < 2) {
@@ -133,19 +134,20 @@ export function TimeInSimulatorPage() {
 
     setFaceDetected(true); // show "verifying…" overlay
 
-    const canvas = document.createElement('canvas');
-    canvas.width  = vid.videoWidth  || 640;
-    canvas.height = vid.videoHeight || 480;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) { setFaceError('Canvas not supported.'); setFaceDetected(false); return; }
-    ctx.translate(canvas.width, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(vid, 0, 0);
-    const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-
-    stopCamera();
-
     try {
+      // Load models (cached after first call) then extract descriptor
+      await loadFaceApiModels();
+      const descriptor = await detectFaceDescriptor(vid);
+
+      stopCamera();
+
+      if (!descriptor) {
+        setFaceDetected(false);
+        setFaceError('No face detected. Make sure your face is centred and well-lit, then try again.');
+        setStep('face-no-match');
+        return;
+      }
+
       const res = await fetch('/api/attendance/verify-face', {
         method:  'POST',
         headers: {
@@ -155,14 +157,14 @@ export function TimeInSimulatorPage() {
             : {}),
         },
         credentials: 'include',
-        body: JSON.stringify({ image: base64 }),
+        body: JSON.stringify({ descriptor }),
       });
-      const data = await res.json() as { verified?: boolean; error?: string; probability?: number };
+      const data = await res.json() as { verified?: boolean; error?: string; distance?: number; verificationToken?: string };
 
       if (!res.ok) throw new Error(data.error ?? `Server error ${res.status}`);
 
       if (data.verified && data.verificationToken) {
-        setFaceVerificationToken(data.verificationToken as string);
+        setFaceVerificationToken(data.verificationToken);
         setStep('submitting');
         setSubmitError(null);
       } else {
@@ -171,6 +173,7 @@ export function TimeInSimulatorPage() {
         setStep('face-no-match');
       }
     } catch (err) {
+      stopCamera();
       setFaceDetected(false);
       setFaceError(err instanceof Error ? err.message : 'Verification failed. Please try again.');
       setStep('face-error');
@@ -472,7 +475,7 @@ export function TimeInSimulatorPage() {
                     )}
                     <p className="text-xs text-muted-foreground text-center">
                       <ScanFace className="w-3 h-3 inline mr-1" />
-                      Verified securely via Luxand.cloud
+                      Face matching runs locally on your device
                     </p>
                   </div>
                 )}

@@ -11,7 +11,7 @@ import {
 import { eq, and, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
-import { searchFace } from "../lib/luxand.js";
+import { isValidDescriptor, isFaceMatch, descriptorDistance } from "../lib/face-recognition.js";
 
 /**
  * Short-lived, one-time face-verification tokens.
@@ -31,9 +31,6 @@ setInterval(() => {
     if (record.expiresAt < now) faceVerificationTokens.delete(token);
   }
 }, 10 * 60 * 1000).unref();
-
-/** Minimum Luxand probability score required to accept a face match. */
-const MIN_FACE_CONFIDENCE = 0.7;
 
 const router: IRouter = Router();
 
@@ -76,15 +73,16 @@ router.get("/attendance", requireAuth, async (req, res): Promise<void> => {
 
 /**
  * POST /api/attendance/verify-face
- * Body: { image: string }  — base64-encoded JPEG
+ * Body: { descriptor: number[] }  — 128-element face embedding from face-api.js
  *
- * Calls Luxand.cloud to check whether the face in the photo matches the
- * enrolled student.  Returns { verified: boolean, probability?: number }.
+ * Compares the submitted descriptor against the student's stored descriptor.
+ * Returns { verified: boolean, distance?: number, verificationToken?: string }.
  */
 router.post("/attendance/verify-face", requireAuth, requireRole("student"), async (req, res): Promise<void> => {
-  const { image } = req.body as { image?: string };
-  if (!image || typeof image !== "string") {
-    res.status(400).json({ error: "image (base64 JPEG) is required" });
+  const { descriptor } = req.body as { descriptor?: unknown };
+
+  if (!isValidDescriptor(descriptor)) {
+    res.status(400).json({ error: "descriptor must be an array of 128 finite numbers" });
     return;
   }
 
@@ -93,34 +91,25 @@ router.post("/attendance/verify-face", requireAuth, requireRole("student"), asyn
     .from(studentProfilesTable)
     .where(eq(studentProfilesTable.userId, req.session.userId!));
 
-  if (!profile?.luxandPersonUuid) {
+  const stored = profile?.faceDescriptor;
+  if (!Array.isArray(stored) || stored.length !== 128) {
     res.status(400).json({ error: "Face not enrolled. Please enroll your face first." });
     return;
   }
 
-  try {
-    const imageBuffer = Buffer.from(image, "base64");
-    const matches = await searchFace(imageBuffer);
+  const distance = descriptorDistance(stored as number[], descriptor);
+  const matched = isFaceMatch(stored as number[], descriptor);
 
-    const topMatch = matches.find(
-      (m) => m.uuid === profile.luxandPersonUuid && m.probability >= MIN_FACE_CONFIDENCE,
-    );
-
-    if (topMatch) {
-      // Issue a one-time, server-bound verification token (5-minute TTL)
-      const verificationToken = randomUUID();
-      faceVerificationTokens.set(verificationToken, {
-        userId: req.session.userId!,
-        expiresAt: Date.now() + 5 * 60 * 1000,
-      });
-      res.json({ verified: true, probability: topMatch.probability, verificationToken });
-    } else {
-      const bestProbability = matches.find((m) => m.uuid === profile.luxandPersonUuid)?.probability ?? 0;
-      res.json({ verified: false, probability: bestProbability });
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    res.status(502).json({ error: `Face verification failed: ${msg}` });
+  if (matched) {
+    // Issue a one-time, server-bound verification token (5-minute TTL)
+    const verificationToken = randomUUID();
+    faceVerificationTokens.set(verificationToken, {
+      userId: req.session.userId!,
+      expiresAt: Date.now() + 5 * 60 * 1000,
+    });
+    res.json({ verified: true, distance, verificationToken });
+  } else {
+    res.json({ verified: false, distance });
   }
 });
 
