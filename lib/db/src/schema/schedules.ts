@@ -1,4 +1,4 @@
-import { pgTable, text, boolean, timestamp, integer, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, pgEnum } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { hospitalsTable, departmentsTable } from "./hospitals";
 
@@ -16,6 +16,11 @@ export const schedulesTable = pgTable("schedules", {
   gracePeriodMin: integer("grace_period_min").notNull().default(15),
   status: scheduleStatusEnum("status").notNull().default("upcoming"),
   notes: text("notes"),
+  // Student assignment controls
+  maxStudents: integer("max_students").notNull().default(10),
+  requiredYearLevel: integer("required_year_level"),
+  eligibleSections: text("eligible_sections"),
+  caseTypeId: text("case_type_id"),
   createdBy: text("created_by").notNull().references(() => usersTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
