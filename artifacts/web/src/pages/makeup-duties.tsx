@@ -41,7 +41,7 @@ export function MakeupDutiesQueuePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Makeup Duties Queue</h2>
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Makeup Duties Queue</h2>
         <p className="text-muted-foreground mt-1">Track and assign makeup duties for students with unresolved absences.</p>
       </div>
 
@@ -105,7 +105,7 @@ export function MakeupDutiesQueuePage() {
             </SelectContent>
           </Select>
         </div>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

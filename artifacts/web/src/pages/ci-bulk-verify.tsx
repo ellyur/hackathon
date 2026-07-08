@@ -121,7 +121,7 @@ export function CIBulkVerifyPage() {
             <ArrowLeft className="w-4 h-4 mr-1" /> Back to Attendance Roster
           </Button>
         </Link>
-        <h2 className="text-3xl font-bold tracking-tight">Bulk Duty Verification</h2>
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Bulk Duty Verification</h2>
         {schedule && (
           <p className="text-muted-foreground mt-1">
             {schedule.hospital?.name} · {schedule.department?.name} · {schedule.dutyDate}
@@ -159,7 +159,7 @@ export function CIBulkVerifyPage() {
                 <Button size="sm" variant="ghost" onClick={clearAll}>Clear</Button>
               </div>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               {loadingDV ? (
                 <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
               ) : scheduleVerifications.length === 0 ? (

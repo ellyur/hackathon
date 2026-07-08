@@ -296,7 +296,7 @@ export function StudentRecommendationsPage() {
           <Link href="/schedules" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-3">
             <ArrowLeft className="w-4 h-4" /> Back to Schedules
           </Link>
-          <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
             <Sparkles className="w-7 h-7 text-amber-500" /> Student Recommendations
           </h2>
           <p className="text-muted-foreground mt-1 text-sm">{scheduleLabel}</p>
@@ -345,7 +345,7 @@ export function StudentRecommendationsPage() {
         <CardHeader>
           <CardTitle className="text-lg">Ranked Recommendations</CardTitle>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           {loadingRecs || loadingSchedule ? (
             <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
               <Loader2 className="w-5 h-5 animate-spin" /> Analyzing students…

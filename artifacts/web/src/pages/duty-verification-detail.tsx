@@ -232,7 +232,7 @@ export function DutyVerificationDetailPage() {
             <ArrowLeft className="h-4 w-4 mr-1" /> Back
           </Button>
         </Link>
-        <h2 className="text-3xl font-bold tracking-tight">Duty Verification</h2>
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Duty Verification</h2>
         <p className="text-muted-foreground mt-1">{dv.department?.name} · {dv.dutyDate}</p>
       </div>
 

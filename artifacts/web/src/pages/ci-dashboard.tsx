@@ -37,7 +37,7 @@ export function CIDashboard() {
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Welcome, {firstName}</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Welcome, {firstName}</h2>
           <p className="text-muted-foreground mt-1">Here is your clinical instruction overview for today.</p>
         </div>
       </div>

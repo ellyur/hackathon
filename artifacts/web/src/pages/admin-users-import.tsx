@@ -185,7 +185,7 @@ export function AdminUsersImportPage() {
           <Link href="/admin/users"><ArrowLeft className="w-4 h-4" /></Link>
         </Button>
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Import Users</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Import Users</h2>
           <p className="text-muted-foreground mt-1">Bulk-create students, CIs, and schedulers from a CSV file.</p>
         </div>
       </div>

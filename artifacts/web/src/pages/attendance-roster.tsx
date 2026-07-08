@@ -170,7 +170,7 @@ export function AttendanceRosterPage() {
               <ArrowLeft className="w-4 h-4 mr-1" /> Back to Duties
             </Button>
           </Link>
-          <h2 className="text-3xl font-bold tracking-tight">Attendance Roster</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Attendance Roster</h2>
           {schedule && (
             <p className="text-muted-foreground mt-1">
               {schedule.hospital?.name ?? schedule.hospitalId} · {schedule.department?.name ?? ''} · {schedule.dutyDate} · {schedule.startTime}–{schedule.endTime}

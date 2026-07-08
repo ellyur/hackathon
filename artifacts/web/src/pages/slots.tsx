@@ -30,7 +30,7 @@ export function AvailableSlotsPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Available Duty Slots</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Available Duty Slots</h2>
           <p className="text-muted-foreground mt-1">Browse and apply for upcoming clinical rotations.</p>
         </div>
       </div>

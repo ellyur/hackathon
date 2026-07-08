@@ -40,7 +40,7 @@ export function CIStudentsListPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Student Progress</h2>
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Student Progress</h2>
         <p className="text-muted-foreground mt-1">Monitor the clinical passport and progress of your assigned students.</p>
       </div>
 
@@ -55,7 +55,7 @@ export function CIStudentsListPage() {
       </div>
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

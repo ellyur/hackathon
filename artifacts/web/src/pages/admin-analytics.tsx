@@ -57,13 +57,13 @@ export function AdminAnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Program Analytics</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Program Analytics</h2>
           <p className="text-muted-foreground mt-1">Overview of student performance and program health.</p>
         </div>
         <Select value={dateRange} onValueChange={setDateRange}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -166,7 +166,7 @@ export function AdminAnalyticsPage() {
             </CardTitle>
             <CardDescription>Students flagged by low compliance or high absences</CardDescription>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             {loadingRisk ? (
               <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
             ) : atRisk.length === 0 ? (
@@ -214,7 +214,7 @@ export function AdminAnalyticsPage() {
             <CardTitle>Hospital Utilization Table</CardTitle>
             <CardDescription>Current student placement per hospital</CardDescription>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             {loadingUtil ? (
               <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
             ) : (

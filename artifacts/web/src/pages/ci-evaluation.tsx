@@ -243,7 +243,7 @@ export function CIEvaluationPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
           <Star className="w-7 h-7" /> Student Evaluations
         </h2>
         <p className="text-muted-foreground mt-1">Rate each student's clinical performance for your completed duties.</p>

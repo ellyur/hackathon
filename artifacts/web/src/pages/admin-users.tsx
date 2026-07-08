@@ -72,12 +72,12 @@ export function AdminUsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Manage Users</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Manage Users</h2>
           <p className="text-muted-foreground mt-1">View and manage all system accounts.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           <Button variant="outline" asChild>
             <Link href="/admin/users/import">
               <Upload className="w-4 h-4 mr-2" />
@@ -129,7 +129,7 @@ export function AdminUsersPage() {
             </Select>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           {isLoading ? (
             <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
               <Loader2 className="w-5 h-5 animate-spin" /> Loading users…

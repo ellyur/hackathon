@@ -413,7 +413,7 @@ export function ClinicalPassportPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Clinical Passport</h2>
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Clinical Passport</h2>
         <p className="text-muted-foreground mt-1">Track your duty hours and clinical case requirements. See what's done and what's still pending.</p>
       </div>
 

@@ -59,7 +59,7 @@ export function SlotApplicationsPage() {
             Back to Slots
           </Button>
         </Link>
-        <h2 className="text-3xl font-bold tracking-tight">Slot Applications</h2>
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Slot Applications</h2>
         {slot && (
           <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-muted-foreground">
             <span className="flex items-center gap-1">
@@ -90,7 +90,7 @@ export function SlotApplicationsPage() {
       </div>
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

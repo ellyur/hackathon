@@ -91,7 +91,7 @@ export function ProfileSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Profile Settings</h2>
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Profile Settings</h2>
         <p className="text-muted-foreground mt-1">Manage your personal information and account security.</p>
       </div>
 

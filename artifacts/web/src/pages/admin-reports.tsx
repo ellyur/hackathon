@@ -86,7 +86,7 @@ export function AdminReportsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Generate Reports</h2>
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Generate Reports</h2>
         <p className="text-muted-foreground mt-1">Export program data in multiple formats for review and compliance.</p>
       </div>
 

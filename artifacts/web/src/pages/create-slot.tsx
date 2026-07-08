@@ -88,7 +88,7 @@ export function CreateSlotPage() {
         <Link href="/slots" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-3">
           <ArrowLeft className="w-4 h-4" /> Back to Slots
         </Link>
-        <h2 className="text-3xl font-bold tracking-tight">Create Duty Slot</h2>
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Create Duty Slot</h2>
         <p className="text-muted-foreground mt-1">Open a new clinical duty slot for student applications.</p>
       </div>
 

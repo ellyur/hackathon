@@ -86,7 +86,7 @@ export function CreateUserPage() {
           <Link href="/admin/users"><ArrowLeft className="w-4 h-4" /></Link>
         </Button>
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Create New User</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Create New User</h2>
           <p className="text-muted-foreground mt-1">Add a new account to the ClinicalFlow system.</p>
         </div>
       </div>

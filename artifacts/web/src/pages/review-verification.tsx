@@ -103,7 +103,7 @@ export function ReviewVerificationPage() {
             Back to Pending Verifications
           </Button>
         </Link>
-        <h2 className="text-3xl font-bold tracking-tight">Review Case Verification</h2>
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Review Case Verification</h2>
         <p className="text-muted-foreground mt-1">Verify or reject this student's submitted case completion.</p>
       </div>
 

@@ -160,7 +160,7 @@ export function MyApplicationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">My Slot Applications</h2>
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight">My Slot Applications</h2>
         <p className="text-muted-foreground mt-1">Track the status of your clinical duty slot applications.</p>
       </div>
 
@@ -187,7 +187,7 @@ export function MyApplicationsPage() {
                 <CardHeader>
                   <CardTitle className="text-base">Applications</CardTitle>
                 </CardHeader>
-                <CardContent className="p-0">
+                <CardContent className="p-0 overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>

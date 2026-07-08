@@ -32,7 +32,7 @@ export function StudentRosterPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Student Roster</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Student Roster</h2>
           <p className="text-muted-foreground mt-1">Monitor case progress and compliance across all students.</p>
         </div>
         <Button onClick={handleExport} variant="outline">
@@ -55,7 +55,7 @@ export function StudentRosterPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <CardTitle className="sr-only">Students Table</CardTitle>
           <Table>
             <TableHeader>

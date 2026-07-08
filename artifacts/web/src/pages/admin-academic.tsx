@@ -117,7 +117,7 @@ function ItemTab({ type, placeholder }: { type: ListType; placeholder: string })
       </div>
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           {isLoading ? (
             <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
           ) : (
@@ -202,7 +202,7 @@ export function AdminAcademicPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
           <BookOpen className="w-7 h-7" /> Academic Management
         </h2>
         <p className="text-muted-foreground mt-1">Manage the structured lists used across student profiles and scheduling filters.</p>

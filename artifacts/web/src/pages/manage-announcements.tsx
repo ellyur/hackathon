@@ -109,7 +109,7 @@ export function ManageAnnouncementsPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Manage Announcements</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Manage Announcements</h2>
           <p className="text-muted-foreground mt-1">Create and manage system-wide announcements for all roles.</p>
         </div>
         <Button onClick={openNew}>
@@ -119,7 +119,7 @@ export function ManageAnnouncementsPage() {
       </div>
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

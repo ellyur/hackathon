@@ -203,14 +203,14 @@ export function AdminHospitalsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Manage Hospitals</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Manage Hospitals</h2>
           <p className="text-muted-foreground mt-1">Configure partner hospital facilities and GPS attendance zones.</p>
         </div>
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
           <DialogTrigger asChild>
-            <Button><Plus className="w-4 h-4 mr-2" />Add Hospital</Button>
+            <Button className="w-full sm:w-auto"><Plus className="w-4 h-4 mr-2" />Add Hospital</Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Add Hospital</DialogTitle></DialogHeader>
@@ -240,7 +240,7 @@ export function AdminHospitalsPage() {
       </Dialog>
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           {isLoading ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

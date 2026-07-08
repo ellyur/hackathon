@@ -44,7 +44,7 @@ export function RecommendationWeightsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Recommendation Algorithm Weights</h2>
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Recommendation Algorithm Weights</h2>
         <p className="text-muted-foreground mt-1">Control how students are ranked for duty slot recommendations.</p>
       </div>
 

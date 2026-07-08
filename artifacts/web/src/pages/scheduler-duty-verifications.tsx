@@ -37,7 +37,7 @@ export function SchedulerDutyVerificationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Duty Verifications</h2>
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Duty Verifications</h2>
         <p className="text-muted-foreground mt-1">
           Confirm duty verifications after receiving signed paper documents.
         </p>
@@ -142,7 +142,7 @@ function VerificationsTable({
 }) {
   return (
     <Card>
-      <CardContent className="p-0">
+      <CardContent className="p-0 overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>

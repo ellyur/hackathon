@@ -43,7 +43,7 @@ export function PendingVerificationsPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Duty Verifications</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Duty Verifications</h2>
           <p className="text-muted-foreground mt-1">
             Review and verify student duty requests assigned to you.
           </p>
@@ -91,7 +91,7 @@ export function PendingVerificationsPage() {
       </div>
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

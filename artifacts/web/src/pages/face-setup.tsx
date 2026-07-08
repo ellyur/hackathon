@@ -151,7 +151,7 @@ export function FaceSetupPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Face Setup</h2>
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Face Setup</h2>
         <p className="text-muted-foreground mt-1">
           Enroll your face so attendance can verify your identity.
         </p>

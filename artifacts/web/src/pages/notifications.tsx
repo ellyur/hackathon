@@ -162,7 +162,7 @@ export function NotificationsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Notification Center</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Notification Center</h2>
           <p className="text-muted-foreground mt-1">Stay up to date with your clinical activities.</p>
         </div>
         <Button variant="outline" onClick={markAllRead} disabled={unreadCount === 0}>

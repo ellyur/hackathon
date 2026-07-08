@@ -63,7 +63,7 @@ export function AdminNotificationLogPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
           <Bell className="w-7 h-7" /> Notification Log
         </h2>
         <p className="text-muted-foreground mt-1">Full history of system notifications sent to all users.</p>
@@ -96,7 +96,7 @@ export function AdminNotificationLogPage() {
       <div className="text-sm text-muted-foreground">{filtered.length} notification{filtered.length !== 1 ? 's' : ''}</div>
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           {isLoading ? (
             <div className="flex justify-center py-12">
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />

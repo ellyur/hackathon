@@ -116,7 +116,7 @@ export function VerifyCasePage() {
         <Link href="/duties" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-3">
           <ArrowLeft className="w-4 h-4" /> Back to My Duties
         </Link>
-        <h2 className="text-3xl font-bold tracking-tight">Verify Student Cases</h2>
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Verify Student Cases</h2>
         <p className="text-muted-foreground mt-1">
           St. Luke's Medical Center · ICU · Oct 15, 2024 · 08:00 AM – 04:00 PM
         </p>

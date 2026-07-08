@@ -133,15 +133,15 @@ export function AdminAcademicYearSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Academic Year Settings</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Academic Year Settings</h2>
           <p className="text-muted-foreground mt-1">
             Configure required Duty Hours per school year and semester. These settings drive the Duty Hours progress
             shown on each student's Clinical Passport.
           </p>
         </div>
-        <Button onClick={() => setAddOpen(true)}>
+        <Button className="w-full sm:w-auto" onClick={() => setAddOpen(true)}>
           <Plus className="w-4 h-4 mr-2" /> Add Setting
         </Button>
       </div>
@@ -209,7 +209,7 @@ export function AdminAcademicYearSettingsPage() {
         </div>
       ) : (
         <Card>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>

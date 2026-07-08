@@ -76,7 +76,7 @@ export function AttendanceHistoryPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Attendance History</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Attendance History</h2>
           <p className="text-muted-foreground mt-1">A complete record of your clinical duty attendance.</p>
         </div>
         <Button variant="outline" onClick={handleExport} className="gap-2">
@@ -108,7 +108,7 @@ export function AttendanceHistoryPage() {
         <CardHeader>
           <CardTitle className="text-base">Duty Records</CardTitle>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           {records.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <p className="text-sm">No attendance records yet.</p>

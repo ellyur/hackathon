@@ -207,12 +207,12 @@ export function AdminCasesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Clinical Cases Library</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Clinical Cases Library</h2>
           <p className="text-muted-foreground mt-1">Define cases students must complete during clinical rotations.</p>
         </div>
-        <Button onClick={() => setAddOpen(true)}><Plus className="w-4 h-4 mr-2" />Add Case</Button>
+        <Button className="w-full sm:w-auto" onClick={() => setAddOpen(true)}><Plus className="w-4 h-4 mr-2" />Add Case</Button>
       </div>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
@@ -278,7 +278,7 @@ export function AdminCasesPage() {
               </TabsList>
             </Tabs>
           </CardContent>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>

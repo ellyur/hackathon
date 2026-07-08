@@ -133,7 +133,7 @@ export function AdminUserEditPage() {
           <Link href="/admin/users"><ArrowLeft className="w-4 h-4" /></Link>
         </Button>
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Edit User</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Edit User</h2>
           <p className="text-muted-foreground mt-1">
             {(user as any).firstName} {(user as any).lastName} · <span className="capitalize">{role}</span>
           </p>

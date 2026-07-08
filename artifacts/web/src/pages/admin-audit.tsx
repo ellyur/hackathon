@@ -73,7 +73,7 @@ export function AdminAuditPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Audit Logs</h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Audit Logs</h2>
           <p className="text-muted-foreground mt-1">Track all system actions and changes for compliance and security.</p>
         </div>
         <Button variant="outline" onClick={handleExport} className="gap-2">
@@ -110,7 +110,7 @@ export function AdminAuditPage() {
             <Input type="date" className="w-[160px]" value={dateTo} onChange={e => setDateTo(e.target.value)} placeholder="To" />
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

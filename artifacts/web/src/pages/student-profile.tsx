@@ -91,7 +91,7 @@ export function StudentProfilePage() {
           </Avatar>
           <div className="flex-1">
             <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-3xl font-bold tracking-tight">
+              <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
                 {user.firstName} {user.lastName}
               </h2>
               {isAtRisk && (
@@ -190,7 +190,7 @@ export function StudentProfilePage() {
                       <Badge variant="outline">{Math.round(cat.completionRate * 100)}% Complete</Badge>
                     </div>
                   </CardHeader>
-                  <CardContent className="p-0">
+                  <CardContent className="p-0 overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -223,7 +223,7 @@ export function StudentProfilePage() {
         {/* ATTENDANCE */}
         <TabsContent value="attendance" className="mt-4">
           <Card>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               {loadingAttendance ? (
                 <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
               ) : (
@@ -261,7 +261,7 @@ export function StudentProfilePage() {
         {/* SCHEDULE HISTORY */}
         <TabsContent value="schedule" className="mt-4">
           <Card>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-x-auto">
               {loadingSchedules ? (
                 <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
               ) : (
