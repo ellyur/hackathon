@@ -1,63 +1,51 @@
 # ClinicalFlow
 
-A nursing school clinical rotation management system. Handles student scheduling, GPS-geofenced attendance, facial recognition check-in, and a "clinical passport" for tracking student progress. Built as a TypeScript pnpm monorepo.
+Smart Clinical Rotation Management Platform for nursing and allied health programs.
 
 ## Stack
 
-- **Frontend**: React 19, Vite 7, Tailwind CSS 4, Wouter (routing), TanStack Query, Framer Motion
-- **Backend**: Express 5, Node.js, express-session (cookie auth), Pino logging
-- **Database**: PostgreSQL with Drizzle ORM
-- **API**: OpenAPI spec → Orval codegen for typed React hooks (`lib/api-client-react`)
+- **Frontend:** React + Vite + Tailwind CSS + shadcn/ui (port 5000)
+- **Backend:** Express 5 + Drizzle ORM + PostgreSQL (port 8080)
+- **Auth:** JWT Bearer tokens stored in localStorage
+- **Biometrics:** Luxand cloud face recognition (enrollment stored as `luxandPersonUuid`)
+- **Monorepo:** pnpm workspaces
 
-## How to Run
-
-Two workflows must be running (started via the Run button or Replit workflow panel):
-
-| Workflow | Command | Port |
-|---|---|---|
-| **API Server** | `PORT=8080 pnpm --filter @workspace/api-server run dev` | 8080 |
-| **Web** | `PORT=5000 BASE_PATH=/ pnpm --filter @workspace/web run dev` | 5000 |
-
-The Vite dev server proxies `/api/*` → `localhost:8080`.
-
-## First-Time Setup
-
-```bash
-pnpm install
-pnpm --filter @workspace/db run push   # apply schema
-pnpm --filter @workspace/scripts run seed  # seed test data
-```
-
-## Test Accounts (password: `password123`)
-
-| Email | Role |
-|---|---|
-| admin@clinicalflow.com | Admin |
-| scheduler@clinicalflow.com | Scheduler |
-| ci@clinicalflow.com | Clinical Instructor |
-| student@clinicalflow.com | Student |
-
-## Environment Secrets
-
-| Secret | Purpose |
-|---|---|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `SESSION_SECRET` | Session cookie signing key |
-
-## Project Structure
+## Project structure
 
 ```
 artifacts/
-  api-server/   Express backend
+  api-server/   Express API server
   web/          React + Vite frontend
 lib/
-  db/           Drizzle schema & migrations
-  api-spec/     OpenAPI definitions & Orval config
-  api-client-react/  Generated React Query hooks
-  api-zod/      Shared Zod schemas
-scripts/        seed.ts and utilities
+  api-client-react/   Generated React Query hooks (orval)
+  api-spec/           OpenAPI spec + orval config
+  api-zod/            Zod schemas shared between client and server
+  db/                 Drizzle schema + PostgreSQL client
 ```
 
-## User Preferences
+## Running locally
 
-- Keep the existing monorepo structure and stack — do not restructure or migrate.
+Both workflows must be running:
+
+| Workflow | Command | Port |
+|---|---|---|
+| API Server | `PORT=8080 pnpm --filter @workspace/api-server run dev` | 8080 |
+| Start application | `PORT=5000 BASE_PATH=/ pnpm --filter @workspace/web run dev` | 5000 |
+
+Install dependencies first: `pnpm install`
+
+## Required secrets
+
+| Secret | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `SESSION_SECRET` | Express session secret |
+
+## Notes
+
+- JWT is used for auth (not cookies) because Replit's iframe proxy breaks cookie-based sessions
+- Any endpoint with BOTH path params AND query params needs special handling due to orval param collision (see `.agents/memory/orval-params-collision.md`)
+
+## User preferences
+
+- Keep existing project structure and stack
