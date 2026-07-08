@@ -1,10 +1,8 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import {
-  MapPin, ScanFace, Fingerprint, CheckCircle2, AlertCircle, Camera,
+  MapPin, ScanFace, CheckCircle2, AlertCircle,
   RefreshCw, Loader2, Navigation, ExternalLink, LogOut, Clock,
 } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -39,37 +37,6 @@ interface LiveGps {
   accuracy: number;
   distance: number;
   withinRange: boolean;
-}
-
-// ── Step indicator ─────────────────────────────────────────────────────────────
-
-function StepIndicator({
-  icon, label, status, detail,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  status: 'pending' | 'active' | 'done' | 'error';
-  detail?: string;
-}) {
-  const colours = {
-    pending: 'text-muted-foreground bg-muted',
-    active: 'text-primary bg-primary/10 animate-pulse',
-    done: 'text-emerald-600 bg-emerald-100',
-    error: 'text-destructive bg-destructive/10',
-  };
-  return (
-    <div className="flex items-center gap-3">
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${colours[status]}`}>
-        {status === 'done' ? <CheckCircle2 className="w-4 h-4" />
-          : status === 'error' ? <AlertCircle className="w-4 h-4" />
-          : icon}
-      </div>
-      <div className="text-left">
-        <div className="text-sm font-medium">{label}</div>
-        {detail && <div className="text-xs text-muted-foreground">{detail}</div>}
-      </div>
-    </div>
-  );
 }
 
 // ── GPS status panel ───────────────────────────────────────────────────────────
@@ -150,12 +117,9 @@ export function TimeInSimulatorPage() {
     (schedule as { hospital?: { name?: string } } | undefined)?.hospital?.name ??
     (schedule as { title?: string } | undefined)?.title ?? 'Hospital';
   const deptName = (schedule as { department?: { name?: string } } | undefined)?.department?.name ?? '';
-  const ciFirstName = (schedule as { ci?: { firstName?: string } } | undefined)?.ci?.firstName ?? '';
-  const ciLastName = (schedule as { ci?: { lastName?: string } } | undefined)?.ci?.lastName ?? '';
   const dutyDate = (schedule as { dutyDate?: string } | undefined)?.dutyDate ?? '';
   const startTime = (schedule as { startTime?: string } | undefined)?.startTime ?? '';
   const endTime = (schedule as { endTime?: string } | undefined)?.endTime ?? '';
-  const gracePeriodMin = (schedule as { gracePeriodMin?: number } | undefined)?.gracePeriodMin ?? 15;
 
   const isEnrolled = faceData?.enrolled === true;
 
@@ -168,7 +132,6 @@ export function TimeInSimulatorPage() {
   const [faceVerificationToken, setFaceVerificationToken] = useState<string | null>(null);
   const [timeInAt, setTimeInAt] = useState<string | null>(null);
   const [timeOutAt, setTimeOutAt] = useState<string | null>(null);
-  const [existingRecordId, setExistingRecordId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   // ── Live GPS state ────────────────────────────────────────────────────────
@@ -203,7 +166,6 @@ export function TimeInSimulatorPage() {
     if (!attendanceList || step !== 'idle') return;
     const record = attendanceList[0]; // backend already filters by student role
     if (!record) return;
-    setExistingRecordId(record.id);
     if (record.timeIn) {
       setTimeInAt(new Date(record.timeIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     }
@@ -440,6 +402,11 @@ export function TimeInSimulatorPage() {
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
+  // ── Derived screen ────────────────────────────────────────────────────────
+  const isGpsScreen = ['idle', 'gps-checking', 'gps-ok', 'gps-error'].includes(step);
+  const isFaceScreen = ['face-loading', 'face-scanning', 'face-ok', 'face-error', 'face-no-match', 'submitting', 'submit-error'].includes(step);
+  const isDoneScreen = step === 'done' || step === 'timed-out';
+
   // ── Loading / enroll guard ────────────────────────────────────────────────
   if (scheduleLoading || faceLoading || attendanceLoading) {
     return (
@@ -464,7 +431,6 @@ export function TimeInSimulatorPage() {
     );
   }
 
-  // ── GPS denied prompt ─────────────────────────────────────────────────────
   if (gpsPermDenied && hasHospitalGps && step === 'idle') {
     return (
       <div className="max-w-lg mx-auto mt-16 text-center space-y-6">
@@ -473,7 +439,7 @@ export function TimeInSimulatorPage() {
         </div>
         <div>
           <h2 className="text-2xl font-bold">Location Access Required</h2>
-          <p className="text-muted-foreground mt-2">ClinicalFlow needs your location to verify that you are at the hospital. Please allow location access in your browser settings and reload.</p>
+          <p className="text-muted-foreground mt-2">SIPAG needs your location to verify that you are at the hospital. Please allow location access in your browser settings and reload.</p>
         </div>
         <Button onClick={() => window.location.reload()}>
           <RefreshCw className="w-4 h-4 mr-2" /> Reload & Retry
@@ -482,345 +448,381 @@ export function TimeInSimulatorPage() {
     );
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  return (
-    <div className="max-w-3xl mx-auto space-y-4">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Active Duty</h2>
-        <p className="text-muted-foreground mt-1">Biometric and geofence verification</p>
-      </div>
-
-      {/* ── Live GPS Map ─────────────────────────────────────────────────── */}
-      {step === 'idle' && (
-        <Card className="overflow-hidden">
-          <div className="h-1.5 bg-gradient-to-r from-primary to-primary/50" />
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Navigation className="w-4 h-4 text-primary" /> Live Location
-              {liveGps && <Badge variant="outline" className="text-xs font-normal ml-auto">±{liveGps.accuracy}m accuracy</Badge>}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 pb-4">
-            <div className="rounded-md overflow-hidden border">
-              <AttendanceMap
-                hospitalLat={hospitalLat}
-                hospitalLng={hospitalLng}
-                attendanceRadius={hospitalRadius}
-                studentLat={liveGps?.latitude ?? null}
-                studentLng={liveGps?.longitude ?? null}
-                status={gpsZoneStatus}
-              />
-            </div>
-            <GpsStatusPanel
-              status={gpsZoneStatus}
-              distance={liveGps?.distance ?? null}
-              radius={hospitalRadius}
-              accuracy={liveGps?.accuracy ?? null}
-              hospitalName={hospitalName}
-            />
-            {/* Open in external navigation */}
-            {hasHospitalGps && (
-              <a
-                href={`https://www.google.com/maps/dir/?api=1&destination=${hospitalLat},${hospitalLng}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-              >
-                <ExternalLink className="w-3 h-3" /> Open navigation in Google Maps
-              </a>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── Schedule + Verification card ─────────────────────────────────── */}
-      <Card className="overflow-hidden">
-        <div className="h-2 bg-primary" />
-        <CardHeader>
-          <CardTitle>{hospitalName}{deptName ? ` — ${deptName}` : ''}</CardTitle>
-          <CardDescription>{dutyDate ? `${dutyDate}, ${startTime} – ${endTime}` : 'Loading schedule…'}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row gap-6">
-            {/* Left — schedule info */}
-            <div className="flex-1 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                  <Avatar className="w-8 h-8"><AvatarFallback>CI</AvatarFallback></Avatar>
-                </div>
-                <div>
-                  <div className="text-sm font-medium">{ciFirstName ? `${ciFirstName} ${ciLastName}` : 'Clinical Instructor'}</div>
-                  <div className="text-xs text-muted-foreground">Clinical Instructor</div>
-                </div>
-              </div>
-              <div className="pt-4 border-t space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Grace Period:</span>
-                  <span className="font-medium text-amber-600">{gracePeriodMin} min after start</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Geofence Radius:</span>
-                  <span className="font-medium">{hospitalRadius} m</span>
-                </div>
-              </div>
-
-              {/* Step indicators */}
-              <div className="pt-4 border-t space-y-2">
-                <StepIndicator
-                  icon={<MapPin className="w-4 h-4" />}
-                  label="GPS Location"
-                  status={
-                    step === 'idle' ? (canStartVerification ? 'done' : 'pending')
-                    : step === 'gps-checking' ? 'active'
-                    : step === 'gps-error' ? 'error'
-                    : 'done'
-                  }
-                  detail={liveGps ? `${liveGps.distance}m away · ±${liveGps.accuracy}m accuracy` : undefined}
-                />
-                <StepIndicator
-                  icon={<ScanFace className="w-4 h-4" />}
-                  label="Face Verification"
-                  status={
-                    ['idle','gps-checking','gps-ok','gps-error'].includes(step) ? 'pending'
-                    : ['face-loading','face-scanning'].includes(step) ? 'active'
-                    : (step === 'face-error' || step === 'face-no-match') ? 'error'
-                    : 'done'
-                  }
-                />
-              </div>
-            </div>
-
-            {/* Right — verification UI */}
-            <div className="flex-1 bg-muted/30 rounded-xl p-6 border flex flex-col items-center justify-center text-center space-y-4 min-h-[240px]">
-
-              {/* idle */}
-              {step === 'idle' && (
-                <>
-                  <Fingerprint className="w-12 h-12 text-primary opacity-80" />
-                  <div>
-                    <h3 className="font-semibold text-lg">
-                      {canStartVerification ? 'Ready to Time In' : 'Getting Location…'}
-                    </h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {!hasHospitalGps
-                        ? 'GPS verification not required for this hospital.'
-                        : canStartVerification
-                        ? 'You are within the attendance zone.'
-                        : liveGps
-                        ? `Move closer to the hospital. ${liveGps.distance}m away.`
-                        : 'Waiting for GPS signal…'}
-                    </p>
-                  </div>
-                  <Button
-                    size="lg"
-                    className="w-full mt-2"
-                    disabled={!canStartVerification}
-                    onClick={startFromLiveGps}
-                  >
-                    {canStartVerification ? 'Start Face Verification' : (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Waiting for GPS…</>
-                    )}
-                  </Button>
-                </>
-              )}
-
-              {/* gps-checking */}
-              {step === 'gps-checking' && (
-                <>
-                  <MapPin className="w-12 h-12 text-primary animate-pulse" />
-                  <div>
-                    <h3 className="font-semibold text-lg">Verifying Location</h3>
-                    <p className="text-sm text-muted-foreground mt-1">Checking GPS coordinates against geofence…</p>
-                  </div>
-                </>
-              )}
-
-              {/* gps-ok */}
-              {step === 'gps-ok' && (
-                <>
-                  <CheckCircle2 className="w-12 h-12 text-emerald-500" />
-                  <div>
-                    <h3 className="font-semibold text-lg text-emerald-700">Location Verified</h3>
-                    <p className="text-sm text-muted-foreground mt-1">{gpsResult?.distance}m from hospital · Opening camera…</p>
-                  </div>
-                </>
-              )}
-
-              {/* gps-error */}
-              {step === 'gps-error' && (
-                <>
-                  <AlertCircle className="w-12 h-12 text-destructive" />
-                  <div>
-                    <h3 className="font-semibold text-lg text-destructive">Location Failed</h3>
-                    {gpsError && <Alert variant="destructive" className="mt-2 text-left"><AlertDescription className="text-xs">{gpsError}</AlertDescription></Alert>}
-                  </div>
-                  <Button variant="outline" size="sm" onClick={verifyGps} className="gap-2">
-                    <RefreshCw className="w-4 h-4" /> Retry GPS
-                  </Button>
-                </>
-              )}
-
-              {/* face-loading */}
-              {step === 'face-loading' && (
-                <>
-                  <Camera className="w-12 h-12 text-primary animate-pulse" />
-                  <div>
-                    <h3 className="font-semibold text-lg">Opening Camera</h3>
-                    <p className="text-sm text-muted-foreground mt-1">Allow camera access when prompted…</p>
-                  </div>
-                </>
-              )}
-
-              {/* face-scanning */}
-              {step === 'face-scanning' && (
-                <div className="w-full space-y-3">
-                  <p className="text-sm font-medium text-center">
-                    {faceDetected ? '⏳ Verifying with server…' : 'Centre your face, then tap Verify'}
-                  </p>
-                  <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black border-2 border-primary">
-                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-                    {!faceDetected && (
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <div className="w-40 h-52 border-2 border-white/60 rounded-full opacity-60" />
-                      </div>
-                    )}
-                    {faceDetected && (
-                      <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
-                        <Loader2 className="w-16 h-16 text-white animate-spin" />
-                      </div>
-                    )}
-                  </div>
-                  {!faceDetected && (
-                    <Button className="w-full gap-2" onClick={captureAndVerify}>
-                      <ScanFace className="w-4 h-4" /> Capture &amp; Verify Face
-                    </Button>
-                  )}
-                  <p className="text-xs text-muted-foreground text-center">
-                    <ScanFace className="w-3 h-3 inline mr-1" />
-                    Face matching runs locally on your device
-                  </p>
-                </div>
-              )}
-
-              {/* submitting */}
-              {step === 'submitting' && (
-                <>
-                  <Loader2 className="w-12 h-12 text-primary animate-spin" />
-                  <div>
-                    <h3 className="font-semibold text-lg">Recording Attendance</h3>
-                    <p className="text-sm text-muted-foreground mt-1">Saving your time-in…</p>
-                  </div>
-                </>
-              )}
-
-              {/* submit-error */}
-              {step === 'submit-error' && (
-                <>
-                  <AlertCircle className="w-12 h-12 text-destructive" />
-                  <div>
-                    <h3 className="font-semibold text-lg text-destructive">Submission Failed</h3>
-                    {submitError && <Alert variant="destructive" className="mt-2 text-left"><AlertDescription className="text-xs">{submitError}</AlertDescription></Alert>}
-                  </div>
-                  <Button variant="outline" size="sm" onClick={reset} className="gap-2">
-                    <RefreshCw className="w-4 h-4" /> Try Again
-                  </Button>
-                </>
-              )}
-
-              {/* face error / no match */}
-              {(step === 'face-error' || step === 'face-no-match') && (
-                <>
-                  <AlertCircle className="w-12 h-12 text-destructive" />
-                  <div>
-                    <h3 className="font-semibold text-lg text-destructive">
-                      {step === 'face-no-match' ? 'Face Did Not Match' : 'Camera Failed'}
-                    </h3>
-                    {faceError && <Alert variant="destructive" className="mt-2 text-left"><AlertDescription className="text-xs">{faceError}</AlertDescription></Alert>}
-                  </div>
-                  <div className="flex gap-2 flex-wrap justify-center">
-                    <Button variant="outline" size="sm" onClick={() => startFaceScan()} className="gap-2">
-                      <RefreshCw className="w-4 h-4" /> Try Again
-                    </Button>
-                    {step === 'face-no-match' && (
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href="/profile/face-setup">Re-enroll Face</Link>
-                      </Button>
-                    )}
-                  </div>
-                </>
-              )}
-
-              {/* done — already timed in, waiting for time-out */}
-              {step === 'done' && (
-                <>
-                  <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
-                    <CheckCircle2 className="w-10 h-10 text-emerald-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg text-emerald-700">Verified &amp; Timed In</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {timeInAt ? `Time in recorded at ${timeInAt}` : 'Attendance saved.'}
-                    </p>
-                  </div>
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="w-full gap-2 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
-                    disabled={recordTimeOut.isPending}
-                    onClick={() => {
-                      recordTimeOut.mutate(
-                        { data: { scheduleId, gpsVerified: true, faceVerified: true, livenessVerified: true } },
-                        {
-                          onSuccess: (record) => {
-                            setStep('timed-out');
-                            if (record.timeOut) {
-                              setTimeOutAt(new Date(record.timeOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-                            }
-                            toast({ title: 'Time-out recorded', description: 'Your duty hours have been saved.' });
-                          },
-                          onError: (err: unknown) => {
-                            toast({
-                              title: 'Time-out failed',
-                              description: err instanceof Error ? err.message : 'Please try again.',
-                              variant: 'destructive',
-                            });
-                          },
-                        },
-                      );
-                    }}
-                  >
-                    {recordTimeOut.isPending
-                      ? <><Loader2 className="w-4 h-4 animate-spin" /> Recording time-out…</>
-                      : <><LogOut className="w-4 h-4" /> Time Out</>}
-                  </Button>
-                </>
-              )}
-
-              {/* timed-out — duty complete */}
-              {step === 'timed-out' && (
-                <>
-                  <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
-                    <Clock className="w-10 h-10 text-blue-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg text-blue-700">Duty Complete</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {timeInAt && timeOutAt
-                        ? `Time in: ${timeInAt} · Time out: ${timeOutAt}`
-                        : timeOutAt
-                        ? `Time out recorded at ${timeOutAt}`
-                        : 'Your duty hours have been saved.'}
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href="/schedule">Back to Schedule</Link>
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+  // ── Shared step pill ──────────────────────────────────────────────────────
+  const StepPill = ({ current, total }: { current: number; total: number }) => (
+    <div className="flex items-center gap-1.5">
+      {Array.from({ length: total }).map((_, i) => (
+        <div
+          key={i}
+          className={`h-1.5 rounded-full transition-all ${
+            i + 1 < current ? 'w-4 bg-emerald-500'
+            : i + 1 === current ? 'w-6 bg-primary'
+            : 'w-4 bg-muted-foreground/25'
+          }`}
+        />
+      ))}
     </div>
   );
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // SCREEN 1 — GPS Location Check
+  // ════════════════════════════════════════════════════════════════════════════
+  if (isGpsScreen) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-0 -mt-2">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <StepPill current={1} total={2} />
+              <span className="text-xs text-muted-foreground">Step 1 of 2</span>
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+              <Navigation className="w-5 h-5 text-primary" /> GPS Verification
+            </h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {hospitalName}{deptName ? ` · ${deptName}` : ''} · {dutyDate ? `${dutyDate}, ${startTime}–${endTime}` : 'Loading…'}
+            </p>
+          </div>
+          {liveGps && (
+            <Badge variant="outline" className="text-xs font-normal shrink-0">
+              ±{liveGps.accuracy}m accuracy
+            </Badge>
+          )}
+        </div>
+
+        {/* Map */}
+        <div className="rounded-2xl overflow-hidden border shadow-md">
+          <AttendanceMap
+            hospitalLat={hospitalLat}
+            hospitalLng={hospitalLng}
+            attendanceRadius={hospitalRadius}
+            studentLat={liveGps?.latitude ?? null}
+            studentLng={liveGps?.longitude ?? null}
+            status={gpsZoneStatus}
+          />
+        </div>
+
+        {/* Status panel */}
+        <div className="pt-3 space-y-3">
+          <GpsStatusPanel
+            status={gpsZoneStatus}
+            distance={liveGps?.distance ?? null}
+            radius={hospitalRadius}
+            accuracy={liveGps?.accuracy ?? null}
+            hospitalName={hospitalName}
+          />
+
+          {/* GPS error */}
+          {step === 'gps-error' && gpsError && (
+            <Alert variant="destructive">
+              <AlertCircle className="w-4 h-4" />
+              <AlertDescription className="text-sm">{gpsError}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Google Maps link */}
+          {hasHospitalGps && (
+            <a
+              href={`https://www.google.com/maps/dir/?api=1&destination=${hospitalLat},${hospitalLng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+            >
+              <ExternalLink className="w-3 h-3" /> Open navigation in Google Maps
+            </a>
+          )}
+
+          {/* GPS error retry — always tappable */}
+          {step === 'gps-error' && (
+            <Button
+              size="lg"
+              variant="outline"
+              className="w-full h-14 text-base rounded-xl gap-2 mt-1"
+              onClick={verifyGps}
+            >
+              <RefreshCw className="w-5 h-5" /> Retry GPS Check
+            </Button>
+          )}
+
+          {/* Main CTA — proceed to face verification */}
+          {step !== 'gps-error' && (
+            <Button
+              size="lg"
+              className="w-full h-14 text-base rounded-xl gap-2 mt-1"
+              disabled={step === 'gps-checking' || !canStartVerification}
+              onClick={startFromLiveGps}
+            >
+              {step === 'gps-checking' ? (
+                <><Loader2 className="w-5 h-5 animate-spin" /> Verifying location…</>
+              ) : !canStartVerification ? (
+                <><Loader2 className="w-5 h-5 animate-spin" /> Waiting for GPS signal…</>
+              ) : (
+                <><ScanFace className="w-5 h-5" /> Continue to Face Verification</>
+              )}
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // SCREEN 2 — Face Verification
+  // ════════════════════════════════════════════════════════════════════════════
+  if (isFaceScreen) {
+    const isScanning = step === 'face-scanning';
+    const isLoading = step === 'face-loading';
+    const isSubmitting = step === 'submitting';
+    const hasError = step === 'face-error' || step === 'face-no-match' || step === 'submit-error';
+
+    return (
+      <div className="max-w-2xl mx-auto space-y-0 -mt-2">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <StepPill current={2} total={2} />
+              <span className="text-xs text-muted-foreground">Step 2 of 2</span>
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+              <ScanFace className="w-5 h-5 text-primary" /> Face Verification
+            </h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Position your face within the frame, then tap Verify
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground gap-1.5 shrink-0"
+            onClick={reset}
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Back
+          </Button>
+        </div>
+
+        {/* Camera frame */}
+        <div className="relative rounded-2xl overflow-hidden bg-black border shadow-xl aspect-[3/4] max-h-[520px] w-full">
+
+          {/* Video feed */}
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover scale-x-[-1]"
+            style={{ display: isScanning || faceDetected ? 'block' : 'none' }}
+          />
+
+          {/* Loading state */}
+          {(isLoading || isSubmitting) && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-zinc-950">
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+              </div>
+              <p className="text-white/80 text-sm font-medium">
+                {isLoading ? 'Opening camera…' : 'Recording attendance…'}
+              </p>
+            </div>
+          )}
+
+          {/* Face guide overlay — corner brackets */}
+          {isScanning && !faceDetected && (
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+              {/* Dim vignette */}
+              <div className="absolute inset-0 bg-black/30" style={{
+                maskImage: 'radial-gradient(ellipse 55% 65% at 50% 45%, transparent 70%, black 100%)',
+                WebkitMaskImage: 'radial-gradient(ellipse 55% 65% at 50% 45%, transparent 70%, black 100%)',
+              }} />
+              {/* Oval guide */}
+              <div className="w-48 h-64 border-2 border-white/70 rounded-full" />
+              {/* Corner brackets */}
+              {(['tl','tr','bl','br'] as const).map((pos) => (
+                <div
+                  key={pos}
+                  className="absolute w-8 h-8 border-white"
+                  style={{
+                    top: pos.startsWith('t') ? '14%' : undefined,
+                    bottom: pos.startsWith('b') ? '14%' : undefined,
+                    left: pos.endsWith('l') ? '22%' : undefined,
+                    right: pos.endsWith('r') ? '22%' : undefined,
+                    borderTopWidth: pos.startsWith('t') ? 3 : 0,
+                    borderBottomWidth: pos.startsWith('b') ? 3 : 0,
+                    borderLeftWidth: pos.endsWith('l') ? 3 : 0,
+                    borderRightWidth: pos.endsWith('r') ? 3 : 0,
+                    borderTopLeftRadius: pos === 'tl' ? 6 : 0,
+                    borderTopRightRadius: pos === 'tr' ? 6 : 0,
+                    borderBottomLeftRadius: pos === 'bl' ? 6 : 0,
+                    borderBottomRightRadius: pos === 'br' ? 6 : 0,
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Verifying overlay */}
+          {isScanning && faceDetected && (
+            <div className="absolute inset-0 bg-primary/25 flex flex-col items-center justify-center gap-3">
+              <Loader2 className="w-14 h-14 text-white animate-spin" />
+              <p className="text-white font-semibold text-sm tracking-wide">Verifying identity…</p>
+            </div>
+          )}
+
+          {/* Error state */}
+          {hasError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-zinc-950 px-6 text-center">
+              <div className="w-16 h-16 rounded-full bg-destructive/15 flex items-center justify-center">
+                <AlertCircle className="w-8 h-8 text-destructive" />
+              </div>
+              <div>
+                <p className="text-white font-semibold text-lg">
+                  {step === 'face-no-match' ? 'Face Did Not Match'
+                  : step === 'submit-error' ? 'Submission Failed'
+                  : 'Camera Error'}
+                </p>
+                <p className="text-white/60 text-sm mt-1">
+                  {faceError ?? submitError ?? 'Something went wrong. Please try again.'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Step badge — top-right */}
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-sm text-white text-xs px-3 py-1 rounded-full font-medium">
+            {isScanning && !faceDetected ? 'Centre your face in the oval'
+            : faceDetected ? 'Hold still…'
+            : isLoading ? 'Starting camera'
+            : isSubmitting ? 'Saving attendance'
+            : hasError ? 'Tap below to try again'
+            : ''}
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div className="pt-3 space-y-2">
+          {isScanning && !faceDetected && (
+            <Button size="lg" className="w-full h-14 text-base rounded-xl gap-2" onClick={captureAndVerify}>
+              <ScanFace className="w-5 h-5" /> Capture &amp; Verify Face
+            </Button>
+          )}
+
+          {(step === 'face-error' || step === 'face-no-match') && (
+            <div className="flex gap-2">
+              <Button size="lg" className="flex-1 h-12 rounded-xl gap-2" onClick={() => startFaceScan()}>
+                <RefreshCw className="w-4 h-4" /> Try Again
+              </Button>
+              {step === 'face-no-match' && (
+                <Button size="lg" variant="outline" className="flex-1 h-12 rounded-xl" asChild>
+                  <Link href="/profile/face-setup">Re-enroll Face</Link>
+                </Button>
+              )}
+            </div>
+          )}
+
+          {step === 'submit-error' && (
+            <Button size="lg" className="w-full h-12 rounded-xl gap-2" onClick={reset}>
+              <RefreshCw className="w-4 h-4" /> Start Over
+            </Button>
+          )}
+
+          <p className="text-xs text-muted-foreground text-center pt-1">
+            <ScanFace className="w-3 h-3 inline mr-1" />
+            Face matching is processed securely on the server
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // SCREEN 3 — Done / Timed Out
+  // ════════════════════════════════════════════════════════════════════════════
+  if (isDoneScreen) {
+    const isTimedOut = step === 'timed-out';
+    return (
+      <div className="max-w-md mx-auto mt-10 text-center space-y-6">
+        <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto ${isTimedOut ? 'bg-blue-100' : 'bg-emerald-100'}`}>
+          {isTimedOut
+            ? <Clock className="w-12 h-12 text-blue-600" />
+            : <CheckCircle2 className="w-12 h-12 text-emerald-600" />}
+        </div>
+        <div>
+          <h2 className={`text-2xl font-bold ${isTimedOut ? 'text-blue-700' : 'text-emerald-700'}`}>
+            {isTimedOut ? 'Duty Complete' : 'Verified & Timed In'}
+          </h2>
+          <p className="text-muted-foreground mt-2">
+            {isTimedOut && timeInAt && timeOutAt
+              ? `Time in: ${timeInAt} · Time out: ${timeOutAt}`
+              : isTimedOut && timeOutAt
+              ? `Time out recorded at ${timeOutAt}`
+              : timeInAt
+              ? `Attendance recorded at ${timeInAt}`
+              : 'Your attendance has been saved.'}
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {hospitalName}{deptName ? ` · ${deptName}` : ''}
+          </p>
+        </div>
+
+        {/* Step recap */}
+        <div className="bg-muted/50 rounded-xl p-4 space-y-2 text-sm text-left">
+          <div className="flex items-center gap-2 text-emerald-700">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>GPS location verified within {hospitalRadius}m</span>
+          </div>
+          <div className="flex items-center gap-2 text-emerald-700">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>Face identity confirmed</span>
+          </div>
+          {isTimedOut && (
+            <div className="flex items-center gap-2 text-blue-700">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>Duty hours recorded</span>
+            </div>
+          )}
+        </div>
+
+        {!isTimedOut && (
+          <Button
+            size="lg"
+            variant="outline"
+            className="w-full h-14 text-base rounded-xl gap-2 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+            disabled={recordTimeOut.isPending}
+            onClick={() => {
+              recordTimeOut.mutate(
+                { data: { scheduleId, gpsVerified: true, faceVerified: true, livenessVerified: true } },
+                {
+                  onSuccess: (record) => {
+                    setStep('timed-out');
+                    if (record.timeOut) {
+                      setTimeOutAt(new Date(record.timeOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+                    }
+                    toast({ title: 'Time-out recorded', description: 'Your duty hours have been saved.' });
+                  },
+                  onError: (err: unknown) => {
+                    toast({
+                      title: 'Time-out failed',
+                      description: err instanceof Error ? err.message : 'Please try again.',
+                      variant: 'destructive',
+                    });
+                  },
+                },
+              );
+            }}
+          >
+            {recordTimeOut.isPending
+              ? <><Loader2 className="w-5 h-5 animate-spin" /> Recording time-out…</>
+              : <><LogOut className="w-5 h-5" /> Time Out</>}
+          </Button>
+        )}
+
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/schedule">← Back to Schedule</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  return null;
 }
