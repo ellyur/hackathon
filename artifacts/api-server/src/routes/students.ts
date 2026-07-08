@@ -168,28 +168,22 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
     : 0;
 
   // ── Clinical Cases by Ward (independent of Duty Hours) ─────────────────────
-  const allDepts = await db
-    .select()
-    .from(departmentsTable)
-    .where(eq(departmentsTable.isActive, true));
-
-  // Wards that have clinical cases OR duty day requirements
-  const wardDepts = allDepts.filter(d => d.requiredDutyDays > 0);
-
-  const verifiedDuties = await db
-    .select()
-    .from(dutyVerificationsTable)
-    .where(
+  const [allDepts, allCases, verifiedDuties] = await Promise.all([
+    db.select().from(departmentsTable).where(eq(departmentsTable.isActive, true)),
+    db.select().from(clinicalCasesTable).where(eq(clinicalCasesTable.isActive, true)),
+    db.select().from(dutyVerificationsTable).where(
       and(
         eq(dutyVerificationsTable.studentId, id),
         eq(dutyVerificationsTable.status, "officially_verified"),
       ),
-    );
+    ),
+  ]);
 
-  const allCases = await db
-    .select()
-    .from(clinicalCasesTable)
-    .where(eq(clinicalCasesTable.isActive, true));
+  // Include wards that have duty day requirements OR have clinical cases assigned
+  const wardDepts = allDepts.filter(
+    d => d.requiredDutyDays > 0 ||
+         allCases.some(c => c.category.toLowerCase() === d.name.toLowerCase()),
+  );
 
   const verifiedCompletions = await db
     .select()
@@ -235,9 +229,9 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
 
     const daysPct = dept.requiredDutyDays > 0
       ? Math.min(1, completedDutyDays / dept.requiredDutyDays)
-      : 0;
+      : 1; // No duty-day requirement → that dimension is fully satisfied
 
-    // Ward completion is based on case progress only (duty hours tracked globally)
+    // Ward completion: combine duty-day progress and case progress
     let completionPct = daysPct;
     if (requiredCases.length > 0) {
       const totalCasesRequired = requiredCases.reduce((s, c) => s + c.required, 0);
@@ -248,9 +242,10 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
       completionPct = Math.min(daysPct, casesPct);
     }
 
+    const anyCaseProgress = requiredCases.some(c => c.verified > 0);
     const status: "complete" | "in_progress" | "not_started" =
       completionPct >= 1 ? "complete"
-      : completedDutyDays > 0 ? "in_progress"
+      : (completedDutyDays > 0 || anyCaseProgress) ? "in_progress"
       : "not_started";
 
     return {
