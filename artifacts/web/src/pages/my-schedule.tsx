@@ -91,6 +91,11 @@ function ScheduleCard({ schedule, attendanceRecord }: { schedule: Schedule; atte
             )}
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
+            {durationLabel(schedule.startTime, schedule.endTime) && (
+              <span className="text-xs font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-full">
+                {durationLabel(schedule.startTime, schedule.endTime)}
+              </span>
+            )}
             {/* Attendance status takes priority over schedule status when present */}
             <AttendanceBadge record={attendanceRecord} />
             {!attendanceRecord && (
@@ -116,24 +121,16 @@ function ScheduleCard({ schedule, attendanceRecord }: { schedule: Schedule; atte
             <span>{ciName}</span>
           </div>
         </div>
-        <div className="flex items-center justify-between pt-1">
-          {/* Duration pill — always bottom-left */}
-          {durationLabel(schedule.startTime, schedule.endTime) ? (
-            <span className="text-xs font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-full">
-              {durationLabel(schedule.startTime, schedule.endTime)}
-            </span>
-          ) : <span />}
-
-          {/* Action button — bottom-right */}
-          {canTimeIn && (
+        {canTimeIn && (
+          <div className="flex justify-end pt-1">
             <Link href={`/schedule/${schedule.id}`}>
               <Button size="sm" variant={alreadyTimedIn ? 'outline' : 'default'} className="gap-2">
                 <LogIn className="h-4 w-4" />
                 {alreadyTimedIn ? 'View Duty' : 'View & Time In'}
               </Button>
             </Link>
-          )}
-        </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
