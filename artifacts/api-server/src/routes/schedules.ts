@@ -249,6 +249,8 @@ router.post("/schedules", requireRole("scheduler", "admin"), async (req, res): P
     startTime: string;
     endTime: string;
     gracePeriodMin?: number;
+    /** Official Duty Hours for this shift — set by Scheduler. Awarded to students upon completion. */
+    dutyHours?: number;
     notes?: string;
     maxStudents?: number;
     requiredYearLevel?: number;
@@ -273,6 +275,7 @@ router.post("/schedules", requireRole("scheduler", "admin"), async (req, res): P
     startTime: body.startTime,
     endTime: body.endTime,
     gracePeriodMin: body.gracePeriodMin ?? 15,
+    dutyHours: body.dutyHours ?? null,
     status: "upcoming",
     notes: body.notes ?? null,
     maxStudents: body.maxStudents ?? 10,
@@ -318,6 +321,8 @@ router.patch("/schedules/:id", requireRole("scheduler", "admin"), async (req, re
   const body = req.body as Partial<{
     title: string; hospitalId: string; departmentId: string; ciId: string;
     dutyDate: string; startTime: string; endTime: string; gracePeriodMin: number;
+    /** Official Duty Hours for this shift — set by Scheduler. Awarded to students upon completion. */
+    dutyHours: number;
     status: "upcoming" | "active" | "completed" | "cancelled"; notes: string;
     maxStudents: number; requiredYearLevel: number; eligibleSections: string;
     caseTypeId: string; studentIds: string[];
@@ -332,6 +337,7 @@ router.patch("/schedules/:id", requireRole("scheduler", "admin"), async (req, re
   if (body.startTime !== undefined) updates.startTime = body.startTime;
   if (body.endTime !== undefined) updates.endTime = body.endTime;
   if (body.gracePeriodMin !== undefined) updates.gracePeriodMin = body.gracePeriodMin;
+  if (body.dutyHours !== undefined) updates.dutyHours = body.dutyHours;
   if (body.status !== undefined) updates.status = body.status;
   if (body.notes !== undefined) updates.notes = body.notes;
   if (body.maxStudents !== undefined) updates.maxStudents = body.maxStudents;

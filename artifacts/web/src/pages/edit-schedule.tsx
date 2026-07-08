@@ -39,6 +39,7 @@ const schema = z.object({
   startTime: z.string().min(1, 'Start time is required'),
   endTime: z.string().min(1, 'End time is required'),
   gracePeriodMin: z.coerce.number().min(0).default(15),
+  dutyHours: z.coerce.number().min(0).optional(),
   notes: z.string().optional(),
 });
 
@@ -88,6 +89,7 @@ export function EditSchedulePage() {
         startTime: schedule.startTime,
         endTime: schedule.endTime,
         gracePeriodMin: schedule.gracePeriodMin,
+        dutyHours: (schedule as any).dutyHours ?? undefined,
         notes: schedule.notes ?? '',
       });
       setSelectedHospital(schedule.hospitalId ?? '');
@@ -107,6 +109,7 @@ export function EditSchedulePage() {
           startTime: data.startTime,
           endTime: data.endTime,
           gracePeriodMin: data.gracePeriodMin,
+          dutyHours: data.dutyHours || undefined,
           notes: data.notes || undefined,
         },
       });
@@ -266,6 +269,16 @@ export function EditSchedulePage() {
             <div className="space-y-2">
               <Label htmlFor="gracePeriodMin">Grace Period (minutes)</Label>
               <Input id="gracePeriodMin" type="number" min={0} max={60} {...register('gracePeriodMin')} />
+            </div>
+
+            {/* Duty Hours */}
+            <div className="space-y-2">
+              <Label htmlFor="dutyHours">
+                Duty Hours
+                <span className="text-muted-foreground text-xs ml-1">(official hours awarded upon completion)</span>
+              </Label>
+              <Input id="dutyHours" type="number" min={0} step={0.5} placeholder="e.g. 8" {...register('dutyHours')} />
+              {errors.dutyHours && <p className="text-xs text-destructive">{errors.dutyHours.message}</p>}
             </div>
 
             {/* Notes */}

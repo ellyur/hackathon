@@ -10,8 +10,9 @@ import {
   dutyVerificationsTable,
   dutyVerificationCasesTable,
   schedulesTable,
+  academicYearSettingsTable,
 } from "@workspace/db";
-import { eq, and, sql, inArray } from "drizzle-orm";
+import { eq, and, sql, inArray, sum } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
@@ -133,11 +134,46 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
     return;
   }
 
+  // ── Duty Hours (independent of Clinical Cases) ─────────────────────────────
+  // Earned: sum attendance.dutyHours for all completed attendance records for this student.
+  const [earnedResult] = await db
+    .select({ total: sql<number>`COALESCE(SUM(${attendanceTable.dutyHours}), 0)` })
+    .from(attendanceTable)
+    .where(eq(attendanceTable.studentId, id));
+  const earnedDutyHours = Math.round(Number(earnedResult?.total ?? 0) * 100) / 100;
+
+  // Required: look up academic year settings for the student's current academic year.
+  // Falls back to student_profiles.totalHoursRequired if no setting is configured.
+  const [profile] = await db
+    .select({ academicYear: studentProfilesTable.academicYear, totalHoursRequired: studentProfilesTable.totalHoursRequired })
+    .from(studentProfilesTable)
+    .where(eq(studentProfilesTable.userId, id));
+
+  let requiredDutyHours = profile?.totalHoursRequired ?? 500;
+  if (profile?.academicYear) {
+    // When multiple semester rows exist for the same school year, use the maximum
+    // configured total (most conservative/complete requirement). This is deterministic
+    // and handles years where one semester may have higher requirements than another.
+    const settingsForYear = await db
+      .select()
+      .from(academicYearSettingsTable)
+      .where(eq(academicYearSettingsTable.schoolYear, profile.academicYear));
+    if (settingsForYear.length > 0) {
+      requiredDutyHours = Math.max(...settingsForYear.map(s => s.requiredTotalDutyHours));
+    }
+  }
+
+  const dutyHoursPct = requiredDutyHours > 0
+    ? Math.min(1, earnedDutyHours / requiredDutyHours)
+    : 0;
+
+  // ── Clinical Cases by Ward (independent of Duty Hours) ─────────────────────
   const allDepts = await db
     .select()
     .from(departmentsTable)
     .where(eq(departmentsTable.isActive, true));
 
+  // Wards that have clinical cases OR duty day requirements
   const wardDepts = allDepts.filter(d => d.requiredDutyDays > 0);
 
   const verifiedDuties = await db
@@ -166,13 +202,12 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
     );
 
   const wards = wardDepts.map(dept => {
+    // Duty days remain tracked per-ward (for scheduling/verification purposes)
     const completedDutyDays = verifiedDuties.filter(
       dv => dv.departmentId === dept.id,
     ).length;
 
-    const completedDutyHours = completedDutyDays *
-      (dept.requiredDutyDays > 0 ? dept.requiredDutyHours / dept.requiredDutyDays : 0);
-
+    // Clinical Cases for this ward — status is INDEPENDENT of duty hours
     const wardCases = allCases.filter(
       c => c.category.toLowerCase() === dept.name.toLowerCase(),
     );
@@ -182,6 +217,7 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
         cc => cc.clinicalCaseId === c.id && cc.departmentId === dept.id,
       ).length;
       const remaining = Math.max(0, c.requiredCount - verified);
+      // Rule: verified case completions NEVER add Duty Hours
       const status: "complete" | "in_progress" | "deficient" =
         verified >= c.requiredCount ? "complete"
         : verified > 0 ? "in_progress"
@@ -190,6 +226,7 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
         caseId: c.id,
         caseName: c.name,
         required: c.requiredCount,
+        hourValue: c.hourValue ?? null,
         verified,
         remaining,
         status,
@@ -200,6 +237,7 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
       ? Math.min(1, completedDutyDays / dept.requiredDutyDays)
       : 0;
 
+    // Ward completion is based on case progress only (duty hours tracked globally)
     let completionPct = daysPct;
     if (requiredCases.length > 0) {
       const totalCasesRequired = requiredCases.reduce((s, c) => s + c.required, 0);
@@ -221,22 +259,28 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
       requiredDutyDays: dept.requiredDutyDays,
       completedDutyDays,
       requiredDutyHours: dept.requiredDutyHours,
-      completedDutyHours: Math.round(completedDutyHours * 10) / 10,
       completionPct: Math.round(completionPct * 100),
       status,
       requiredCases,
     };
   });
 
+  // Legacy totals kept for backward compatibility
   const totalRequired = wardDepts.reduce((s, d) => s + d.requiredDutyDays, 0);
   const totalCompleted = wards.reduce((s, w) => s + Math.min(w.completedDutyDays, w.requiredDutyDays), 0);
   const overallCompletion = totalRequired > 0 ? totalCompleted / totalRequired : 0;
 
   res.json({
     studentId: id,
+    // ── Duty Hours (independent track) ─────────
+    earnedDutyHours,
+    requiredDutyHours,
+    dutyHoursCompletion: Math.round(dutyHoursPct * 100),
+    // ── Legacy / ward-day fields ────────────────
     totalDutyDaysRequired: totalRequired,
     totalDutyDaysCompleted: totalCompleted,
     overallCompletion,
+    // ── Clinical Cases by Ward ──────────────────
     wards,
   });
 });

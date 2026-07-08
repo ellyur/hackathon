@@ -1,4 +1,4 @@
-import { pgTable, text, boolean, timestamp, integer, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, boolean, timestamp, integer, real, pgEnum } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { hospitalsTable } from "./hospitals";
 import { departmentsTable } from "./hospitals";
@@ -11,6 +11,8 @@ export const clinicalCasesTable = pgTable("clinical_cases", {
   description: text("description").notNull().default(""),
   category: text("category").notNull(),
   requiredCount: integer("required_count").notNull().default(1),
+  /** Reference-only: displayed in reports but does NOT add to a student's Duty Hours. */
+  hourValue: real("hour_value"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -25,7 +25,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   'ICU': 'bg-red-100 text-red-700 border-red-200',
 };
 
-const emptyForm = { name: '', description: '', category: 'Delivery Room' as string, requiredCount: '1', isActive: true };
+const emptyForm = { name: '', description: '', category: 'Delivery Room' as string, requiredCount: '1', hourValue: '', isActive: true };
 
 export function AdminCasesPage() {
   const { toast } = useToast();
@@ -51,6 +51,7 @@ export function AdminCasesPage() {
           description: form.description || undefined,
           category: form.category,
           requiredCount: Number(form.requiredCount),
+          hourValue: form.hourValue ? Number(form.hourValue) : undefined,
           isActive: form.isActive,
         },
       },
@@ -76,6 +77,7 @@ export function AdminCasesPage() {
           description: editForm.description || undefined,
           category: editForm.category,
           requiredCount: Number(editForm.requiredCount),
+          hourValue: editForm.hourValue ? Number(editForm.hourValue) : undefined,
           isActive: editForm.isActive,
         },
       },
@@ -107,6 +109,7 @@ export function AdminCasesPage() {
       description: c.description ?? '',
       category: c.category,
       requiredCount: String(c.requiredCount),
+      hourValue: (c as any).hourValue != null ? String((c as any).hourValue) : '',
       isActive: c.isActive,
     });
     setEditOpen(true);
@@ -134,6 +137,10 @@ export function AdminCasesPage() {
       <div>
         <Label>Required Count</Label>
         <Input className="mt-1" type="number" min="1" value={values.requiredCount} onChange={e => onChange({ ...values, requiredCount: e.target.value })} />
+      </div>
+      <div>
+        <Label>Hour Value <span className="text-muted-foreground text-xs">(reference only — does not add Duty Hours)</span></Label>
+        <Input className="mt-1" type="number" min="0" step="0.5" value={values.hourValue} onChange={e => onChange({ ...values, hourValue: e.target.value })} placeholder="e.g. 4" />
       </div>
       <div className="flex items-center gap-3 pt-1">
         <Switch checked={values.isActive} onCheckedChange={v => onChange({ ...values, isActive: v })} />

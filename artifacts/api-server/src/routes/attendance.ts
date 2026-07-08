@@ -273,23 +273,31 @@ router.post("/attendance/time-out", requireRole("student"), async (req, res): Pr
 
   const now = new Date();
 
-  // Duty hours are based on the scheduled shift length (endTime − startTime),
-  // not the actual clock time the student was present. A 7 AM–3 PM shift always
-  // credits 8 hours regardless of when the student timed in or out.
+  // Duty hours come from the schedule's configured dutyHours field (set by Scheduler).
+  // This is the OFFICIAL value — it does NOT depend on actual clock-in/clock-out time.
+  // Rule: completing a duty awards exactly the configured hours, regardless of when
+  // the student timed in or out.
+  // Fallback: if the Scheduler hasn't set dutyHours on this schedule yet, compute
+  // from the shift length (endTime − startTime) for backward compatibility.
   const [scheduleRow] = await db
     .select()
     .from(schedulesTable)
     .where(eq(schedulesTable.id, scheduleId));
 
-  const dutyHours = scheduleRow
-    ? (() => {
-        const [sh, sm] = scheduleRow.startTime.split(":").map(Number);
-        const [eh, em] = scheduleRow.endTime.split(":").map(Number);
-        let diffMin = (eh * 60 + em) - (sh * 60 + sm);
-        if (diffMin < 0) diffMin += 24 * 60; // overnight shift
-        return Math.round((diffMin / 60) * 100) / 100;
-      })()
-    : null;
+  let dutyHours: number | null = null;
+  if (scheduleRow) {
+    if (scheduleRow.dutyHours != null) {
+      // Use the officially configured value
+      dutyHours = scheduleRow.dutyHours;
+    } else {
+      // Backward-compat: derive from shift length
+      const [sh, sm] = scheduleRow.startTime.split(":").map(Number);
+      const [eh, em] = scheduleRow.endTime.split(":").map(Number);
+      let diffMin = (eh * 60 + em) - (sh * 60 + sm);
+      if (diffMin < 0) diffMin += 24 * 60; // overnight shift
+      dutyHours = Math.round((diffMin / 60) * 100) / 100;
+    }
+  }
 
   await db
     .update(attendanceTable)
@@ -346,6 +354,23 @@ router.post(
       return;
     }
 
+    // Award duty hours only for completed attendance (not absences).
+    // Rule: absences earn no hours — the schedule's hours are only credited
+    // when the student actually attended (present or late).
+    let ciDutyHours: number | null = null;
+    if (body.status !== "absent") {
+      if (schedule.dutyHours != null) {
+        ciDutyHours = schedule.dutyHours;
+      } else {
+        // Backward-compat fallback: derive from shift length
+        const [sh, sm] = schedule.startTime.split(":").map(Number);
+        const [eh, em] = schedule.endTime.split(":").map(Number);
+        let diffMin = (eh * 60 + em) - (sh * 60 + sm);
+        if (diffMin < 0) diffMin += 24 * 60;
+        ciDutyHours = Math.round((diffMin / 60) * 100) / 100;
+      }
+    }
+
     const id = randomUUID();
     await db.insert(attendanceTable).values({
       id,
@@ -353,6 +378,7 @@ router.post(
       studentId: body.studentId,
       ciId: req.session.userId!,
       timeIn: new Date(),
+      dutyHours: ciDutyHours,
       status: body.status,
       method: "ci_assisted",
       gpsVerified: body.gpsVerified ?? true,

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, real, pgEnum } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { hospitalsTable, departmentsTable } from "./hospitals";
 
@@ -14,6 +14,8 @@ export const schedulesTable = pgTable("schedules", {
   startTime: text("start_time").notNull(),
   endTime: text("end_time").notNull(),
   gracePeriodMin: integer("grace_period_min").notNull().default(15),
+  /** Official duty hours for this shift — set by the Scheduler. Awards this many hours to students on completion. */
+  dutyHours: real("duty_hours"),
   status: scheduleStatusEnum("status").notNull().default("upcoming"),
   notes: text("notes"),
   // Student assignment controls

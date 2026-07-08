@@ -71,6 +71,7 @@ import { AdminAuditPage } from '@/pages/admin-audit';
 import { AdminSettingsPage } from '@/pages/admin-settings';
 import { AdminAcademicPage } from '@/pages/admin-academic';
 import { AdminNotificationLogPage } from '@/pages/admin-notification-log';
+import { AdminAcademicYearSettingsPage } from '@/pages/admin-academic-year-settings';
 import { CIEvaluationPage } from '@/pages/ci-evaluation';
 import { StudentAcademicSchedulePage } from '@/pages/student-academic-schedule';
 import { DutyVerificationDetailPage } from '@/pages/duty-verification-detail';
@@ -154,6 +155,7 @@ function Router() {
           <Route path="/admin/settings" component={AdminSettingsPage} />
           <Route path="/admin/academic" component={AdminAcademicPage} />
           <Route path="/admin/notification-log" component={AdminNotificationLogPage} />
+          <Route path="/admin/academic-year-settings" component={AdminAcademicYearSettingsPage} />
           <Route path="/evaluations" component={CIEvaluationPage} />
           <Route path="/academic-schedule" component={StudentAcademicSchedulePage} />
 

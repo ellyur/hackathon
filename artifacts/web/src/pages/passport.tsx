@@ -26,9 +26,20 @@ async function apiFetch<T>(path: string): Promise<T> {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface WardCase { caseId: string; caseName: string; required: number; verified: number; remaining: number; status: 'complete' | 'in_progress' | 'deficient'; }
-interface WardProgress { departmentId: string; wardName: string; requiredDutyDays: number; completedDutyDays: number; requiredDutyHours: number; completedDutyHours: number; completionPct: number; status: 'complete' | 'in_progress' | 'not_started'; requiredCases: WardCase[]; }
-interface StudentPassport { studentId: string; totalDutyDaysRequired: number; totalDutyDaysCompleted: number; overallCompletion: number; wards: WardProgress[]; }
+interface WardCase { caseId: string; caseName: string; required: number; verified: number; remaining: number; hourValue?: number | null; status: 'complete' | 'in_progress' | 'deficient'; }
+interface WardProgress { departmentId: string; wardName: string; requiredDutyDays: number; completedDutyDays: number; requiredDutyHours: number; completionPct: number; status: 'complete' | 'in_progress' | 'not_started'; requiredCases: WardCase[]; }
+interface StudentPassport {
+  studentId: string;
+  // Independent Duty Hours track
+  earnedDutyHours: number;
+  requiredDutyHours: number;
+  dutyHoursCompletion: number;
+  // Legacy ward-day fields
+  totalDutyDaysRequired: number;
+  totalDutyDaysCompleted: number;
+  overallCompletion: number;
+  wards: WardProgress[];
+}
 
 interface AttendanceRecord { id: string; dutyDate: string; timeIn: string | null; timeOut: string | null; status: string; dutyHours: number | null; lateMinutes: number; gpsVerified: boolean | null; faceVerified: boolean | null; }
 interface VerificationRecord { id: string; dutyDate: string; status: string; ciName: string; ciRemarks: string | null; ciVerifiedAt: string | null; schedulerConfirmedAt: string | null; selectedCases: string[]; }
@@ -251,39 +262,40 @@ export function ClinicalPassportPage() {
   }
 
   const wards = passport?.wards ?? [];
-  const overallPct = Math.round((passport?.overallCompletion ?? 0) * 100);
-  const totalDays = passport?.totalDutyDaysRequired ?? 0;
-  const completedDays = passport?.totalDutyDaysCompleted ?? 0;
-  const remainingDays = Math.max(0, totalDays - completedDays);
+  // Duty Hours (independent track)
+  const earnedHours = passport?.earnedDutyHours ?? 0;
+  const requiredHours = passport?.requiredDutyHours ?? 0;
+  const dutyHoursPct = passport?.dutyHoursCompletion ?? 0;
+  const remainingHours = Math.max(0, requiredHours - earnedHours);
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Clinical Passport</h2>
-        <p className="text-muted-foreground mt-1">Track your ward duty days and clinical case requirements. Click any ward for details.</p>
+        <p className="text-muted-foreground mt-1">Track your duty hours and clinical case requirements independently. Click any ward for details.</p>
       </div>
 
-      {/* Summary Cards */}
+      {/* Duty Hours Summary — independent of Clinical Cases */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Overall Progress</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Duty Hours Progress</CardTitle></CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{overallPct}%</div>
-            <Progress value={overallPct} className="mt-3" />
+            <div className="text-2xl font-bold">{dutyHoursPct}%</div>
+            <Progress value={dutyHoursPct} className="mt-3" />
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Duty Days Completed</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Duty Hours Completed</CardTitle></CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-emerald-600">{completedDays}</div>
-            <p className="text-xs text-muted-foreground mt-1">Out of {totalDays} required</p>
+            <div className="text-2xl font-bold text-emerald-600">{earnedHours.toFixed(1)}</div>
+            <p className="text-xs text-muted-foreground mt-1">Out of {requiredHours} required hours</p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Remaining Duty Days</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Remaining Duty Hours</CardTitle></CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-600">{remainingDays}</div>
-            <p className="text-xs text-muted-foreground mt-1">Across all wards</p>
+            <div className="text-2xl font-bold text-amber-600">{remainingHours.toFixed(1)}</div>
+            <p className="text-xs text-muted-foreground mt-1">Hours still needed</p>
           </CardContent>
         </Card>
       </div>
@@ -377,9 +389,9 @@ export function ClinicalPassportPage() {
         <CardContent className="flex items-start gap-3 pt-4 pb-4">
           <AlertCircle className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
           <p className="text-sm text-blue-700">
-            Your Clinical Passport is read-only. Duty days and clinical cases are updated automatically
-            after your Clinical Instructor verifies your duty and the Scheduler confirms the paper documents.
-            Click any ward card to see detailed history.
+            <strong>Duty Hours</strong> are earned from completed duty schedules — the Scheduler sets the official hours for each shift.
+            <strong> Clinical Cases</strong> are tracked separately and verified by your Clinical Instructor; completing a case does <em>not</em> add Duty Hours.
+            Both are updated automatically after verification. Click any ward card to see detailed history.
           </p>
         </CardContent>
       </Card>

@@ -28,6 +28,8 @@ router.post("/cases", requireRole("admin"), async (req, res): Promise<void> => {
     description?: string;
     category: string;
     requiredCount?: number;
+    /** Reference-only — displayed in reports but does NOT add to Duty Hours. */
+    hourValue?: number;
   };
   if (!body.name || !body.category) {
     res.status(400).json({ error: "Name and category are required" });
@@ -41,6 +43,7 @@ router.post("/cases", requireRole("admin"), async (req, res): Promise<void> => {
     description: body.description ?? "",
     category: body.category,
     requiredCount: body.requiredCount ?? 1,
+    hourValue: body.hourValue ?? null,
     isActive: true,
   });
 
@@ -61,6 +64,8 @@ router.patch("/cases/:id", requireRole("admin"), async (req, res): Promise<void>
     description: string;
     category: string;
     requiredCount: number;
+    /** Reference-only — displayed in reports but does NOT add to Duty Hours. */
+    hourValue: number;
     isActive: boolean;
   }>;
 
@@ -71,6 +76,7 @@ router.patch("/cases/:id", requireRole("admin"), async (req, res): Promise<void>
       ...(body.description !== undefined && { description: body.description }),
       ...(body.category !== undefined && { category: body.category }),
       ...(body.requiredCount !== undefined && { requiredCount: body.requiredCount }),
+      ...(body.hourValue !== undefined && { hourValue: body.hourValue }),
       ...(body.isActive !== undefined && { isActive: body.isActive }),
     })
     .where(eq(clinicalCasesTable.id, id));
