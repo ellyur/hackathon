@@ -141,6 +141,25 @@ export function useCiVerifyDuty() {
   });
 }
 
+export interface BulkVerifyResult {
+  verified: number;
+  results: Array<{ id: string; status: 'ok' | 'error'; error?: string }>;
+}
+
+export function useCiBulkVerifyDuty() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { ids: string[]; caseIds: string[]; remarks?: string }) =>
+      apiFetch<BulkVerifyResult>('/api/duty-verifications/bulk-ci-verify', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: dutyVerificationKeys.all });
+    },
+  });
+}
+
 export function useConfirmDutyVerification() {
   const queryClient = useQueryClient();
   return useMutation({

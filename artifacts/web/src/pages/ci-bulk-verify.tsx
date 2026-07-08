@@ -13,7 +13,7 @@ import {
   CheckCircle2, AlertCircle, ClipboardCheck, Clock,
 } from 'lucide-react';
 import { useGetSchedule } from '@workspace/api-client-react';
-import { useListDutyVerifications, useCiVerifyDuty } from '@/hooks/use-duty-verifications';
+import { useListDutyVerifications, useCiBulkVerifyDuty } from '@/hooks/use-duty-verifications';
 import { useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 
@@ -58,7 +58,7 @@ export function CIBulkVerifyPage() {
   const [verifying, setVerifying] = useState(false);
   const [verifiedCount, setVerifiedCount] = useState(0);
 
-  const ciVerify = useCiVerifyDuty();
+  const bulkVerify = useCiBulkVerifyDuty();
 
   function toggleDv(id: string) {
     setSelectedDvIds(prev => {
@@ -83,33 +83,30 @@ export function CIBulkVerifyPage() {
 
   async function handleBulkVerify() {
     setVerifying(true);
-    let count = 0;
-    const errors: string[] = [];
-
-    for (const dvId of selectedDvIds) {
-      try {
-        await ciVerify.mutateAsync({
-          id: dvId,
-          caseIds: [...selectedCaseIds],
-          remarks: remarks || undefined,
-        });
-        count++;
-      } catch (e) {
-        errors.push(dvId);
-      }
+    try {
+      const result = await bulkVerify.mutateAsync({
+        ids: [...selectedDvIds],
+        caseIds: [...selectedCaseIds],
+        remarks: remarks || undefined,
+      });
+      setVerifiedCount(result.verified);
+      setStep('done');
+      toast({
+        title: `${result.verified} student${result.verified !== 1 ? 's' : ''} verified ✓`,
+        description: 'All selected duties sent to Scheduler.',
+      });
+    } catch (e: any) {
+      // Server may return structured details (e.g. precondition failure on a specific ID)
+      const serverMsg: string = e?.message ?? 'An unexpected error occurred.';
+      toast({
+        title: 'Bulk verification failed',
+        description: serverMsg,
+        variant: 'destructive',
+      });
+    } finally {
+      setVerifying(false);
+      refetch();
     }
-
-    setVerifiedCount(count);
-    setVerifying(false);
-    setStep('done');
-
-    if (errors.length > 0) {
-      toast({ title: `${count} verified, ${errors.length} failed`, variant: 'destructive' });
-    } else {
-      toast({ title: `${count} student${count !== 1 ? 's' : ''} verified ✓`, description: 'All selected duties sent to Scheduler.' });
-    }
-
-    refetch();
   }
 
   const selectedStudentNames = scheduleVerifications

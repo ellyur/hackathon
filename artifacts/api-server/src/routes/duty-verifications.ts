@@ -249,6 +249,146 @@ router.post(
 );
 
 /**
+ * POST /api/duty-verifications/bulk-ci-verify
+ * CI verifies multiple duty verification requests in one atomic transaction.
+ * Body: { ids: string[], caseIds: string[], remarks?: string }
+ * Returns: { verified: number, results: Array<{ id, status, error? }> }
+ */
+router.post(
+  "/duty-verifications/bulk-ci-verify",
+  requireRole("ci"),
+  async (req, res): Promise<void> => {
+    const ciId = req.session.userId!;
+    const { ids, caseIds, remarks } = req.body as {
+      ids?: unknown;
+      caseIds?: unknown;
+      remarks?: unknown;
+    };
+
+    // ── Strict input validation ───────────────────────────────────────────────
+    if (!Array.isArray(ids) || ids.length === 0 || ids.some(id => typeof id !== "string")) {
+      res.status(400).json({ error: "ids must be a non-empty array of strings" });
+      return;
+    }
+    if (!Array.isArray(caseIds) || caseIds.some(id => typeof id !== "string")) {
+      res.status(400).json({ error: "caseIds must be an array of strings" });
+      return;
+    }
+    if (remarks !== undefined && typeof remarks !== "string") {
+      res.status(400).json({ error: "remarks must be a string" });
+      return;
+    }
+
+    // Deduplicate to prevent double-processing
+    const uniqueIds: string[] = [...new Set(ids as string[])];
+    const uniqueCaseIds: string[] = [...new Set(caseIds as string[])];
+
+    const now = new Date();
+    const verifiedIds: string[] = [];
+
+    // ── Atomic transaction with in-transaction precondition guards ────────────
+    // Each update uses WHERE id + ciId + status='waiting_ci' and checks the
+    // returned row count — if any row fails, the whole transaction rolls back.
+    try {
+      await db.transaction(async (tx) => {
+        for (const id of uniqueIds) {
+          // Conditional update: only proceeds if preconditions hold at write time
+          const updated = await tx
+            .update(dutyVerificationsTable)
+            .set({
+              status: "pending_scheduler",
+              ciVerifiedAt: now,
+              ciVerifiedBy: ciId,
+              ciRemarks: (remarks as string | undefined) ?? null,
+              updatedAt: now,
+            })
+            .where(
+              and(
+                eq(dutyVerificationsTable.id, id),
+                eq(dutyVerificationsTable.ciId, ciId),
+                eq(dutyVerificationsTable.status, "waiting_ci"),
+              ),
+            )
+            .returning({ id: dutyVerificationsTable.id, studentId: dutyVerificationsTable.studentId, dutyDate: dutyVerificationsTable.dutyDate });
+
+          if (updated.length === 0) {
+            throw Object.assign(
+              new Error(`Precondition failed for id ${id}: not found, not assigned to you, or not in waiting_ci status`),
+              { preconditionId: id },
+            );
+          }
+
+          // Replace cases for this verification
+          await tx
+            .delete(dutyVerificationCasesTable)
+            .where(eq(dutyVerificationCasesTable.dutyVerificationId, id));
+
+          if (uniqueCaseIds.length > 0) {
+            await tx.insert(dutyVerificationCasesTable).values(
+              uniqueCaseIds.map(caseId => ({
+                id: randomUUID(),
+                dutyVerificationId: id,
+                clinicalCaseId: caseId,
+              })),
+            );
+          }
+
+          verifiedIds.push(id);
+        }
+      });
+    } catch (err: any) {
+      if (err?.preconditionId) {
+        res.status(400).json({ error: err.message, failedId: err.preconditionId });
+      } else {
+        throw err;
+      }
+      return;
+    }
+
+    // ── Side-effects: notifications + audit logs (non-fatal) ─────────────────
+    // Fetch the now-updated records for notification metadata
+    const updatedRecords = await db
+      .select({ id: dutyVerificationsTable.id, studentId: dutyVerificationsTable.studentId, dutyDate: dutyVerificationsTable.dutyDate })
+      .from(dutyVerificationsTable)
+      .where(inArray(dutyVerificationsTable.id, verifiedIds));
+
+    await Promise.allSettled(
+      updatedRecords.map(async (dv) => {
+        try {
+          await db.insert(notificationsTable).values({
+            id: randomUUID(),
+            userId: dv.studentId,
+            type: "duty_verification_ci_verified",
+            title: "Duty Verified by Clinical Instructor",
+            message: `Your duty on ${dv.dutyDate} has been verified by your CI and is now pending scheduler confirmation.`,
+            relatedEntity: "duty_verification",
+            relatedId: dv.id,
+          });
+        } catch { /* non-fatal */ }
+
+        try {
+          await db.insert(auditLogsTable).values({
+            id: randomUUID(),
+            userId: ciId,
+            action: "duty_ci_verified",
+            entityType: "duty_verification",
+            entityId: dv.id,
+            oldValue: { status: "waiting_ci", bulk: true },
+            newValue: { status: "pending_scheduler", caseIds: uniqueCaseIds },
+            ipAddress: req.ip ?? "",
+          });
+        } catch { /* non-fatal */ }
+      }),
+    );
+
+    res.json({
+      verified: verifiedIds.length,
+      results: verifiedIds.map(id => ({ id, status: "ok" as const })),
+    });
+  },
+);
+
+/**
  * PATCH /api/duty-verifications/:id/ci-verify
  * CI selects completed cases and verifies the duty.
  * Body: { caseIds: string[], remarks?: string }
