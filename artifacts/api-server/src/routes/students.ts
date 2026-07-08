@@ -228,8 +228,12 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
     );
 
     const requiredCases = wardCases.map(c => {
+      // Filter by clinicalCaseId only — NOT departmentId.
+      // The completion's departmentId reflects where the student was physically deployed,
+      // which may differ from the ward the case is categorically assigned to on the passport.
+      // (e.g. "IV Catheter Insertion" (Med-Surg) completed in Delivery Room still counts here.)
       const verified = verifiedCompletions.filter(
-        cc => cc.clinicalCaseId === c.id && cc.departmentId === dept.id,
+        cc => cc.clinicalCaseId === c.id,
       ).length;
       const remaining = Math.max(0, c.requiredCount - verified);
       // Rule: verified case completions NEVER add Duty Hours
@@ -437,6 +441,9 @@ router.get("/students/:id/ward-detail/:departmentId", requireAuth, async (req, r
   let caseProgress: object[] = [];
   if (wardCases.length > 0) {
     const caseIds = wardCases.map(c => c.id);
+    // Do NOT filter by departmentId here — a completion's departmentId reflects where
+    // the student was physically deployed, which may differ from the ward a case is
+    // categorically assigned to (e.g. "IV Catheter Insertion" (Med-Surg) recorded in Delivery Room).
     const completions = await db
       .select()
       .from(caseCompletionsTable)
@@ -445,7 +452,6 @@ router.get("/students/:id/ward-detail/:departmentId", requireAuth, async (req, r
           eq(caseCompletionsTable.studentId, studentId),
           eq(caseCompletionsTable.status, "verified"),
           inArray(caseCompletionsTable.clinicalCaseId, caseIds),
-          eq(caseCompletionsTable.departmentId, departmentId),
         ),
       );
 
