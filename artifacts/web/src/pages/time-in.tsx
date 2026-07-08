@@ -5,12 +5,15 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import {
   MapPin, ScanFace, Fingerprint, CheckCircle2, AlertCircle, Camera,
-  RefreshCw, Loader2, Navigation, ExternalLink,
+  RefreshCw, Loader2, Navigation, ExternalLink, LogOut, Clock,
 } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRoute, Link } from 'wouter';
 import { getDistance } from 'geolib';
-import { useGetSchedule, useRecordTimeIn, useGetMyFaceDescriptor } from '@workspace/api-client-react';
+import {
+  useGetSchedule, useRecordTimeIn, useRecordTimeOut,
+  useListAttendance, useGetMyFaceDescriptor,
+} from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
 import { loadFaceApiModels, detectFaceDescriptor, prefetchFaceApiModels } from '@/lib/face-detection';
 import { AttendanceMap, type GpsZoneStatus } from '@/components/attendance-map';
@@ -20,7 +23,7 @@ import { AttendanceMap, type GpsZoneStatus } from '@/components/attendance-map';
 type Step =
   | 'idle' | 'gps-checking' | 'gps-ok' | 'gps-error'
   | 'face-loading' | 'face-scanning' | 'face-ok' | 'face-error' | 'face-no-match'
-  | 'submitting' | 'done' | 'submit-error';
+  | 'submitting' | 'done' | 'submit-error' | 'timed-out';
 
 interface GpsResult {
   distance: number;
@@ -128,7 +131,12 @@ export function TimeInSimulatorPage() {
   const { data: faceData, isLoading: faceLoading } = useGetMyFaceDescriptor({
     query: { staleTime: 60_000 } as never,
   });
+  const { data: attendanceList, isLoading: attendanceLoading } = useListAttendance(
+    { scheduleId },
+    { query: { enabled: !!scheduleId, staleTime: 0, refetchOnMount: true } as never },
+  );
   const recordTimeIn = useRecordTimeIn();
+  const recordTimeOut = useRecordTimeOut();
 
   // ── Derived schedule data ─────────────────────────────────────────────────
   const hospitalRadius =
@@ -159,6 +167,8 @@ export function TimeInSimulatorPage() {
   const [faceDetected, setFaceDetected] = useState(false);
   const [faceVerificationToken, setFaceVerificationToken] = useState<string | null>(null);
   const [timeInAt, setTimeInAt] = useState<string | null>(null);
+  const [timeOutAt, setTimeOutAt] = useState<string | null>(null);
+  const [existingRecordId, setExistingRecordId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   // ── Live GPS state ────────────────────────────────────────────────────────
@@ -185,6 +195,26 @@ export function TimeInSimulatorPage() {
 
   // Warm up face-api.js models immediately so they're ready before the user starts verification
   useEffect(() => { prefetchFaceApiModels(); }, []);
+
+  // ── Sync step from existing attendance record on load ─────────────────────
+  // Only runs when idle to avoid clobbering in-progress verification flows.
+  // Backend sorts by createdAt DESC, so [0] is the most recent record.
+  useEffect(() => {
+    if (!attendanceList || step !== 'idle') return;
+    const record = attendanceList[0]; // backend already filters by student role
+    if (!record) return;
+    setExistingRecordId(record.id);
+    if (record.timeIn) {
+      setTimeInAt(new Date(record.timeIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    }
+    if (record.timeOut) {
+      setTimeOutAt(new Date(record.timeOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      setStep('timed-out');
+    } else if (record.timeIn) {
+      setStep('done');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attendanceList]);
 
   // ── Start GPS watching on mount ───────────────────────────────────────────
   useEffect(() => {
@@ -411,7 +441,7 @@ export function TimeInSimulatorPage() {
   useEffect(() => () => stopCamera(), [stopCamera]);
 
   // ── Loading / enroll guard ────────────────────────────────────────────────
-  if (scheduleLoading || faceLoading) {
+  if (scheduleLoading || faceLoading || attendanceLoading) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground gap-2">
         <Loader2 className="w-5 h-5 animate-spin" /> Loading…
@@ -720,7 +750,7 @@ export function TimeInSimulatorPage() {
                 </>
               )}
 
-              {/* done */}
+              {/* done — already timed in, waiting for time-out */}
               {step === 'done' && (
                 <>
                   <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
@@ -729,9 +759,62 @@ export function TimeInSimulatorPage() {
                   <div>
                     <h3 className="font-semibold text-lg text-emerald-700">Verified &amp; Timed In</h3>
                     <p className="text-sm text-muted-foreground mt-1">
-                      {timeInAt ? `Recorded at ${timeInAt}` : 'Attendance saved.'}
+                      {timeInAt ? `Time in recorded at ${timeInAt}` : 'Attendance saved.'}
                     </p>
                   </div>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="w-full gap-2 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                    disabled={recordTimeOut.isPending}
+                    onClick={() => {
+                      recordTimeOut.mutate(
+                        { data: { scheduleId, gpsVerified: true, faceVerified: true, livenessVerified: true } },
+                        {
+                          onSuccess: (record) => {
+                            setStep('timed-out');
+                            if (record.timeOut) {
+                              setTimeOutAt(new Date(record.timeOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+                            }
+                            toast({ title: 'Time-out recorded', description: 'Your duty hours have been saved.' });
+                          },
+                          onError: (err: unknown) => {
+                            toast({
+                              title: 'Time-out failed',
+                              description: err instanceof Error ? err.message : 'Please try again.',
+                              variant: 'destructive',
+                            });
+                          },
+                        },
+                      );
+                    }}
+                  >
+                    {recordTimeOut.isPending
+                      ? <><Loader2 className="w-4 h-4 animate-spin" /> Recording time-out…</>
+                      : <><LogOut className="w-4 h-4" /> Time Out</>}
+                  </Button>
+                </>
+              )}
+
+              {/* timed-out — duty complete */}
+              {step === 'timed-out' && (
+                <>
+                  <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
+                    <Clock className="w-10 h-10 text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg text-blue-700">Duty Complete</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {timeInAt && timeOutAt
+                        ? `Time in: ${timeInAt} · Time out: ${timeOutAt}`
+                        : timeOutAt
+                        ? `Time out recorded at ${timeOutAt}`
+                        : 'Your duty hours have been saved.'}
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/schedule">Back to Schedule</Link>
+                  </Button>
                 </>
               )}
             </div>
