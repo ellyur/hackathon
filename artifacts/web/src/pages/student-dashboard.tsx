@@ -39,8 +39,17 @@ export function StudentDashboard() {
 
   const isEnrolled = faceData?.enrolled === true;
 
+  // Schedules the student has already timed in for should not appear as
+  // "upcoming" even if the schedule row itself is still active/upcoming —
+  // the schedule status reflects the shift as a whole, not this student's
+  // individual attendance for it.
+  const attendedScheduleIds = new Set(
+    attendance.map((r: { scheduleId: string }) => r.scheduleId),
+  );
+
   const upcoming = (schedules ?? []).filter(
-    (s: Schedule) => s.status === 'active' || s.status === 'upcoming',
+    (s: Schedule) =>
+      (s.status === 'active' || s.status === 'upcoming') && !attendedScheduleIds.has(s.id),
   );
   const nextDuty: Schedule | undefined = upcoming[0];
 

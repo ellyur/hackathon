@@ -192,13 +192,15 @@ router.get("/students/:id/hours", requireAuth, async (req, res): Promise<void> =
     .where(and(eq(attendanceTable.studentId, id), sql`${attendanceTable.dutyHours} IS NOT NULL`));
 
   const hoursCompleted = records.reduce((sum, r) => sum + (r.dutyHours ?? 0), 0);
+  const hoursRequired = profile?.totalHoursRequired ?? 500;
 
   res.json({
     studentId: id,
-    hoursCompleted: Math.round(hoursCompleted * 100) / 100,
-    hoursRequired: profile?.totalHoursRequired ?? 500,
-    progress:
-      Math.round((hoursCompleted / (profile?.totalHoursRequired ?? 500)) * 100 * 10) / 10,
+    totalHoursCompleted: Math.round(hoursCompleted * 100) / 100,
+    totalHoursRequired: hoursRequired,
+    hoursRemaining: Math.max(0, Math.round((hoursRequired - hoursCompleted) * 100) / 100),
+    progressPercent:
+      hoursRequired > 0 ? Math.round((hoursCompleted / hoursRequired) * 100 * 10) / 10 : 0,
   });
 });
 
