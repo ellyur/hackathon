@@ -1,0 +1,314 @@
+Since your system is already built, here's a **final MVP feature checklist** that you can use for testing, demo, or your hackathon presentation.
+
+---
+
+# 🔑 Admin Checklist
+
+## Authentication
+
+* ☐ Login
+* ☐ Logout
+* ☐ Change Password
+* ☐ Forgot Password (optional)
+
+---
+
+## Dashboard
+
+* ☐ View overall system statistics
+* ☐ Total Students
+* ☐ Total Clinical Instructors
+* ☐ Total Schedulers
+* ☐ Total Partner Hospitals
+* ☐ Upcoming Duties
+* ☐ Attendance Summary
+* ☐ Clinical Case Progress Analytics
+
+---
+
+## Hospital Management
+
+* ☐ Add Hospital
+* ☐ Edit Hospital
+* ☐ Delete Hospital
+* ☐ Activate/Deactivate Hospital
+* ☐ Set Hospital Location using Interactive Map
+* ☐ Search Hospital
+* ☐ Configure Attendance Radius
+* ☐ View Hospital Details
+
+---
+
+## User Management
+
+### Students
+
+* ☐ Add Student
+* ☐ Edit Student
+* ☐ Archive/Delete Student
+* ☐ Reset Password
+* ☐ Activate/Deactivate Account
+
+### Clinical Instructors
+
+* ☐ Add CI
+* ☐ Edit CI
+* ☐ Remove CI
+
+### Scheduler
+
+* ☐ Add Scheduler
+* ☐ Edit Scheduler
+* ☐ Remove Scheduler
+
+---
+
+## Academic Management
+
+* ☐ Manage Sections
+* ☐ Manage Year Levels
+* ☐ Manage Semesters
+* ☐ Manage School Year
+
+---
+
+## Clinical Requirements
+
+* ☐ Add Required Cases
+* ☐ Edit Required Cases
+* ☐ Delete Required Cases
+* ☐ Set Required Number of Cases
+
+---
+
+## Reports
+
+* ☐ Attendance Report
+* ☐ Clinical Hours Report
+* ☐ Student Progress Report
+* ☐ Export PDF
+* ☐ Export Excel
+
+---
+
+## Notifications
+
+* ☐ Send Announcement
+* ☐ Send Broadcast Notification
+* ☐ View Notification Logs
+
+---
+
+# 👨‍🎓 Student Checklist
+
+## Authentication
+
+* ☐ Login
+* ☐ Logout
+* ☐ Change Password
+
+---
+
+## Dashboard
+
+* ☐ View Upcoming Duty
+* ☐ View Today's Duty
+* ☐ View Attendance Status
+* ☐ View Clinical Passport
+* ☐ View Overall Progress
+* ☐ View Remaining Required Cases
+* ☐ View Completed Cases
+
+---
+
+## Academic Schedule
+
+* ☐ Add Semester Schedule
+* ☐ Edit Schedule
+* ☐ Delete Schedule
+
+---
+
+## Clinical Passport
+
+* ☐ View Completed Cases
+* ☐ View Remaining Cases
+* ☐ View Total Clinical Hours
+* ☐ View Verified Cases
+* ☐ View Progress Percentage
+
+---
+
+## Attendance
+
+* ☐ Open Attendance
+* ☐ Allow GPS
+* ☐ View Live Map
+* ☐ View Hospital Location
+* ☐ View Navigation Route
+* ☐ View Attendance Radius
+* ☐ GPS Verification
+* ☐ Face Registration
+* ☐ Face Verification
+* ☐ Time In
+* ☐ Time Out
+* ☐ View Attendance History
+
+---
+
+## Notifications
+
+* ☐ Receive Duty Assignment
+* ☐ Receive Schedule Changes
+* ☐ Receive Announcements
+* ☐ Mark Notifications as Read
+
+---
+
+## Profile
+
+* ☐ Edit Personal Information
+* ☐ Upload Profile Picture
+* ☐ Register Face
+* ☐ Update Face Registration
+
+---
+
+# 📅 Scheduler Checklist
+
+## Authentication
+
+* ☐ Login
+* ☐ Logout
+
+---
+
+## Dashboard
+
+* ☐ View Today's Duties
+* ☐ View Upcoming Duties
+* ☐ View Student Statistics
+* ☐ View Hospital Statistics
+* ☐ View At-Risk Students
+
+---
+
+## Master Schedule
+
+* ☐ Monthly Calendar View
+* ☐ Navigate Previous Month
+* ☐ Navigate Next Month
+* ☐ Click Date
+* ☐ View Schedule Details
+* ☐ Color-coded Schedule Status
+
+---
+
+## Create Schedule
+
+* ☐ Select Hospital
+* ☐ Select Clinical Instructor
+* ☐ Select Department
+* ☐ Select Clinical Case
+* ☐ Set Date
+* ☐ Set Time
+* ☐ Set Number of Students
+* ☐ Select Eligible Sections
+* ☐ Add Remarks
+* ☐ Save Schedule
+
+---
+
+## Intelligent Recommendation Engine
+
+* ☐ Generate Recommended Students
+* ☐ View Recommendation Score
+* ☐ View Recommendation Reasons
+* ☐ Assign Student
+* ☐ Skip Recommendation
+* ☐ Manual Student Search
+* ☐ Replace Assigned Student
+* ☐ Remove Assigned Student
+
+---
+
+## Student Monitoring
+
+* ☐ View Student Clinical Progress
+* ☐ View Remaining Cases
+* ☐ View Duty Hours
+* ☐ View Attendance History
+* ☐ View Academic Schedule Conflict
+
+---
+
+## Attendance Monitoring
+
+* ☐ View Checked-in Students
+* ☐ View Checked-out Students
+* ☐ View Late Students
+* ☐ View Absent Students
+* ☐ View GPS Verification Status
+* ☐ View Face Verification Status
+
+---
+
+## Notifications
+
+* ☐ Notify Assigned Students
+* ☐ Notify Schedule Changes
+* ☐ Broadcast Updates
+
+---
+
+# 👩‍⚕️ Clinical Instructor (CI) Checklist
+
+> **Don't forget this role**—it's one of the most important in your workflow.
+
+## Dashboard
+
+* ☐ View Assigned Duties
+* ☐ View Assigned Students
+
+## Attendance
+
+* ☐ View Student Attendance
+* ☐ Verify Attendance (alternative mode)
+* ☐ Mark Late
+* ☐ Mark Absent
+
+## Clinical Cases
+
+* ☐ Verify Completed Clinical Cases
+* ☐ Add Remarks
+* ☐ Approve Case Completion
+
+## Student Evaluation
+
+* ☐ View Student Progress
+* ☐ View Clinical Passport
+* ☐ Submit Evaluation (optional)
+
+## Notifications
+
+* ☐ Receive Schedule Updates
+* ☐ Send Announcements to Assigned Students
+
+---
+
+# 🏆 Core Features (Hackathon Summary)
+
+If a judge asks, **"What are the main features?"**, you can summarize them as:
+
+1. ✅ Digital Clinical Passport
+2. ✅ Intelligent Recommendation Engine
+3. ✅ Master Schedule Calendar
+4. ✅ GPS & Biometric Attendance Verification
+5. ✅ Clinical Hours Tracking
+6. ✅ Required Clinical Case Tracking
+7. ✅ Academic Schedule Conflict Detection
+8. ✅ Interactive Hospital Map & Geofencing
+9. ✅ Real-time Notifications
+10. ✅ Analytics & Progress Dashboard
+
+This checklist covers all four roles and provides a solid basis for your testing and presentation.
