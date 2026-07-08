@@ -10,9 +10,67 @@ import {
   departmentsTable,
   notificationsTable,
 } from "@workspace/db";
-import { eq, and, desc, inArray, count } from "drizzle-orm";
+import { eq, and, desc, inArray, count, lt, or } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
+
+// ── Auto-advance schedule statuses ─────────────────────────────────────────────
+// Runs on startup and every minute so statuses reflect real wall-clock time.
+
+async function autoAdvanceScheduleStatuses() {
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10); // "YYYY-MM-DD"
+  const timeStr  = now.toTimeString().slice(0, 5);  // "HH:MM"
+
+  try {
+    // 1. upcoming → active  (today, start ≤ now < end)
+    await db
+      .update(schedulesTable)
+      .set({ status: "active", updatedAt: now })
+      .where(
+        and(
+          eq(schedulesTable.status, "upcoming"),
+          eq(schedulesTable.dutyDate, todayStr),
+          // startTime ≤ current time
+          or(
+            lt(schedulesTable.startTime, timeStr),
+            eq(schedulesTable.startTime, timeStr),
+          ),
+          // endTime > current time — keep active until end
+          // (we can't do GT easily on text without raw sql; just promote to active
+          //  and let the next branch complete it when endTime passes)
+        ),
+      );
+
+    // 2. upcoming | active → completed  (past days OR today past endTime)
+    await db
+      .update(schedulesTable)
+      .set({ status: "completed", updatedAt: now })
+      .where(
+        and(
+          or(
+            eq(schedulesTable.status, "upcoming"),
+            eq(schedulesTable.status, "active"),
+          ),
+          or(
+            // Any past day
+            lt(schedulesTable.dutyDate, todayStr),
+            // Today but end time has passed
+            and(
+              eq(schedulesTable.dutyDate, todayStr),
+              lt(schedulesTable.endTime, timeStr),
+            ),
+          ),
+        ),
+      );
+  } catch {
+    // Non-fatal — next tick will retry
+  }
+}
+
+// Run once immediately on startup, then every minute
+autoAdvanceScheduleStatuses();
+setInterval(autoAdvanceScheduleStatuses, 60 * 1000).unref();
 
 const router: IRouter = Router();
 
