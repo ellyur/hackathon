@@ -32,5 +32,9 @@ router.use(recommendationsRouter);
 router.use(notificationsRouter);
 router.use(announcementsRouter);
 router.use(analyticsRouter);
+router.use(academicRouter);
+router.use(academicSchedulesRouter);
+router.use(evaluationsRouter);
+router.use(reportsRouter);
 
 export default router;

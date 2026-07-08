@@ -17,13 +17,20 @@ interface ReportConfig {
 }
 
 const REPORTS: ReportConfig[] = [
-  { id: 'student-progress', title: 'Student Progress Report', description: 'Per-student summary of case completions, hours logged, and overall progress toward graduation requirements.', icon: Users, color: 'text-blue-500 bg-blue-50' },
+  { id: 'student-progress', title: 'Student Progress Report', description: 'Per-student summary of duties attended, hours logged, and overall attendance rate.', icon: Users, color: 'text-blue-500 bg-blue-50' },
   { id: 'attendance-summary', title: 'Attendance Summary Report', description: 'Aggregated attendance records broken down by hospital and department, including present/absent/late rates.', icon: ClipboardList, color: 'text-teal-500 bg-teal-50' },
   { id: 'case-compliance', title: 'Case Compliance Report', description: 'Analysis of case gap distribution — identifies which cases are most frequently incomplete across the student cohort.', icon: FileText, color: 'text-purple-500 bg-purple-50' },
-  { id: 'ci-performance', title: 'Clinical Instructor Performance', description: 'CI attendance verification rates, average response times, and pending verification counts per instructor.', icon: UserCheck, color: 'text-orange-500 bg-orange-50' },
-  { id: 'makeup-duty', title: 'Makeup Duty Status', description: 'Outstanding makeup duty assignments, completion rates, and overdue cases requiring immediate attention.', icon: CalendarClock, color: 'text-red-500 bg-red-50' },
+  { id: 'ci-performance', title: 'Clinical Instructor Performance', description: 'CI schedule counts, completion rates, and upcoming/cancelled duties per instructor.', icon: UserCheck, color: 'text-orange-500 bg-orange-50' },
+  { id: 'makeup-duty', title: 'Makeup Duty Status', description: 'All scheduled duties with status — useful for tracking completion across the cohort.', icon: CalendarClock, color: 'text-red-500 bg-red-50' },
   { id: 'completion-forecast', title: 'Program Completion Forecast', description: 'Projected graduation risk analysis — estimates which students are on track vs. at-risk of not completing requirements.', icon: TrendingUp, color: 'text-emerald-500 bg-emerald-50' },
 ];
+
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem('authToken');
+  const h: Record<string, string> = {};
+  if (token) h['Authorization'] = `Bearer ${token}`;
+  return h;
+}
 
 export function AdminReportsPage() {
   const { toast } = useToast();
@@ -34,12 +41,46 @@ export function AdminReportsPage() {
 
   const handleGenerate = async (reportId: string, reportTitle: string) => {
     setLoading(prev => ({ ...prev, [reportId]: true }));
-    await new Promise(r => setTimeout(r, 1500));
-    setLoading(prev => ({ ...prev, [reportId]: false }));
-    toast({
-      title: 'Report generated',
-      description: `${reportTitle} is ready. Downloading as ${(format[reportId] || 'PDF').toUpperCase()}...`,
-    });
+    try {
+      const fmt = format[reportId] ?? 'pdf';
+      const from = dateFrom[reportId] ?? '';
+      const to = dateTo[reportId] ?? '';
+
+      const params = new URLSearchParams({ format: fmt });
+      if (from) params.set('dateFrom', from);
+      if (to) params.set('dateTo', to);
+
+      const res = await fetch(`/api/reports/${reportId}?${params}`, {
+        headers: authHeaders(),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Failed to generate report' }));
+        throw new Error(err.error ?? 'Failed to generate report');
+      }
+
+      // Trigger browser download
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ext = fmt === 'xlsx' ? 'xlsx' : fmt === 'csv' ? 'csv' : 'pdf';
+      a.download = `${reportTitle.replace(/\s+/g, '-')}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: 'Report downloaded',
+        description: `${reportTitle} saved as ${fmt.toUpperCase()}.`,
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Something went wrong';
+      toast({ title: 'Failed to generate report', description: msg, variant: 'destructive' });
+    } finally {
+      setLoading(prev => ({ ...prev, [reportId]: false }));
+    }
   };
 
   return (
@@ -108,7 +149,7 @@ export function AdminReportsPage() {
                     disabled={isLoading}
                   >
                     {isLoading
-                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Generating...</>
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Generating…</>
                       : <><Download className="w-3.5 h-3.5" />Generate</>}
                   </Button>
                 </div>

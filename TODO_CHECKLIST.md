@@ -8,36 +8,40 @@ verification, etc.) are not listed here — only what still needs to be complete
 ## Partial (exists but incomplete)
 
 ### Admin
-- [ ] **Hospital attendance radius** — hospital lat/lng is stored, but the geofence radius
-  used for attendance is not independently configurable per hospital.
-- [ ] **Academic management (global lists)** — year level / section / school year exist as
-  free-form fields on student profiles, but there is no admin screen to manage them as
-  reusable, structured lists (add/edit/delete Sections, Year Levels, Semesters, School Years).
-- [ ] **Notification logs** — announcements/broadcasts can be sent, but there is no log/history
-  view of past notifications sent.
-- [ ] **Schedule-change notifications** — auto-notification on schedule edits appears stubbed;
-  needs to actually fire to affected students/CIs when a schedule is changed.
+- [x] **Hospital attendance radius** — hospital lat/lng and attendanceRadius field are stored,
+  exposed in the Add/Edit hospital form, and used by the attendance time-in geofence check.
+  ✅ Already fully implemented.
+- [x] **Academic management (global lists)** — Admin > Academic Lists page at `/admin/academic`
+  with full CRUD (add/edit/delete/toggle) for Sections, Year Levels, Semesters, and School Years.
+  Backend: `GET/POST/PATCH/DELETE /api/academic-lists`. Nav item added to admin sidebar.
+- [x] **Notification logs** — Admin > Notification Log page at `/admin/notification-log` shows
+  all system notifications with type/title/message/user/read-status, filterable by type and
+  searchable. Backend: `GET /api/notifications/all`. Nav item added to admin sidebar.
+- [x] **Schedule-change notifications** — PATCH `/api/schedules/:id` now fires
+  `schedule_change` notifications to all assigned students + the CI whenever hospital,
+  department, CI, duty date, time, or status fields change.
 
 ## Missing (not implemented)
 
 ### Admin
-- [ ] **Forgot Password flow** — no backend route or UI for password reset via email/token.
-- [ ] **Reports section** — `admin-reports.tsx` is a UI shell with no real data wiring:
-  - [ ] Attendance Report
-  - [ ] Clinical Hours Report
-  - [ ] Student Progress Report
-  - [ ] Export to PDF
-  - [ ] Export to Excel
+- [x] **Forgot Password flow** — fully implemented: `POST /auth/forgot-password` generates a
+  token returned in the response (no email provider); `/forgot-password` and `/reset-password`
+  frontend pages exist and are wired to the API. ✅ Already fully implemented.
+- [x] **Reports section** — `admin-reports.tsx` now calls `GET /api/reports/:type` with real
+  data queries. All 6 report types (attendance-summary, student-progress, case-compliance,
+  ci-performance, makeup-duty, completion-forecast) are implemented. Downloads as PDF, CSV,
+  or Excel (.xlsx).
 
 ### Student
-- [ ] **Forgot Password flow** — same as above, needs to work for student accounts too.
-- [ ] **Self-service Academic Schedule management** — students cannot add/edit/delete their
-  own semester schedule entries.
+- [x] **Forgot Password flow** — same as admin, works for all roles. ✅ Already fully implemented.
+- [x] **Self-service Academic Schedule management** — Student > Academic Schedule page at
+  `/academic-schedule` with full CRUD (add/edit/delete) for class entries. Backend:
+  `GET/POST/PATCH/DELETE /api/academic-schedules`. Nav item added to student sidebar.
 
 ### Clinical Instructor (CI)
-- [ ] **Student Evaluation** — no evaluation form or database schema exists for a CI to submit
-  a rating/evaluation of a student's clinical performance.
+- [x] **Student Evaluation** — CI > Evaluations page at `/evaluations` with per-duty star
+  rating (1–5) + remarks for each assigned student. Upsert semantics (re-submitting updates
+  existing rating). Backend: `GET/POST /api/evaluations`. Nav item added to CI sidebar.
 
 ---
-**Status key:** unchecked = not started. Check items off as they're completed, or delete
-entries once fully implemented and verified.
+**Status key:** [x] = complete. All checklist items are now implemented.

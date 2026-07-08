@@ -18,7 +18,11 @@ import {
   Stethoscope,
   PieChart,
   ScanFace,
-  PlusCircle
+  PlusCircle,
+  BookOpen,
+  Star,
+  History,
+  GraduationCap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -55,6 +59,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     student: [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
       { name: 'My Schedule', href: '/schedule', icon: Calendar },
+      { name: 'Academic Schedule', href: '/academic-schedule', icon: GraduationCap },
       { name: 'Clinical Passport', href: '/passport', icon: ClipboardList },
       { name: 'Attendance', href: '/attendance', icon: CheckCircle },
       { name: 'Available Slots', href: '/slots', icon: PlusCircle },
@@ -63,7 +68,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     ci: [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
       { name: 'My Duties', href: '/duties', icon: ClipboardList },
-      { name: 'Attendance Roster', href: '/attendance', icon: CheckCircle }, // Actually under /duties/:id/attendance usually, but a global one is helpful
+      { name: 'Attendance Roster', href: '/attendance', icon: CheckCircle },
+      { name: 'Evaluations', href: '/evaluations', icon: Star },
     ],
     scheduler: [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -81,7 +87,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       { name: 'Users', href: '/admin/users', icon: Users },
       { name: 'Hospitals', href: '/admin/hospitals', icon: Building2 },
       { name: 'Clinical Cases', href: '/admin/cases', icon: Stethoscope },
+      { name: 'Academic Lists', href: '/admin/academic', icon: BookOpen },
       { name: 'Reports', href: '/admin/reports', icon: FileText },
+      { name: 'Notification Log', href: '/admin/notification-log', icon: History },
       { name: 'Settings', href: '/admin/settings', icon: Settings },
     ]
   };

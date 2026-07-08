@@ -69,6 +69,10 @@ import { RecommendationWeightsPage } from '@/pages/recommendation-weights';
 import { AdminReportsPage } from '@/pages/admin-reports';
 import { AdminAuditPage } from '@/pages/admin-audit';
 import { AdminSettingsPage } from '@/pages/admin-settings';
+import { AdminAcademicPage } from '@/pages/admin-academic';
+import { AdminNotificationLogPage } from '@/pages/admin-notification-log';
+import { CIEvaluationPage } from '@/pages/ci-evaluation';
+import { StudentAcademicSchedulePage } from '@/pages/student-academic-schedule';
 
 const queryClient = new QueryClient();
 
@@ -146,6 +150,10 @@ function Router() {
           <Route path="/admin/reports" component={AdminReportsPage} />
           <Route path="/admin/audit" component={AdminAuditPage} />
           <Route path="/admin/settings" component={AdminSettingsPage} />
+          <Route path="/admin/academic" component={AdminAcademicPage} />
+          <Route path="/admin/notification-log" component={AdminNotificationLogPage} />
+          <Route path="/evaluations" component={CIEvaluationPage} />
+          <Route path="/academic-schedule" component={StudentAcademicSchedulePage} />
 
           <Route component={NotFound} />
         </Switch>

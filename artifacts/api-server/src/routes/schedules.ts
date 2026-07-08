@@ -8,6 +8,7 @@ import {
   attendanceTable,
   hospitalsTable,
   departmentsTable,
+  notificationsTable,
 } from "@workspace/db";
 import { eq, and, desc, inArray, count } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -286,6 +287,46 @@ router.patch("/schedules/:id", requireRole("scheduler", "admin"), async (req, re
     await db.delete(scheduleStudentsTable).where(eq(scheduleStudentsTable.scheduleId, id));
     if (body.studentIds.length > 0) {
       await db.insert(scheduleStudentsTable).values(body.studentIds.map((sid) => ({ scheduleId: id, studentId: sid })));
+    }
+  }
+
+  // Fire notifications to assigned students + CI whenever key schedule fields change
+  const keyFieldChanged =
+    body.hospitalId !== undefined || body.departmentId !== undefined ||
+    body.ciId !== undefined || body.dutyDate !== undefined ||
+    body.startTime !== undefined || body.endTime !== undefined ||
+    body.status !== undefined;
+
+  if (keyFieldChanged) {
+    const [afterUpdate] = await db.select().from(schedulesTable).where(eq(schedulesTable.id, id));
+    const affectedStudents = await db.select({ studentId: scheduleStudentsTable.studentId })
+      .from(scheduleStudentsTable)
+      .where(eq(scheduleStudentsTable.scheduleId, id));
+
+    const changeDetail = body.status !== undefined
+      ? `Status changed to "${body.status}".`
+      : `Duty date or time has been updated — please review your schedule.`;
+
+    const notifMessage = `Your duty on ${afterUpdate.dutyDate} at ${afterUpdate.startTime} has been modified. ${changeDetail}`;
+
+    const recipientIds = [
+      ...affectedStudents.map(s => s.studentId),
+      ...(afterUpdate.ciId ? [afterUpdate.ciId] : []),
+    ];
+
+    if (recipientIds.length > 0) {
+      await db.insert(notificationsTable).values(
+        recipientIds.map(uid => ({
+          id: randomUUID(),
+          userId: uid,
+          type: "schedule_change",
+          title: "Schedule Updated",
+          message: notifMessage,
+          relatedEntity: "schedule",
+          relatedId: id,
+          isRead: false,
+        }))
+      );
     }
   }
 
