@@ -86,9 +86,6 @@ export default defineConfig({
         cookieDomainRewrite: '',
       },
     },
-    // SPA fallback: serve index.html for all non-file routes
-    // This ensures client-side routes like /profile/face-setup work on full reload
-    historyApiFallback: true,
   },
   preview: {
     port,
