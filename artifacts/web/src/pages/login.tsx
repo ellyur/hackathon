@@ -24,6 +24,9 @@ export function Login() {
           localStorage.setItem('authToken', data.token);
           setAuthTokenGetter(() => localStorage.getItem('authToken'));
         }
+        // Cache the full user object so auth is synchronous on next load
+        // (no loading spinner / blank page on refresh or deep-link navigation)
+        localStorage.setItem('authUser', JSON.stringify(data));
         localStorage.removeItem('mockRole');
         queryClient.invalidateQueries();
         setLocation('/dashboard');
