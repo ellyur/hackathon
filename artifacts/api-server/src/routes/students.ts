@@ -129,30 +129,40 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
     .from(caseCompletionsTable)
     .where(eq(caseCompletionsTable.studentId, id));
 
-  const passport = cases.map((c) => {
+  // Build per-case entries
+  const entries = cases.map((c) => {
     const studentCompletions = completions.filter((cc) => cc.clinicalCaseId === c.id);
     const verified = studentCompletions.filter((cc) => cc.status === "verified").length;
-    const pending = studentCompletions.filter((cc) => cc.status === "pending").length;
-    return {
-      case: c,
-      required: c.requiredCount,
-      verified,
-      pending,
-      remaining: Math.max(0, c.requiredCount - verified),
-      status: verified >= c.requiredCount ? "complete" : verified > 0 ? "in_progress" : "not_started",
-    };
+    const pending  = studentCompletions.filter((cc) => cc.status === "pending").length;
+    const completed = verified + pending;
+    const remaining = Math.max(0, c.requiredCount - verified);
+    const status: "complete" | "in_progress" | "deficient" =
+      verified >= c.requiredCount ? "complete"
+      : (verified > 0 || pending > 0) ? "in_progress"
+      : "deficient";
+    return { caseId: c.id, caseName: c.name, category: c.category, required: c.requiredCount, completed, verified, remaining, status };
   });
 
-  const totalRequired = cases.reduce((s, c) => s + c.requiredCount, 0);
-  const totalVerified = passport.reduce((s, p) => s + p.verified, 0);
+  // Group by category
+  const categoryMap = new Map<string, typeof entries>();
+  for (const e of entries) {
+    const cat = e.category ?? "Other";
+    if (!categoryMap.has(cat)) categoryMap.set(cat, []);
+    categoryMap.get(cat)!.push(e);
+  }
 
-  res.json({
-    studentId: id,
-    completionRate: totalRequired > 0 ? Math.round((totalVerified / totalRequired) * 100) : 0,
-    totalRequired,
-    totalVerified,
-    passport,
+  const categories = Array.from(categoryMap.entries()).map(([category, cases]) => {
+    const totalReq  = cases.reduce((s, c) => s + c.required, 0);
+    const totalVer  = cases.reduce((s, c) => s + c.verified, 0);
+    const completionRate = totalReq > 0 ? totalVer / totalReq : 0;
+    return { category, completionRate, cases };
   });
+
+  const totalCases     = cases.reduce((s, c) => s + c.requiredCount, 0);
+  const completedCases = entries.reduce((s, e) => s + e.verified, 0);
+  const overallCompletion = totalCases > 0 ? completedCases / totalCases : 0;
+
+  res.json({ studentId: id, totalCases, completedCases, overallCompletion, categories });
 });
 
 router.get("/students/:id/attendance", requireAuth, async (req, res): Promise<void> => {

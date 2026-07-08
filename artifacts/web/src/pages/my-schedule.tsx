@@ -34,6 +34,17 @@ function formatTime(t: string): string {
   return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
+function durationLabel(start: string | undefined, end: string | undefined): string | null {
+  if (!start || !end) return null;
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  const mins = (eh * 60 + em) - (sh * 60 + sm);
+  if (mins <= 0) return null;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `+${h}h` : `+${h}h ${m}m`;
+}
+
 function AttendanceBadge({ record }: { record: AttendanceRecord | undefined }) {
   if (!record) return null;
   if (record.status === 'present') {
@@ -105,16 +116,24 @@ function ScheduleCard({ schedule, attendanceRecord }: { schedule: Schedule; atte
             <span>{ciName}</span>
           </div>
         </div>
-        {canTimeIn && (
-          <div className="flex justify-end pt-1">
+        <div className="flex items-center justify-between pt-1">
+          {/* Duration pill — always bottom-left */}
+          {durationLabel(schedule.startTime, schedule.endTime) ? (
+            <span className="text-xs font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-full">
+              {durationLabel(schedule.startTime, schedule.endTime)}
+            </span>
+          ) : <span />}
+
+          {/* Action button — bottom-right */}
+          {canTimeIn && (
             <Link href={`/schedule/${schedule.id}`}>
               <Button size="sm" variant={alreadyTimedIn ? 'outline' : 'default'} className="gap-2">
                 <LogIn className="h-4 w-4" />
                 {alreadyTimedIn ? 'View Duty' : 'View & Time In'}
               </Button>
             </Link>
-          </div>
-        )}
+          )}
+        </div>
       </CardContent>
     </Card>
   );
