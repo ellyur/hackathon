@@ -3,7 +3,7 @@ import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Clock, MapPin, CheckCircle2, AlertCircle, FileCheck, ArrowRight, Loader2, ScanFace, Calendar } from 'lucide-react';
 import { Link } from 'wouter';
-import { useListSchedules, useGetMyFaceDescriptor } from '@workspace/api-client-react';
+import { useListSchedules, useGetMyFaceDescriptor, useListAttendance, useGetStudentHours } from '@workspace/api-client-react';
 import { useAuth } from '@/hooks/use-auth';
 import type { AuthUser } from '@workspace/api-client-react';
 import type { Schedule } from '@workspace/api-client-react';
@@ -28,12 +28,27 @@ export function StudentDashboard() {
     query: { staleTime: 60_000 } as never,
   });
 
+  const { data: attendance = [] } = useListAttendance(undefined, {
+    query: { staleTime: 30_000, refetchOnMount: true } as never,
+  });
+
+  const userId = user?.id ?? '';
+  const { data: hoursData } = useGetStudentHours(userId, {
+    query: { enabled: !!userId, staleTime: 30_000 } as never,
+  });
+
   const isEnrolled = faceData?.enrolled === true;
 
   const upcoming = (schedules ?? []).filter(
     (s: Schedule) => s.status === 'active' || s.status === 'upcoming',
   );
   const nextDuty: Schedule | undefined = upcoming[0];
+
+  const presentCount  = attendance.filter((r: { status: string }) => r.status === 'present').length;
+  const lateCount     = attendance.filter((r: { status: string }) => r.status === 'late').length;
+  const hoursCompleted = hoursData?.totalHoursCompleted ?? 0;
+  const hoursRequired  = hoursData?.totalHoursRequired  ?? 500;
+  const progressPct    = hoursData?.progressPercent      ?? 0;
 
   return (
     <div className="space-y-8">
@@ -165,11 +180,11 @@ export function StudentDashboard() {
         <Card className="col-span-full md:col-span-1 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">Duty Hours</CardTitle>
-            <CardDescription>320 / 500 hours completed</CardDescription>
+            <CardDescription>{hoursCompleted.toFixed(1)} / {hoursRequired} hours completed</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="pt-2">
-              <Progress value={64} className="h-3" />
+              <Progress value={progressPct} className="h-3" />
             </div>
             <div className="grid grid-cols-2 gap-4 pt-2">
               <div className="space-y-1 p-3 rounded-lg bg-muted/50">
@@ -177,14 +192,14 @@ export function StudentDashboard() {
                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                   Present
                 </div>
-                <div className="text-2xl font-bold">42</div>
+                <div className="text-2xl font-bold">{presentCount}</div>
               </div>
               <div className="space-y-1 p-3 rounded-lg bg-muted/50">
                 <div className="text-sm text-muted-foreground flex items-center gap-1.5">
                   <AlertCircle className="w-4 h-4 text-amber-500" />
                   Late
                 </div>
-                <div className="text-2xl font-bold">2</div>
+                <div className="text-2xl font-bold">{lateCount}</div>
               </div>
             </div>
           </CardContent>

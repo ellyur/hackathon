@@ -227,8 +227,23 @@ router.post("/attendance/time-out", requireRole("student"), async (req, res): Pr
   }
 
   const now = new Date();
-  const dutyHours = record.timeIn
-    ? Math.round(((now.getTime() - record.timeIn.getTime()) / 3600000) * 100) / 100
+
+  // Duty hours are based on the scheduled shift length (endTime − startTime),
+  // not the actual clock time the student was present. A 7 AM–3 PM shift always
+  // credits 8 hours regardless of when the student timed in or out.
+  const [scheduleRow] = await db
+    .select()
+    .from(schedulesTable)
+    .where(eq(schedulesTable.id, scheduleId));
+
+  const dutyHours = scheduleRow
+    ? (() => {
+        const [sh, sm] = scheduleRow.startTime.split(":").map(Number);
+        const [eh, em] = scheduleRow.endTime.split(":").map(Number);
+        let diffMin = (eh * 60 + em) - (sh * 60 + sm);
+        if (diffMin < 0) diffMin += 24 * 60; // overnight shift
+        return Math.round((diffMin / 60) * 100) / 100;
+      })()
     : null;
 
   await db

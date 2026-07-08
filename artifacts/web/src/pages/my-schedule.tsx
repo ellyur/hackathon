@@ -1,11 +1,12 @@
+import { useMemo } from 'react';
 import { Link } from 'wouter';
-import { Calendar, Clock, MapPin, User, LogIn, Loader2 } from 'lucide-react';
+import { Calendar, Clock, MapPin, User, LogIn, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useListSchedules } from '@workspace/api-client-react';
-import type { Schedule } from '@workspace/api-client-react';
+import { useListSchedules, useListAttendance } from '@workspace/api-client-react';
+import type { Schedule, AttendanceRecord } from '@workspace/api-client-react';
 
 type ScheduleStatus = 'upcoming' | 'active' | 'completed' | 'cancelled';
 
@@ -33,10 +34,33 @@ function formatTime(t: string): string {
   return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
-function ScheduleCard({ schedule }: { schedule: Schedule }) {
+function AttendanceBadge({ record }: { record: AttendanceRecord | undefined }) {
+  if (!record) return null;
+  if (record.status === 'present') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">
+        <CheckCircle2 className="h-3 w-3" /> Present
+      </span>
+    );
+  }
+  if (record.status === 'late') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
+        <AlertCircle className="h-3 w-3" /> Late
+      </span>
+    );
+  }
+  if (record.status === 'absent') {
+    return <Badge variant="destructive">Absent</Badge>;
+  }
+  return null;
+}
+
+function ScheduleCard({ schedule, attendanceRecord }: { schedule: Schedule; attendanceRecord?: AttendanceRecord }) {
   const status = (schedule.status as ScheduleStatus) ?? 'upcoming';
   const config = statusConfig[status] ?? statusConfig.upcoming;
   const canTimeIn = status === 'active' || status === 'upcoming';
+  const alreadyTimedIn = !!attendanceRecord?.timeIn;
 
   const hospitalName = schedule.hospital?.name ?? 'Hospital';
   const deptName = schedule.department?.name ?? '';
@@ -55,11 +79,15 @@ function ScheduleCard({ schedule }: { schedule: Schedule }) {
               </p>
             )}
           </div>
-          {config.className ? (
-            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${config.className}`}>{config.label}</span>
-          ) : (
-            <Badge variant={status === 'cancelled' ? 'destructive' : 'outline'}>{config.label}</Badge>
-          )}
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {/* Attendance status takes priority over schedule status when present */}
+            <AttendanceBadge record={attendanceRecord} />
+            {!attendanceRecord && (
+              config.className
+                ? <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${config.className}`}>{config.label}</span>
+                : <Badge variant={status === 'cancelled' ? 'destructive' : 'outline'}>{config.label}</Badge>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -80,9 +108,9 @@ function ScheduleCard({ schedule }: { schedule: Schedule }) {
         {canTimeIn && (
           <div className="flex justify-end pt-1">
             <Link href={`/schedule/${schedule.id}`}>
-              <Button size="sm" className="gap-2">
+              <Button size="sm" variant={alreadyTimedIn ? 'outline' : 'default'} className="gap-2">
                 <LogIn className="h-4 w-4" />
-                View &amp; Time In
+                {alreadyTimedIn ? 'View Duty' : 'View & Time In'}
               </Button>
             </Link>
           </div>
@@ -96,6 +124,17 @@ export function MySchedulePage() {
   const { data: schedules, isLoading, isError } = useListSchedules(undefined, {
     query: { staleTime: 60_000 } as never,
   });
+
+  const { data: attendanceRecords = [] } = useListAttendance(undefined, {
+    query: { staleTime: 30_000, refetchOnMount: true } as never,
+  });
+
+  // Map scheduleId → most-recent attendance record for this student
+  const attendanceMap = useMemo(() => {
+    const m = new Map<string, AttendanceRecord>();
+    [...attendanceRecords].reverse().forEach((r: AttendanceRecord) => m.set(r.scheduleId, r));
+    return m;
+  }, [attendanceRecords]);
 
   if (isLoading) {
     return (
@@ -147,7 +186,7 @@ export function MySchedulePage() {
               </CardContent>
             </Card>
           ) : (
-            upcoming.map(s => <ScheduleCard key={s.id} schedule={s} />)
+            upcoming.map(s => <ScheduleCard key={s.id} schedule={s} attendanceRecord={attendanceMap.get(s.id)} />)
           )}
         </TabsContent>
 
@@ -161,7 +200,7 @@ export function MySchedulePage() {
               </CardContent>
             </Card>
           ) : (
-            past.map(s => <ScheduleCard key={s.id} schedule={s} />)
+            past.map(s => <ScheduleCard key={s.id} schedule={s} attendanceRecord={attendanceMap.get(s.id)} />)
           )}
         </TabsContent>
       </Tabs>
