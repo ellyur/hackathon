@@ -60,10 +60,15 @@ export default function Landing() {
                 <div className="w-3 h-3 rounded-full bg-emerald-500/80"></div>
               </div>
             </div>
-            <div className="flex-1 bg-background/50 p-8 flex items-center justify-center">
-               <div className="text-center text-muted-foreground/50 font-medium text-lg">
-                  Dashboard Interface Visual
-               </div>
+            <div className="flex-1 overflow-hidden">
+              <video
+                src="https://res.cloudinary.com/h4y5bfvm/video/upload/v1783530526/change_the_logo_into_this_on_t_rj5t5x.mp4"
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+              />
             </div>
           </div>
         </div>
