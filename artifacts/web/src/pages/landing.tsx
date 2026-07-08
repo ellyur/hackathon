@@ -148,15 +148,11 @@ export default function Landing() {
               </div>
               <div className="flex-1 w-full relative">
                 <div className="aspect-square bg-gradient-to-br from-primary/20 to-accent rounded-full absolute inset-0 blur-3xl opacity-50"></div>
-                <div className="relative border bg-card rounded-2xl shadow-xl p-8 space-y-4">
-                   <div className="h-10 w-3/4 bg-muted rounded"></div>
-                   <div className="h-4 w-1/2 bg-muted/60 rounded"></div>
-                   <div className="grid grid-cols-2 gap-4 mt-8">
-                     <div className="h-24 bg-muted/40 rounded-xl"></div>
-                     <div className="h-24 bg-muted/40 rounded-xl"></div>
-                     <div className="h-24 bg-muted/40 rounded-xl col-span-2"></div>
-                   </div>
-                </div>
+                <img
+                  src="https://res.cloudinary.com/h4y5bfvm/image/upload/v1783531013/ChatGPT_Image_Jul_9_2026_01_16_21_AM_1_oyfsq1.jpg"
+                  alt="SIPAG platform preview"
+                  className="relative w-full rounded-2xl shadow-xl object-cover"
+                />
               </div>
            </div>
         </div>
