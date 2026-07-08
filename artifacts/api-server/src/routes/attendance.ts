@@ -8,8 +8,9 @@ import {
   auditLogsTable,
   notificationsTable,
   hospitalsTable,
+  usersTable,
 } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
 import { isValidDescriptor, isFaceMatch, descriptorDistance } from "../lib/face-recognition.js";
@@ -86,7 +87,18 @@ router.get("/attendance", requireAuth, async (req, res): Promise<void> => {
         .from(attendanceTable)
         .orderBy(desc(attendanceTable.createdAt));
 
-  res.json(records);
+  // Enrich each record with lightweight student profile (name, section, year level)
+  const studentIds = [...new Set(records.map(r => r.studentId))];
+  const students = studentIds.length > 0
+    ? await db
+        .select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName, section: usersTable.section, yearLevel: usersTable.yearLevel })
+        .from(usersTable)
+        .where(inArray(usersTable.id, studentIds))
+    : [];
+  const studentMap = Object.fromEntries(students.map(s => [s.id, s]));
+  const enriched = records.map(r => ({ ...r, student: studentMap[r.studentId] ?? null }));
+
+  res.json(enriched);
 });
 
 /**

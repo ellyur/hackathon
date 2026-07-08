@@ -440,4 +440,75 @@ router.patch(
   },
 );
 
+/**
+ * PATCH /api/duty-verifications/:id/return
+ * CI returns the duty verification request back to the student.
+ * The record is deleted so the student can re-request with corrected information.
+ * Body: { reason?: string }
+ */
+router.patch(
+  "/duty-verifications/:id/return",
+  requireRole("ci"),
+  async (req, res): Promise<void> => {
+    const { id } = req.params;
+    const ciId = req.session.userId!;
+    const { reason } = req.body as { reason?: string };
+
+    const [dv] = await db
+      .select()
+      .from(dutyVerificationsTable)
+      .where(eq(dutyVerificationsTable.id, id));
+
+    if (!dv) {
+      res.status(404).json({ error: "Duty verification not found" });
+      return;
+    }
+
+    if (dv.ciId !== ciId) {
+      res.status(403).json({ error: "You are not the assigned CI for this duty" });
+      return;
+    }
+
+    if (dv.status !== "waiting_ci") {
+      res.status(400).json({ error: "Can only return requests that are waiting for CI review" });
+      return;
+    }
+
+    // Notify the student that the request has been returned
+    try {
+      await db.insert(notificationsTable).values({
+        id: randomUUID(),
+        userId: dv.studentId,
+        type: "duty_verification_request",
+        title: "Duty Verification Returned",
+        message: reason
+          ? `Your duty verification request for ${dv.dutyDate} was returned by your CI: ${reason}. Please resubmit after addressing the concern.`
+          : `Your duty verification request for ${dv.dutyDate} was returned by your CI. Please resubmit after addressing any concerns.`,
+        relatedEntity: "duty_verification",
+        relatedId: id,
+      });
+    } catch {
+      // non-fatal
+    }
+
+    // Audit log before deletion
+    await db.insert(auditLogsTable).values({
+      id: randomUUID(),
+      userId: ciId,
+      action: "duty_verification_returned",
+      entityType: "duty_verification",
+      entityId: id,
+      oldValue: { status: "waiting_ci" },
+      newValue: { action: "returned_to_student", reason: reason ?? null },
+      ipAddress: req.ip ?? "",
+    });
+
+    // Delete the verification so the student can resubmit
+    await db.delete(dutyVerificationCasesTable).where(eq(dutyVerificationCasesTable.dutyVerificationId, id));
+    await db.delete(dutyVerificationsTable).where(eq(dutyVerificationsTable.id, id));
+
+    res.json({ message: "Duty verification returned to student" });
+  },
+);
+
 export default router;

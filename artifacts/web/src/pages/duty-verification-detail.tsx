@@ -7,10 +7,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import {
   ArrowLeft, CheckCircle, User, FileText, MapPin, Loader2, Clock,
-  CalendarDays, Stethoscope, ClipboardCheck,
+  CalendarDays, Stethoscope, ClipboardCheck, RotateCcw, X,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import type { AuthUser } from '@workspace/api-client-react';
@@ -141,6 +143,9 @@ export function DutyVerificationDetailPage() {
   const [remarks, setRemarks] = useState('');
   const [done, setDone] = useState(false);
 
+  const [returnOpen, setReturnOpen] = useState(false);
+  const [returnReason, setReturnReason] = useState('');
+
   const ciVerify = useCiVerifyDuty();
   const schedulerConfirm = useConfirmDutyVerification();
 
@@ -157,6 +162,25 @@ export function DutyVerificationDetailPage() {
     try {
       await ciVerify.mutateAsync({ id: dvId, caseIds: selectedCaseIds, remarks: remarks || undefined });
       toast({ title: 'Duty Verified ✓', description: 'The request is now pending Scheduler confirmation.' });
+      setDone(true);
+      setTimeout(() => setLocation('/verifications'), 1500);
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed', variant: 'destructive' });
+    }
+  }
+
+  async function handleReturnToStudent() {
+    try {
+      const token = localStorage.getItem('authToken');
+      const res = await fetch(`/api/duty-verifications/${dvId}/return`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ reason: returnReason || undefined }),
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? res.statusText);
+      toast({ title: 'Returned to Student', description: 'The student has been notified to resubmit.' });
+      setReturnOpen(false);
       setDone(true);
       setTimeout(() => setLocation('/verifications'), 1500);
     } catch (err: unknown) {
@@ -379,8 +403,25 @@ export function DutyVerificationDetailPage() {
                     {ciVerify.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardCheck className="h-4 w-4" />}
                     Verify Duty
                   </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2"
+                    onClick={() => setReturnOpen(true)}
+                    disabled={ciVerify.isPending}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Return to Student
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full gap-2 text-muted-foreground"
+                    onClick={() => setLocation('/verifications')}
+                  >
+                    <X className="h-4 w-4" />
+                    Cancel
+                  </Button>
                   <p className="text-xs text-muted-foreground text-center">
-                    This will send the request to the Scheduler for final confirmation.
+                    Verifying sends this to the Scheduler for final confirmation.
                   </p>
                 </>
               ) : canSchedulerConfirm ? (

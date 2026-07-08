@@ -70,7 +70,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
       { name: 'My Duties', href: '/duties', icon: ClipboardList },
       { name: 'Duty Verifications', href: '/verifications', icon: CheckCircle },
-      { name: 'Attendance Roster', href: '/attendance', icon: CheckCircle },
+      { name: 'Student Progress', href: '/ci/students', icon: Users },
       { name: 'Evaluations', href: '/evaluations', icon: Star },
     ],
     scheduler: [

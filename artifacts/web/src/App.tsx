@@ -73,6 +73,9 @@ import { AdminAcademicPage } from '@/pages/admin-academic';
 import { AdminNotificationLogPage } from '@/pages/admin-notification-log';
 import { AdminAcademicYearSettingsPage } from '@/pages/admin-academic-year-settings';
 import { CIEvaluationPage } from '@/pages/ci-evaluation';
+import { CIStudentsListPage } from '@/pages/ci-students-list';
+import { CIStudentProgressPage } from '@/pages/ci-student-progress';
+import { CIBulkVerifyPage } from '@/pages/ci-bulk-verify';
 import { StudentAcademicSchedulePage } from '@/pages/student-academic-schedule';
 import { DutyVerificationDetailPage } from '@/pages/duty-verification-detail';
 import { SchedulerDutyVerificationsPage } from '@/pages/scheduler-duty-verifications';
@@ -126,6 +129,9 @@ function Router() {
           <Route path="/duties" component={MyDutiesPage} />
           <Route path="/duties/:id/attendance" component={AttendanceRosterPage} />
           <Route path="/duties/:id/verify" component={VerifyCasePage} />
+          <Route path="/duties/:id/bulk-verify" component={CIBulkVerifyPage} />
+          <Route path="/ci/students" component={CIStudentsListPage} />
+          <Route path="/ci/students/:studentId" component={CIStudentProgressPage} />
 
           {/* Scheduler */}
           <Route path="/schedules" component={MasterSchedulePage} />

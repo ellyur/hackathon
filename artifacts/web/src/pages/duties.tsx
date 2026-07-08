@@ -40,6 +40,12 @@ function DutyCard({ duty }: { duty: Schedule }) {
             <Users className="w-3.5 h-3.5" />
             {duty.students?.length ?? 0} students
           </span>
+          {(duty as any).dutyHours != null && (
+            <span className="flex items-center gap-1 font-medium text-primary">
+              <Clock className="w-3.5 h-3.5" />
+              {(duty as any).dutyHours} duty hrs
+            </span>
+          )}
         </div>
       </div>
       <div className="flex gap-2 flex-shrink-0">
