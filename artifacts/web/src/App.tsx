@@ -73,6 +73,8 @@ import { AdminAcademicPage } from '@/pages/admin-academic';
 import { AdminNotificationLogPage } from '@/pages/admin-notification-log';
 import { CIEvaluationPage } from '@/pages/ci-evaluation';
 import { StudentAcademicSchedulePage } from '@/pages/student-academic-schedule';
+import { DutyVerificationDetailPage } from '@/pages/duty-verification-detail';
+import { SchedulerDutyVerificationsPage } from '@/pages/scheduler-duty-verifications';
 
 const queryClient = new QueryClient();
 
@@ -154,6 +156,10 @@ function Router() {
           <Route path="/admin/notification-log" component={AdminNotificationLogPage} />
           <Route path="/evaluations" component={CIEvaluationPage} />
           <Route path="/academic-schedule" component={StudentAcademicSchedulePage} />
+
+          {/* Duty Verifications — shared route for Student / CI / Scheduler */}
+          <Route path="/duty-verifications" component={SchedulerDutyVerificationsPage} />
+          <Route path="/duty-verifications/:id" component={DutyVerificationDetailPage} />
 
           <Route component={NotFound} />
         </Switch>

@@ -113,7 +113,10 @@ router.get("/case-completions", requireAuth, async (req, res): Promise<void> => 
   res.json(completions);
 });
 
-router.post("/case-completions", requireRole("student"), async (req, res): Promise<void> => {
+// Students no longer submit cases directly — cases are created via the
+// duty verification workflow (POST /duty-verifications → CI verifies → scheduler confirms).
+// This endpoint is kept for admin/scheduler manual overrides only.
+router.post("/case-completions", requireRole("scheduler", "admin"), async (req, res): Promise<void> => {
   const body = req.body as {
     clinicalCaseId: string;
     scheduleId: string;

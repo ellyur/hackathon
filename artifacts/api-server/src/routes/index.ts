@@ -16,6 +16,7 @@ import academicRouter from "./academic.js";
 import academicSchedulesRouter from "./academic-schedules.js";
 import evaluationsRouter from "./evaluations.js";
 import reportsRouter from "./reports.js";
+import dutyVerificationsRouter from "./duty-verifications.js";
 
 const router: IRouter = Router();
 
@@ -36,5 +37,6 @@ router.use(academicRouter);
 router.use(academicSchedulesRouter);
 router.use(evaluationsRouter);
 router.use(reportsRouter);
+router.use(dutyVerificationsRouter);
 
 export default router;

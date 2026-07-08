@@ -1,12 +1,29 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { Clock, MapPin, CheckCircle2, AlertCircle, FileCheck, ArrowRight, Loader2, ScanFace, Calendar } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Clock, MapPin, CheckCircle2, AlertCircle, ArrowRight, Loader2, ScanFace, Calendar, CalendarDays, ClipboardCheck, FileCheck } from 'lucide-react';
 import { Link } from 'wouter';
-import { useListSchedules, useGetMyFaceDescriptor, useListAttendance, useGetStudentHours } from '@workspace/api-client-react';
+import { useListSchedules, useGetMyFaceDescriptor, useListAttendance } from '@workspace/api-client-react';
 import { useAuth } from '@/hooks/use-auth';
 import type { AuthUser } from '@workspace/api-client-react';
-import type { Schedule } from '@workspace/api-client-react';
+import type { Schedule, AttendanceRecord } from '@workspace/api-client-react';
+import { useQuery } from '@tanstack/react-query';
+import { useListDutyVerifications } from '@/hooks/use-duty-verifications';
+
+function getAuthToken() { return localStorage.getItem('authToken'); }
+async function apiFetch<T>(path: string): Promise<T> {
+  const token = getAuthToken();
+  const res = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {}, credentials: 'include' });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText);
+  return res.json();
+}
+
+interface StudentPassport {
+  totalDutyDaysRequired: number;
+  totalDutyDaysCompleted: number;
+  overallCompletion: number;
+}
 
 function formatTime(t: string): string {
   if (!t) return '';
@@ -14,6 +31,15 @@ function formatTime(t: string): string {
   const ampm = h >= 12 ? 'PM' : 'AM';
   const hour = h % 12 || 12;
   return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+function verificationStatusBadge(status: string) {
+  switch (status) {
+    case 'waiting_ci': return <Badge variant="secondary" className="text-xs">Waiting for CI</Badge>;
+    case 'pending_scheduler': return <Badge className="bg-amber-500 hover:bg-amber-600 text-xs">Pending Scheduler</Badge>;
+    case 'officially_verified': return <Badge className="bg-emerald-500 hover:bg-emerald-600 text-xs">Verified ✓</Badge>;
+    default: return <Badge variant="outline" className="text-xs">{status}</Badge>;
+  }
 }
 
 export function StudentDashboard() {
@@ -33,31 +59,45 @@ export function StudentDashboard() {
   });
 
   const userId = user?.id ?? '';
-  const { data: hoursData } = useGetStudentHours(userId, {
-    query: { enabled: !!userId, staleTime: 30_000 } as never,
+
+  const { data: passport } = useQuery<StudentPassport>({
+    queryKey: ['student-passport', userId],
+    queryFn: () => apiFetch(`/api/students/${userId}/passport`),
+    enabled: !!userId,
+    staleTime: 30_000,
   });
+
+  const { data: myVerifications = [] } = useListDutyVerifications();
 
   const isEnrolled = faceData?.enrolled === true;
 
-  // Schedules the student has already timed in for should not appear as
-  // "upcoming" even if the schedule row itself is still active/upcoming —
-  // the schedule status reflects the shift as a whole, not this student's
-  // individual attendance for it.
   const attendedScheduleIds = new Set(
     attendance.map((r: { scheduleId: string }) => r.scheduleId),
   );
 
-  const upcoming = (schedules ?? []).filter(
+  const all = schedules ?? [];
+  const upcoming = all.filter(
     (s: Schedule) =>
       (s.status === 'active' || s.status === 'upcoming') && !attendedScheduleIds.has(s.id),
   );
   const nextDuty: Schedule | undefined = upcoming[0];
 
+  // Attended/completed duties where student can request verification
+  const attendanceMap = new Map<string, AttendanceRecord>();
+  for (const r of attendance as AttendanceRecord[]) attendanceMap.set(r.scheduleId, r);
+
+  const verificationByAttendanceId = new Map(myVerifications.map((v: any) => [v.attendanceId, v]));
+
+  const attendedDuties = all
+    .filter((s: Schedule) => attendedScheduleIds.has(s.id))
+    .slice(0, 3); // show most recent 3
+
   const presentCount  = attendance.filter((r: { status: string }) => r.status === 'present').length;
   const lateCount     = attendance.filter((r: { status: string }) => r.status === 'late').length;
-  const hoursCompleted = hoursData?.totalHoursCompleted ?? 0;
-  const hoursRequired  = hoursData?.totalHoursRequired  ?? 500;
-  const progressPct    = hoursData?.progressPercent      ?? 0;
+
+  const totalDays = passport?.totalDutyDaysRequired ?? 0;
+  const completedDays = passport?.totalDutyDaysCompleted ?? 0;
+  const overallPct = Math.round((passport?.overallCompletion ?? 0) * 100);
 
   return (
     <div className="space-y-8">
@@ -146,7 +186,7 @@ export function StudentDashboard() {
           </CardContent>
         </Card>
 
-        {/* Passport Progress — kept as summary; real data comes from /passport page */}
+        {/* Clinical Passport — Duty Days Summary */}
         <Card className="col-span-full md:col-span-1 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">Clinical Passport</CardTitle>
@@ -163,37 +203,49 @@ export function StudentDashboard() {
                     stroke="currentColor"
                     strokeWidth="12"
                     strokeDasharray="351.85"
-                    strokeDashoffset={351.85 * (1 - 0.65)}
+                    strokeDashoffset={351.85 * (1 - (passport?.overallCompletion ?? 0))}
                     className="text-primary transition-all duration-1000"
                   />
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-2xl font-bold">65%</span>
+                  <span className="text-2xl font-bold">{overallPct}%</span>
                 </div>
               </div>
             </div>
             <div className="mt-6 flex justify-between text-sm text-muted-foreground">
               <div className="text-center">
-                <div className="font-medium text-foreground">26</div>
-                <div>Completed</div>
+                <div className="font-medium text-foreground">{completedDays}</div>
+                <div>Days Done</div>
               </div>
               <div className="text-center">
-                <div className="font-medium text-foreground">40</div>
+                <div className="font-medium text-foreground">{totalDays}</div>
                 <div>Required</div>
               </div>
             </div>
+            <Button variant="outline" className="w-full mt-4" asChild>
+              <Link href="/passport">View Full Passport</Link>
+            </Button>
           </CardContent>
         </Card>
 
-        {/* Hours Progress */}
+        {/* Attendance Stats */}
         <Card className="col-span-full md:col-span-1 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Duty Hours</CardTitle>
-            <CardDescription>{hoursCompleted.toFixed(1)} / {hoursRequired} hours completed</CardDescription>
+            <CardTitle className="text-lg">Attendance</CardTitle>
+            <CardDescription>Your duty attendance record</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="pt-2">
-              <Progress value={progressPct} className="h-3" />
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-muted-foreground">Attendance Rate</span>
+                <span className="font-semibold">
+                  {attendance.length > 0 ? Math.round((presentCount + lateCount) / attendance.length * 100) : 0}%
+                </span>
+              </div>
+              <Progress
+                value={attendance.length > 0 ? (presentCount + lateCount) / attendance.length * 100 : 0}
+                className="h-3"
+              />
             </div>
             <div className="grid grid-cols-2 gap-4 pt-2">
               <div className="space-y-1 p-3 rounded-lg bg-muted/50">
@@ -217,46 +269,80 @@ export function StudentDashboard() {
 
       {/* Bottom Grid */}
       <div className="grid gap-6 md:grid-cols-2">
+        {/* Attended Duties — Request Verification */}
         <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle className="text-lg">Pending Case Verifications</CardTitle>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <ClipboardCheck className="w-5 h-5 text-primary" />
+              Duty Verifications
+            </CardTitle>
+            <CardDescription>Request verification for completed duties</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {[
-                { title: 'Normal Spontaneous Delivery', status: 'Pending CI Review', date: 'Oct 12' },
-                { title: 'IV Insertion', status: 'Pending CI Review', date: 'Oct 10' },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-                      <FileCheck className="w-4 h-4" />
+            <div className="space-y-3">
+              {attendedDuties.length === 0 ? (
+                <p className="text-sm text-center text-muted-foreground py-4">No attended duties yet.</p>
+              ) : (
+                attendedDuties.map((s: Schedule) => {
+                  const rec = attendanceMap.get(s.id);
+                  if (!rec) return null;
+                  const existingVerif = verificationByAttendanceId.get(rec.id) as any;
+                  return (
+                    <div key={s.id} className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                          <FileCheck className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-medium text-sm truncate">
+                            {s.department?.name ?? s.title ?? 'Clinical Rotation'}
+                          </div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {s.hospital?.name ?? ''} • {s.dutyDate}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="shrink-0 ml-2">
+                        {existingVerif ? (
+                          <Link href={`/duty-verifications/${existingVerif.id}`}>
+                            <Button variant="ghost" size="sm" className="gap-1 text-xs">
+                              {verificationStatusBadge(existingVerif.status)}
+                            </Button>
+                          </Link>
+                        ) : (
+                          <Link href={`/schedule/${s.id}?requestVerification=1`}>
+                            <Button size="sm" variant="outline" className="text-xs gap-1">
+                              Request
+                              <ArrowRight className="w-3 h-3" />
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <div className="font-medium text-sm">{item.title}</div>
-                      <div className="text-xs text-muted-foreground">{item.status} • {item.date}</div>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="icon">
-                    <ArrowRight className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
+                  );
+                })
+              )}
             </div>
             <Button variant="outline" className="w-full mt-4" asChild>
-              <Link href="/passport">View Full Passport</Link>
+              <Link href="/schedule">View All Schedules</Link>
             </Button>
           </CardContent>
         </Card>
 
+        {/* My Schedule */}
         <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle className="text-lg">My Schedule</CardTitle>
+            <CardTitle className="text-lg">
+              <span className="flex items-center gap-2">
+                <CalendarDays className="w-5 h-5 text-primary" />
+                My Schedule
+              </span>
+            </CardTitle>
             <CardDescription>{upcoming.length} upcoming {upcoming.length === 1 ? 'duty' : 'duties'}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {upcoming.slice(0, 2).map(s => (
+              {upcoming.slice(0, 2).map((s: Schedule) => (
                 <div key={s.id} className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
                   <div>
                     <div className="font-medium text-sm">{s.department?.name ?? s.title ?? 'Rotation'}</div>
@@ -280,4 +366,3 @@ export function StudentDashboard() {
     </div>
   );
 }
-

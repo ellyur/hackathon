@@ -11,3 +11,4 @@ export * from "./academic";
 export * from "./password-resets";
 export * from "./evaluations";
 export * from "./academic-schedules";
+export * from "./duty-verifications";

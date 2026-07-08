@@ -1,0 +1,199 @@
+# ClinicalFlow Final Feature Verification
+
+You are NOT building a new project.
+
+You are auditing the existing ClinicalFlow project.
+
+Verify every feature below.
+
+If something is missing, implement it.
+
+If something partially works, improve it.
+
+Do NOT remove existing features unless explicitly stated.
+
+Maintain the current UI design system.
+
+---
+
+# SYSTEM ROLES
+
+There are ONLY four system roles.
+
+1. Admin
+2. Scheduler
+3. Clinical Instructor (CI)
+4. Student
+
+There is NO Hospital role.
+
+Hospitals are only managed by Admin.
+
+---
+
+# SYSTEM MODULES
+
+The completed system should contain these modules.
+
+✓ Authentication
+
+✓ Dashboard
+
+✓ Hospital Management
+
+✓ Master Schedule Calendar
+
+✓ Intelligent Student Recommendation Engine
+
+✓ Student Academic Schedule
+
+✓ Clinical Passport
+
+✓ Duty Verification Workflow
+
+✓ Attendance
+
+✓ GPS Geofencing
+
+✓ Face Verification
+
+✓ Notifications
+
+✓ Reports
+
+✓ Analytics
+
+---
+
+# ROLE FEATURES
+
+=================================================
+ADMIN
+=================================================
+
+Dashboard
+
+- System Analytics
+- Total Students
+- Total Clinical Instructors
+- Total Schedulers
+- Total Hospitals
+- Attendance Statistics
+- Clinical Progress Statistics
+
+Hospital Management
+
+- Add Hospital
+- Edit Hospital
+- Delete Hospital
+- Activate Hospital
+- Set Hospital Name
+- Set Hospital Address
+- Interactive Map
+- Search Hospital
+- Drag Marker
+- Save Latitude
+- Save Longitude
+- Save Attendance Radius
+
+User Management
+
+Students
+
+- Add
+- Edit
+- Archive
+- Reset Password
+
+Clinical Instructor
+
+- Add
+- Edit
+- Remove
+
+Scheduler
+
+- Add
+- Edit
+- Remove
+
+Academic Management
+
+- School Year
+- Semester
+- Sections
+- Year Levels
+
+Clinical Requirements
+
+Configure
+
+Orthopedic
+
+Operating Room
+
+Delivery Room
+
+Psychiatric
+
+Geriatric
+
+OB Ward
+
+Medical Surgical Ward
+
+Reports
+
+Attendance
+
+Clinical Passport
+
+Clinical Cases
+
+Duty Days
+
+Export PDF
+
+Export Excel
+
+Notifications
+
+Broadcast Announcement
+
+=================================================
+SCHEDULER
+=================================================
+
+Dashboard
+
+Today's Duties
+
+Upcoming Duties
+
+Pending Verifications
+
+Student Progress
+
+Master Schedule
+
+Monthly Calendar
+
+Previous Month
+
+Next Month
+
+Each Date Box displays
+
+Hospital
+
+Ward
+
+Duty Time
+
+Assigned Students
+
+Status Color
+
+Blue
+
+Upcoming

@@ -1,12 +1,14 @@
-import { useMemo } from 'react';
-import { Link } from 'wouter';
-import { Calendar, Clock, MapPin, User, LogIn, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Link, useLocation } from 'wouter';
+import { Calendar, Clock, MapPin, User, LogIn, Loader2, CheckCircle2, AlertCircle, ClipboardCheck, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
 import { useListSchedules, useListAttendance } from '@workspace/api-client-react';
 import type { Schedule, AttendanceRecord } from '@workspace/api-client-react';
+import { useListDutyVerifications, useRequestDutyVerification } from '@/hooks/use-duty-verifications';
 
 type ScheduleStatus = 'upcoming' | 'active' | 'completed' | 'cancelled';
 
@@ -19,10 +21,7 @@ const statusConfig: Record<ScheduleStatus, { label: string; className: string }>
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString([], {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   });
 }
 
@@ -61,17 +60,42 @@ function AttendanceBadge({ record }: { record: AttendanceRecord | undefined }) {
       </span>
     );
   }
-  if (record.status === 'absent') {
-    return <Badge variant="destructive">Absent</Badge>;
-  }
+  if (record.status === 'absent') return <Badge variant="destructive">Absent</Badge>;
   return null;
 }
 
-function ScheduleCard({ schedule, attendanceRecord }: { schedule: Schedule; attendanceRecord?: AttendanceRecord }) {
+function verificationStatusBadge(status: string) {
+  switch (status) {
+    case 'waiting_ci':
+      return <Badge variant="secondary" className="text-xs">Waiting for CI</Badge>;
+    case 'pending_scheduler':
+      return <Badge className="bg-amber-500 hover:bg-amber-600 text-xs">Pending Scheduler</Badge>;
+    case 'officially_verified':
+      return <Badge className="bg-emerald-500 hover:bg-emerald-600 text-xs">Verified ✓</Badge>;
+    default:
+      return <Badge variant="outline" className="text-xs">{status}</Badge>;
+  }
+}
+
+function ScheduleCard({
+  schedule,
+  attendanceRecord,
+  existingVerification,
+  onRequestVerification,
+  isRequesting,
+}: {
+  schedule: Schedule;
+  attendanceRecord?: AttendanceRecord;
+  existingVerification?: any;
+  onRequestVerification?: () => void;
+  isRequesting?: boolean;
+}) {
   const status = (schedule.status as ScheduleStatus) ?? 'upcoming';
   const config = statusConfig[status] ?? statusConfig.upcoming;
   const canTimeIn = status === 'active' || status === 'upcoming';
   const alreadyTimedIn = !!attendanceRecord?.timeIn;
+  const isPast = status === 'completed';
+  const hasAttendance = !!attendanceRecord;
 
   const hospitalName = schedule.hospital?.name ?? 'Hospital';
   const deptName = schedule.department?.name ?? '';
@@ -96,7 +120,6 @@ function ScheduleCard({ schedule, attendanceRecord }: { schedule: Schedule; atte
                 {durationLabel(schedule.startTime, schedule.endTime)}
               </span>
             )}
-            {/* Attendance status takes priority over schedule status when present */}
             <AttendanceBadge record={attendanceRecord} />
             {!attendanceRecord && (
               config.className
@@ -121,22 +144,58 @@ function ScheduleCard({ schedule, attendanceRecord }: { schedule: Schedule; atte
             <span>{ciName}</span>
           </div>
         </div>
-        {canTimeIn && (
-          <div className="flex justify-end pt-1">
+
+        {/* Actions */}
+        <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
+          {canTimeIn && (
             <Link href={`/schedule/${schedule.id}`}>
               <Button size="sm" variant={alreadyTimedIn ? 'outline' : 'default'} className="gap-2">
                 <LogIn className="h-4 w-4" />
                 {alreadyTimedIn ? 'View Duty' : 'View & Time In'}
               </Button>
             </Link>
-          </div>
-        )}
+          )}
+
+          {/* Request Duty Verification — shown on past duties where student attended */}
+          {isPast && hasAttendance && (
+            <div className="flex items-center gap-2">
+              {existingVerification ? (
+                <Link href={`/duty-verifications/${existingVerification.id}`}>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <ClipboardCheck className="h-4 w-4" />
+                    View Verification
+                    {verificationStatusBadge(existingVerification.status)}
+                  </Button>
+                </Link>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="gap-2"
+                  onClick={onRequestVerification}
+                  disabled={isRequesting}
+                >
+                  {isRequesting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ClipboardCheck className="h-4 w-4" />
+                  )}
+                  Request Duty Verification
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
 }
 
 export function MySchedulePage() {
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const [requestingFor, setRequestingFor] = useState<string | null>(null);
+
   const { data: schedules, isLoading, isError } = useListSchedules(undefined, {
     query: { staleTime: 60_000 } as never,
   });
@@ -145,12 +204,44 @@ export function MySchedulePage() {
     query: { staleTime: 30_000, refetchOnMount: true } as never,
   });
 
-  // Map scheduleId → most-recent attendance record for this student
+  const { data: myVerifications = [] } = useListDutyVerifications();
+  const requestVerification = useRequestDutyVerification();
+
+  // Map scheduleId → attendance record
   const attendanceMap = useMemo(() => {
     const m = new Map<string, AttendanceRecord>();
     [...attendanceRecords].reverse().forEach((r: AttendanceRecord) => m.set(r.scheduleId, r));
     return m;
   }, [attendanceRecords]);
+
+  // Map attendanceId → verification
+  const verifByAttendanceId = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const v of myVerifications as any[]) m.set(v.attendanceId, v);
+    return m;
+  }, [myVerifications]);
+
+  async function handleRequestVerification(schedule: Schedule) {
+    const rec = attendanceMap.get(schedule.id);
+    if (!rec) return;
+    setRequestingFor(schedule.id);
+    try {
+      const created = await requestVerification.mutateAsync({
+        scheduleId: schedule.id,
+        attendanceId: rec.id,
+      });
+      toast({
+        title: 'Verification Requested ✓',
+        description: 'Your Clinical Instructor has been notified.',
+      });
+      setLocation(`/duty-verifications/${created.id}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to request verification';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    } finally {
+      setRequestingFor(null);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -169,8 +260,8 @@ export function MySchedulePage() {
   }
 
   const all = schedules ?? [];
-  const upcoming = all.filter(s => s.status === 'upcoming' || s.status === 'active');
-  const past = all.filter(s => s.status === 'completed' || s.status === 'cancelled');
+  const upcoming = all.filter((s: Schedule) => s.status === 'upcoming' || s.status === 'active');
+  const past = all.filter((s: Schedule) => s.status === 'completed' || s.status === 'cancelled');
 
   return (
     <div className="space-y-6">
@@ -189,7 +280,14 @@ export function MySchedulePage() {
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="past">Past</TabsTrigger>
+          <TabsTrigger value="past">
+            Past
+            {past.length > 0 && (
+              <span className="ml-2 bg-muted text-muted-foreground text-xs rounded-full px-1.5 py-0.5">
+                {past.length}
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="upcoming" className="mt-4 space-y-4">
@@ -202,7 +300,13 @@ export function MySchedulePage() {
               </CardContent>
             </Card>
           ) : (
-            upcoming.map(s => <ScheduleCard key={s.id} schedule={s} attendanceRecord={attendanceMap.get(s.id)} />)
+            upcoming.map((s: Schedule) => (
+              <ScheduleCard
+                key={s.id}
+                schedule={s}
+                attendanceRecord={attendanceMap.get(s.id)}
+              />
+            ))
           )}
         </TabsContent>
 
@@ -216,7 +320,20 @@ export function MySchedulePage() {
               </CardContent>
             </Card>
           ) : (
-            past.map(s => <ScheduleCard key={s.id} schedule={s} attendanceRecord={attendanceMap.get(s.id)} />)
+            past.map((s: Schedule) => {
+              const rec = attendanceMap.get(s.id);
+              const verif = rec ? verifByAttendanceId.get(rec.id) : undefined;
+              return (
+                <ScheduleCard
+                  key={s.id}
+                  schedule={s}
+                  attendanceRecord={rec}
+                  existingVerification={verif}
+                  onRequestVerification={() => handleRequestVerification(s)}
+                  isRequesting={requestingFor === s.id}
+                />
+              );
+            })
           )}
         </TabsContent>
       </Tabs>

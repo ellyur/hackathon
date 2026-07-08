@@ -68,6 +68,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     ci: [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
       { name: 'My Duties', href: '/duties', icon: ClipboardList },
+      { name: 'Duty Verifications', href: '/verifications', icon: CheckCircle },
       { name: 'Attendance Roster', href: '/attendance', icon: CheckCircle },
       { name: 'Evaluations', href: '/evaluations', icon: Star },
     ],
@@ -78,7 +79,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       { name: 'Duty Slots', href: '/slots', icon: ClipboardList },
       { name: 'Makeup Duties', href: '/makeup-duties', icon: AlertTriangle },
       { name: 'Case Gaps', href: '/case-gaps', icon: PieChart },
-      { name: 'Verifications', href: '/verifications', icon: CheckCircle },
+      { name: 'Duty Verifications', href: '/duty-verifications', icon: CheckCircle },
       { name: 'Announcements', href: '/announcements/manage', icon: Bell },
     ],
     admin: [

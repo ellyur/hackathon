@@ -18,6 +18,8 @@ export const departmentsTable = pgTable("departments", {
   name: text("name").notNull(),
   code: text("code").notNull().default(""),
   isActive: boolean("is_active").notNull().default(true),
+  requiredDutyDays: integer("required_duty_days").notNull().default(0),
+  requiredDutyHours: integer("required_duty_hours").notNull().default(0),
 });
 
 export type Hospital = typeof hospitalsTable.$inferSelect;

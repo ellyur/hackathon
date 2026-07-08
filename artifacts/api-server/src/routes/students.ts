@@ -6,8 +6,10 @@ import {
   attendanceTable,
   caseCompletionsTable,
   clinicalCasesTable,
+  departmentsTable,
+  dutyVerificationsTable,
 } from "@workspace/db";
-import { eq, and, sql, count } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
@@ -109,6 +111,8 @@ router.get("/students", requireAuth, async (req, res): Promise<void> => {
   res.json(profiles);
 });
 
+// ── Clinical Passport (Ward / Duty-Day based) ─────────────────────────────────
+
 router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void> => {
   const { id } = req.params;
   const session = req.session;
@@ -119,50 +123,121 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
     return;
   }
 
-  const cases = await db
+  // Fetch all active departments that have duty day requirements
+  const allDepts = await db
+    .select()
+    .from(departmentsTable)
+    .where(eq(departmentsTable.isActive, true));
+
+  // Include all departments with requiredDutyDays > 0
+  const wardDepts = allDepts.filter(d => d.requiredDutyDays > 0);
+
+  // Count officially-verified duty verifications per department for this student
+  const verifiedDuties = await db
+    .select()
+    .from(dutyVerificationsTable)
+    .where(
+      and(
+        eq(dutyVerificationsTable.studentId, id),
+        eq(dutyVerificationsTable.status, "officially_verified"),
+      ),
+    );
+
+  // Fetch all active clinical cases for case-based progress
+  const allCases = await db
     .select()
     .from(clinicalCasesTable)
     .where(eq(clinicalCasesTable.isActive, true));
 
-  const completions = await db
+  // Fetch verified case completions for this student
+  const verifiedCompletions = await db
     .select()
     .from(caseCompletionsTable)
-    .where(eq(caseCompletionsTable.studentId, id));
+    .where(
+      and(
+        eq(caseCompletionsTable.studentId, id),
+        eq(caseCompletionsTable.status, "verified"),
+      ),
+    );
 
-  // Build per-case entries
-  const entries = cases.map((c) => {
-    const studentCompletions = completions.filter((cc) => cc.clinicalCaseId === c.id);
-    const verified = studentCompletions.filter((cc) => cc.status === "verified").length;
-    const pending  = studentCompletions.filter((cc) => cc.status === "pending").length;
-    const completed = verified + pending;
-    const remaining = Math.max(0, c.requiredCount - verified);
-    const status: "complete" | "in_progress" | "deficient" =
-      verified >= c.requiredCount ? "complete"
-      : (verified > 0 || pending > 0) ? "in_progress"
-      : "deficient";
-    return { caseId: c.id, caseName: c.name, category: c.category, required: c.requiredCount, completed, verified, remaining, status };
+  // Build per-ward progress
+  const wards = wardDepts.map(dept => {
+    const completedDutyDays = verifiedDuties.filter(
+      dv => dv.departmentId === dept.id,
+    ).length;
+
+    const completedDutyHours = completedDutyDays *
+      (dept.requiredDutyDays > 0 ? dept.requiredDutyHours / dept.requiredDutyDays : 0);
+
+    // Cases for this ward: match by case category === department name
+    const wardCases = allCases.filter(
+      c => c.category.toLowerCase() === dept.name.toLowerCase(),
+    );
+
+    const requiredCases = wardCases.map(c => {
+      const verified = verifiedCompletions.filter(
+        cc => cc.clinicalCaseId === c.id && cc.departmentId === dept.id,
+      ).length;
+      const remaining = Math.max(0, c.requiredCount - verified);
+      const status: "complete" | "in_progress" | "deficient" =
+        verified >= c.requiredCount ? "complete"
+        : verified > 0 ? "in_progress"
+        : "deficient";
+      return {
+        caseId: c.id,
+        caseName: c.name,
+        required: c.requiredCount,
+        verified,
+        remaining,
+        status,
+      };
+    });
+
+    const daysPct = dept.requiredDutyDays > 0
+      ? Math.min(1, completedDutyDays / dept.requiredDutyDays)
+      : 0;
+
+    // If ward has required cases, completion is limited by both days and cases
+    let completionPct = daysPct;
+    if (requiredCases.length > 0) {
+      const totalCasesRequired = requiredCases.reduce((s, c) => s + c.required, 0);
+      const totalCasesVerified = requiredCases.reduce((s, c) => s + c.verified, 0);
+      const casesPct = totalCasesRequired > 0
+        ? Math.min(1, totalCasesVerified / totalCasesRequired)
+        : 1;
+      completionPct = Math.min(daysPct, casesPct);
+    }
+
+    const status: "complete" | "in_progress" | "not_started" =
+      completionPct >= 1 ? "complete"
+      : completedDutyDays > 0 ? "in_progress"
+      : "not_started";
+
+    return {
+      departmentId: dept.id,
+      wardName: dept.name,
+      requiredDutyDays: dept.requiredDutyDays,
+      completedDutyDays,
+      requiredDutyHours: dept.requiredDutyHours,
+      completedDutyHours: Math.round(completedDutyHours * 10) / 10,
+      completionPct: Math.round(completionPct * 100),
+      status,
+      requiredCases,
+    };
   });
 
-  // Group by category
-  const categoryMap = new Map<string, typeof entries>();
-  for (const e of entries) {
-    const cat = e.category ?? "Other";
-    if (!categoryMap.has(cat)) categoryMap.set(cat, []);
-    categoryMap.get(cat)!.push(e);
-  }
+  // Overall completion = avg across all wards weighted by required days
+  const totalRequired = wardDepts.reduce((s, d) => s + d.requiredDutyDays, 0);
+  const totalCompleted = wards.reduce((s, w) => s + Math.min(w.completedDutyDays, w.requiredDutyDays), 0);
+  const overallCompletion = totalRequired > 0 ? totalCompleted / totalRequired : 0;
 
-  const categories = Array.from(categoryMap.entries()).map(([category, cases]) => {
-    const totalReq  = cases.reduce((s, c) => s + c.required, 0);
-    const totalVer  = cases.reduce((s, c) => s + c.verified, 0);
-    const completionRate = totalReq > 0 ? totalVer / totalReq : 0;
-    return { category, completionRate, cases };
+  res.json({
+    studentId: id,
+    totalDutyDaysRequired: totalRequired,
+    totalDutyDaysCompleted: totalCompleted,
+    overallCompletion,
+    wards,
   });
-
-  const totalCases     = cases.reduce((s, c) => s + c.requiredCount, 0);
-  const completedCases = entries.reduce((s, e) => s + e.verified, 0);
-  const overallCompletion = totalCases > 0 ? completedCases / totalCases : 0;
-
-  res.json({ studentId: id, totalCases, completedCases, overallCompletion, categories });
 });
 
 router.get("/students/:id/attendance", requireAuth, async (req, res): Promise<void> => {
