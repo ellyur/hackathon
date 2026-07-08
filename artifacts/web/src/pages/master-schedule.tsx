@@ -780,6 +780,11 @@ export function MasterSchedulePage() {
                 <Button variant="outline" asChild>
                   <Link href={`/schedules/${detailSchedule.id}/edit`}>Edit Schedule</Link>
                 </Button>
+                <Button asChild>
+                  <Link href={`/schedules/${detailSchedule.id}/recommendations`}>
+                    <Sparkles className="w-4 h-4 mr-2" /> Assign Students
+                  </Link>
+                </Button>
               </DialogFooter>
             </>
           )}
