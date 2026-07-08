@@ -12,7 +12,7 @@ import { useRoute, Link } from 'wouter';
 import { getDistance } from 'geolib';
 import { useGetSchedule, useRecordTimeIn, useGetMyFaceDescriptor } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
-import { loadFaceApiModels, detectFaceDescriptor } from '@/lib/face-detection';
+import { loadFaceApiModels, detectFaceDescriptor, prefetchFaceApiModels } from '@/lib/face-detection';
 import { AttendanceMap, type GpsZoneStatus } from '@/components/attendance-map';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -182,6 +182,9 @@ export function TimeInSimulatorPage() {
     : 'outside';
 
   const canStartVerification = !hasHospitalGps || (liveGps !== null && liveGps.withinRange);
+
+  // Warm up face-api.js models immediately so they're ready before the user starts verification
+  useEffect(() => { prefetchFaceApiModels(); }, []);
 
   // ── Start GPS watching on mount ───────────────────────────────────────────
   useEffect(() => {

@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { useGetMyFaceDescriptor } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
-import { loadFaceApiModels, detectFaceDescriptor } from '@/lib/face-detection';
+import { loadFaceApiModels, detectFaceDescriptor, prefetchFaceApiModels } from '@/lib/face-detection';
 
 type Step =
   | 'idle'
@@ -24,6 +24,10 @@ export function FaceSetupPage() {
 
   const { data: faceData, isLoading: faceLoading, refetch } =
     useGetMyFaceDescriptor({ query: { staleTime: 30_000 } as never });
+
+  // Warm up face-api.js models in the background as soon as the page loads
+  // so they're ready before the user clicks "Capture".
+  useEffect(() => { prefetchFaceApiModels(); }, []);
 
   const [step, setStep]   = useState<Step>('idle');
   const [error, setError] = useState<string | null>(null);
