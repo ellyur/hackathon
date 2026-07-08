@@ -58,7 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (authLoading) {
       return (
         <div className="h-screen w-full flex flex-col items-center justify-center bg-background gap-4">
-          <img src="/sipag-logo.png" alt="SIPAG" className="w-12 h-12 rounded-xl object-contain" />
+          <img src="/sipag-logo.png" alt="SIPAG" className="w-12 h-12 rounded-xl object-contain bg-white" />
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
             <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -141,7 +141,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <img
               src="/sipag-logo.png"
               alt="SIPAG"
-              className="w-9 h-9 rounded-lg object-contain shrink-0 shadow-md"
+              className="w-9 h-9 rounded-lg object-contain shrink-0 shadow-md bg-white"
               onError={(e) => {
                 e.currentTarget.style.display = 'none';
               }}
@@ -285,7 +285,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {/* Show SIPAG logo in header on mobile */}
             {isMobile && (
               <div className="flex items-center gap-2">
-                <img src="/sipag-logo.png" alt="SIPAG" className="w-7 h-7 rounded-md object-contain" />
+                <img src="/sipag-logo.png" alt="SIPAG" className="w-7 h-7 rounded-md object-contain bg-white" />
                 <span className="font-bold text-navy text-lg tracking-wide" style={{ color: 'hsl(217 67% 27%)' }}>
                   SIPAG
                 </span>

@@ -71,7 +71,7 @@ export function Login() {
           <img
             src="/sipag-logo.png"
             alt="SIPAG"
-            className="w-14 h-14 rounded-2xl object-contain shadow-xl ring-2 ring-white/20"
+            className="w-14 h-14 rounded-2xl object-contain shadow-xl ring-2 ring-white/20 bg-white"
           />
           <div>
             <div className="text-3xl font-bold tracking-wide leading-none">SIPAG</div>
@@ -119,7 +119,7 @@ export function Login() {
       <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-10 bg-background">
         {/* Mobile logo */}
         <div className="lg:hidden flex items-center gap-3 mb-10">
-          <img src="/sipag-logo.png" alt="SIPAG" className="w-11 h-11 rounded-xl object-contain shadow" />
+          <img src="/sipag-logo.png" alt="SIPAG" className="w-11 h-11 rounded-xl object-contain shadow bg-white" />
           <div>
             <div className="text-2xl font-bold" style={{ color: 'hsl(217 67% 27%)' }}>SIPAG</div>
             <div className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">
