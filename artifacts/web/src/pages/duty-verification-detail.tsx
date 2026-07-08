@@ -31,35 +31,84 @@ async function apiFetch<T>(path: string): Promise<T> {
 
 interface ClinicalCase { id: string; name: string; category: string; requiredCount: number; }
 
-const statusSteps = [
-  { key: 'waiting_ci', label: 'Waiting for CI' },
-  { key: 'pending_scheduler', label: 'Verified by CI' },
-  { key: 'officially_verified', label: 'Officially Verified' },
+type DVStatus = 'waiting_ci' | 'pending_scheduler' | 'officially_verified';
+
+// ── 4-Step Status Timeline ────────────────────────────────────────────────────
+
+const STEPS = [
+  { label: 'Waiting for CI', sublabel: 'Request submitted' },
+  { label: 'Verified by CI', sublabel: 'Cases reviewed' },
+  { label: 'Pending Scheduler', sublabel: 'Awaiting paper docs' },
+  { label: 'Officially Verified', sublabel: 'Passport updated' },
 ] as const;
 
-type DVStatus = 'waiting_ci' | 'ci_verified' | 'pending_scheduler' | 'officially_verified';
+function StatusTimeline({ status, ciVerifiedAt }: { status: DVStatus; ciVerifiedAt: string | null | undefined }) {
+  // Determine which steps are "done"
+  // Step 0 (Waiting CI): always done once created
+  // Step 1 (Verified by CI): done when ciVerifiedAt is set
+  // Step 2 (Pending Scheduler): done when status is pending_scheduler or officially_verified
+  // Step 3 (Officially Verified): done when status is officially_verified
 
-function StatusTimeline({ status }: { status: DVStatus }) {
-  const stepIndex = status === 'officially_verified' ? 2
-    : status === 'pending_scheduler' || status === 'ci_verified' ? 1
+  const stepsDone = [
+    true, // Step 0: always past
+    !!ciVerifiedAt || status === 'pending_scheduler' || status === 'officially_verified',
+    status === 'pending_scheduler' || status === 'officially_verified',
+    status === 'officially_verified',
+  ];
+
+  // Current step index
+  const currentStep = status === 'officially_verified' ? 3
+    : status === 'pending_scheduler' ? 2
+    : ciVerifiedAt ? 1
     : 0;
+
   return (
-    <div className="flex items-center gap-2 py-2">
-      {statusSteps.map((step, i) => (
-        <div key={step.key} className="flex items-center gap-2 flex-1">
-          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-            i <= stepIndex ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-          }`}>
-            {i < stepIndex ? '✓' : i + 1}
+    <div className="py-2">
+      {/* Desktop: horizontal */}
+      <div className="hidden sm:flex items-center">
+        {STEPS.map((step, i) => (
+          <div key={step.label} className="flex items-center flex-1 last:flex-none">
+            <div className="flex flex-col items-center gap-1.5">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
+                stepsDone[i]
+                  ? i === currentStep
+                    ? 'bg-primary border-primary text-primary-foreground'
+                    : 'bg-emerald-500 border-emerald-500 text-white'
+                  : 'bg-background border-muted-foreground/30 text-muted-foreground'
+              }`}>
+                {stepsDone[i] && i < currentStep ? '✓' : i + 1}
+              </div>
+              <div className="text-center">
+                <p className={`text-xs font-semibold leading-tight ${stepsDone[i] ? 'text-foreground' : 'text-muted-foreground'}`}>
+                  {step.label}
+                </p>
+                <p className="text-[10px] text-muted-foreground">{step.sublabel}</p>
+              </div>
+            </div>
+            {i < STEPS.length - 1 && (
+              <div className={`flex-1 h-0.5 mx-2 mt-[-18px] ${stepsDone[i + 1] ? 'bg-emerald-500' : 'bg-muted-foreground/20'}`} />
+            )}
           </div>
-          <span className={`text-xs hidden sm:block ${i <= stepIndex ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-            {step.label}
-          </span>
-          {i < statusSteps.length - 1 && (
-            <div className={`flex-1 h-0.5 ${i < stepIndex ? 'bg-primary' : 'bg-muted'}`} />
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
+
+      {/* Mobile: vertical */}
+      <div className="flex sm:hidden flex-col gap-2">
+        {STEPS.map((step, i) => (
+          <div key={step.label} className="flex items-center gap-3">
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+              stepsDone[i]
+                ? i === currentStep
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-emerald-500 text-white'
+                : 'bg-muted text-muted-foreground'
+            }`}>
+              {stepsDone[i] && i < currentStep ? '✓' : i + 1}
+            </div>
+            <span className={`text-sm ${stepsDone[i] ? 'font-medium' : 'text-muted-foreground'}`}>{step.label}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -68,6 +117,8 @@ function formatTime(t: string | null | undefined): string {
   if (!t) return '—';
   return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 
 export function DutyVerificationDetailPage() {
   const { toast } = useToast();
@@ -93,19 +144,13 @@ export function DutyVerificationDetailPage() {
   const ciVerify = useCiVerifyDuty();
   const schedulerConfirm = useConfirmDutyVerification();
 
-  // Pre-select already-chosen cases when data loads
   const alreadySelected = dv?.selectedCases.map(c => c.clinicalCaseId) ?? [];
-
-  // For CI: filter cases relevant to this ward (by category matching dept name)
   const deptName = dv?.department?.name?.toLowerCase() ?? '';
   const relevantCases = allCases.filter(c => c.category.toLowerCase() === deptName);
-  // Also show all cases if no department-specific ones exist
   const casesToShow = relevantCases.length > 0 ? relevantCases : allCases;
 
   function toggleCase(caseId: string) {
-    setSelectedCaseIds(prev =>
-      prev.includes(caseId) ? prev.filter(id => id !== caseId) : [...prev, caseId]
-    );
+    setSelectedCaseIds(prev => prev.includes(caseId) ? prev.filter(id => id !== caseId) : [...prev, caseId]);
   }
 
   async function handleCiVerify() {
@@ -113,7 +158,7 @@ export function DutyVerificationDetailPage() {
       await ciVerify.mutateAsync({ id: dvId, caseIds: selectedCaseIds, remarks: remarks || undefined });
       toast({ title: 'Duty Verified ✓', description: 'The request is now pending Scheduler confirmation.' });
       setDone(true);
-      setTimeout(() => setLocation('/duty-verifications'), 1500);
+      setTimeout(() => setLocation('/verifications'), 1500);
     } catch (err: unknown) {
       toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed', variant: 'destructive' });
     }
@@ -122,7 +167,7 @@ export function DutyVerificationDetailPage() {
   async function handleSchedulerConfirm() {
     try {
       await schedulerConfirm.mutateAsync(dvId);
-      toast({ title: 'Verification Confirmed ✓', description: 'The student\'s passport has been updated.' });
+      toast({ title: 'Verification Confirmed ✓', description: "The student's Clinical Passport has been updated." });
       setDone(true);
       setTimeout(() => setLocation('/duty-verifications'), 1500);
     } catch (err: unknown) {
@@ -153,36 +198,28 @@ export function DutyVerificationDetailPage() {
 
   const canCiVerify = role === 'ci' && dv.status === 'waiting_ci';
   const canSchedulerConfirm = (role === 'scheduler' || role === 'admin') && dv.status === 'pending_scheduler';
-  const effectiveSelected = selectedCaseIds.length > 0 ? selectedCaseIds : alreadySelected;
+  const backPath = role === 'ci' ? '/verifications' : '/duty-verifications';
 
   return (
     <div className="space-y-6">
       <div>
-        {/* CI goes back to /verifications (their duty-verification list); scheduler/admin/student to /duty-verifications */}
-        <Link href={role === 'ci' ? '/verifications' : '/duty-verifications'}>
+        <Link href={backPath}>
           <Button variant="ghost" size="sm" className="mb-2 -ml-2">
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back
+            <ArrowLeft className="h-4 w-4 mr-1" /> Back
           </Button>
         </Link>
         <h2 className="text-3xl font-bold tracking-tight">Duty Verification</h2>
         <p className="text-muted-foreground mt-1">{dv.department?.name} · {dv.dutyDate}</p>
       </div>
 
-      {/* Status Timeline */}
+      {/* 4-Step Timeline */}
       <Card>
-        <CardContent className="pt-4 pb-3">
-          <StatusTimeline status={dv.status as DVStatus} />
-          <div className="mt-2 text-center">
-            {dv.status === 'waiting_ci' && (
-              <Badge variant="secondary" className="text-sm">Waiting for Clinical Instructor</Badge>
-            )}
-            {dv.status === 'pending_scheduler' && (
-              <Badge className="bg-amber-500 hover:bg-amber-600 text-sm">Pending Scheduler Confirmation</Badge>
-            )}
-            {dv.status === 'officially_verified' && (
-              <Badge className="bg-emerald-500 hover:bg-emerald-600 text-sm">Officially Verified ✓</Badge>
-            )}
+        <CardContent className="pt-5 pb-4">
+          <StatusTimeline status={dv.status as DVStatus} ciVerifiedAt={dv.ciVerifiedAt} />
+          <div className="mt-4 text-center">
+            {dv.status === 'waiting_ci' && <Badge variant="secondary" className="text-sm">Waiting for Clinical Instructor</Badge>}
+            {dv.status === 'pending_scheduler' && <Badge className="bg-amber-500 hover:bg-amber-600 text-sm">Pending Scheduler Confirmation</Badge>}
+            {dv.status === 'officially_verified' && <Badge className="bg-emerald-500 hover:bg-emerald-600 text-sm">Officially Verified ✓</Badge>}
           </div>
         </CardContent>
       </Card>
@@ -192,11 +229,7 @@ export function DutyVerificationDetailPage() {
         <div className="space-y-4 lg:col-span-2">
           {/* Student Info */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <User className="h-4 w-4" /> Student Information
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><User className="h-4 w-4" /> Student Information</CardTitle></CardHeader>
             <CardContent>
               <div className="flex items-center gap-4">
                 <Avatar className="h-12 w-12">
@@ -212,18 +245,12 @@ export function DutyVerificationDetailPage() {
 
           {/* Duty Details */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <FileText className="h-4 w-4" /> Duty Details
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><FileText className="h-4 w-4" /> Duty Details</CardTitle></CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-muted-foreground">Duty Date</p>
-                  <p className="font-medium flex items-center gap-1 mt-0.5">
-                    <CalendarDays className="w-3.5 h-3.5 text-primary" />{dv.dutyDate}
-                  </p>
+                  <p className="font-medium flex items-center gap-1 mt-0.5"><CalendarDays className="w-3.5 h-3.5 text-primary" />{dv.dutyDate}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Clinical Instructor</p>
@@ -231,9 +258,7 @@ export function DutyVerificationDetailPage() {
                 </div>
                 <div>
                   <p className="text-muted-foreground">Hospital</p>
-                  <p className="font-medium flex items-center gap-1 mt-0.5">
-                    <MapPin className="w-3.5 h-3.5 text-primary" />{dv.hospital?.name ?? '—'}
-                  </p>
+                  <p className="font-medium flex items-center gap-1 mt-0.5"><MapPin className="w-3.5 h-3.5 text-primary" />{dv.hospital?.name ?? '—'}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Ward</p>
@@ -243,13 +268,9 @@ export function DutyVerificationDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Attendance Info */}
+          {/* Attendance Record */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Clock className="h-4 w-4" /> Attendance Record
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Clock className="h-4 w-4" /> Attendance Record</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -266,7 +287,7 @@ export function DutyVerificationDetailPage() {
                 </div>
                 <div>
                   <p className="text-muted-foreground">Status</p>
-                  <Badge variant={dv.attendance?.status === 'present' ? 'default' : 'secondary'} className="capitalize">
+                  <Badge variant={dv.attendance?.status === 'present' ? 'default' : 'secondary'} className="capitalize mt-0.5">
                     {dv.attendance?.status ?? '—'}
                   </Badge>
                 </div>
@@ -274,19 +295,13 @@ export function DutyVerificationDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Clinical Cases Checklist — CI action or read-only view */}
+          {/* Clinical Cases */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Stethoscope className="h-4 w-4" /> Clinical Cases
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Stethoscope className="h-4 w-4" /> Clinical Cases</CardTitle></CardHeader>
             <CardContent>
               {canCiVerify ? (
                 <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    Select all clinical cases completed during this duty:
-                  </p>
+                  <p className="text-sm text-muted-foreground">Select all clinical cases completed during this duty:</p>
                   {casesToShow.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-2">No cases configured for this ward.</p>
                   ) : (
@@ -308,29 +323,24 @@ export function DutyVerificationDetailPage() {
                   )}
                 </div>
               ) : (
-                // Read-only: show selected cases
                 <div className="space-y-2">
-                  {dv.selectedCases.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No cases selected yet.</p>
-                  ) : (
-                    dv.selectedCases.map(sc => (
+                  {dv.selectedCases.length === 0
+                    ? <p className="text-sm text-muted-foreground">No cases selected yet.</p>
+                    : dv.selectedCases.map(sc => (
                       <div key={sc.id} className="flex items-center gap-2 py-1.5 border-b last:border-0 text-sm">
                         <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
                         <span>{sc.clinicalCase?.name ?? sc.clinicalCaseId}</span>
                       </div>
-                    ))
-                  )}
+                    ))}
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* CI Remarks (if any) */}
+          {/* CI Remarks */}
           {dv.ciRemarks && (
             <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Clinical Instructor Remarks</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="text-base">Clinical Instructor Remarks</CardTitle></CardHeader>
               <CardContent>
                 <p className="text-sm border rounded-md p-3 bg-muted/30">{dv.ciRemarks}</p>
               </CardContent>
@@ -343,7 +353,7 @@ export function DutyVerificationDetailPage() {
           <Card className="sticky top-4">
             <CardHeader>
               <CardTitle className="text-base">
-                {canCiVerify ? 'Verify Duty' : canSchedulerConfirm ? 'Confirm Verification' : 'Verification Status'}
+                {canCiVerify ? 'Verify This Duty' : canSchedulerConfirm ? 'Confirm Verification' : 'Verification Status'}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -380,6 +390,12 @@ export function DutyVerificationDetailPage() {
                       <span className="text-muted-foreground">CI Verified</span>
                       <span className="font-medium text-emerald-600">✓</span>
                     </div>
+                    {dv.ciVerifiedAt && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">CI Verified At</span>
+                        <span className="font-medium">{new Date(dv.ciVerifiedAt).toLocaleDateString()}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Cases Selected</span>
                       <span className="font-medium">{dv.selectedCases.length}</span>

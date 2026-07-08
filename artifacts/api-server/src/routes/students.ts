@@ -8,20 +8,18 @@ import {
   clinicalCasesTable,
   departmentsTable,
   dutyVerificationsTable,
+  dutyVerificationCasesTable,
+  schedulesTable,
 } from "@workspace/db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
 
-// ── Face enrollment (face-api.js, client-side embeddings) ────────────────────
+// ── Face enrollment ────────────────────────────────────────────────────────────
 
 import { isValidDescriptor } from "../lib/face-recognition.js";
 
-/**
- * GET /api/students/me/face-descriptor
- * Returns whether the student has a stored face descriptor.
- */
 router.get("/students/me/face-descriptor", requireAuth, requireRole("student"), async (req, res): Promise<void> => {
   const [profile] = await db
     .select()
@@ -36,13 +34,6 @@ router.get("/students/me/face-descriptor", requireAuth, requireRole("student"), 
   res.json({ enrolled: Array.isArray(profile.faceDescriptor) && profile.faceDescriptor.length === 128 });
 });
 
-/**
- * POST /api/students/me/face-enroll
- * Body: { descriptor: number[] }  — 128-element face embedding from face-api.js
- *
- * Stores the client-computed face descriptor for future verification.
- * Re-enrollment simply overwrites the stored descriptor.
- */
 router.post("/students/me/face-enroll", requireAuth, requireRole("student"), async (req, res): Promise<void> => {
   const { descriptor } = req.body as { descriptor?: unknown };
 
@@ -79,60 +70,76 @@ router.post("/students/me/face-enroll", requireAuth, requireRole("student"), asy
 router.get("/students", requireAuth, async (req, res): Promise<void> => {
   const { search } = req.query as { search?: string };
 
-  const students = await db
+  const users = await db
     .select()
     .from(usersTable)
     .where(eq(usersTable.role, "student"));
 
-  const profiles = await Promise.all(
-    students.map(async (s) => {
+  const withProfiles = await Promise.all(
+    users.map(async (u) => {
       const [profile] = await db
         .select()
         .from(studentProfilesTable)
-        .where(eq(studentProfilesTable.userId, s.id));
-      const { passwordHash: _pw, ...safe } = s;
-      return { ...safe, studentProfile: profile ?? null };
+        .where(eq(studentProfilesTable.userId, u.id));
+      return { ...u, studentProfile: profile ?? null };
     }),
   );
 
-  if (search) {
-    const q = search.toLowerCase();
-    return void res.json(
-      profiles.filter(
-        (p) =>
-          p.firstName.toLowerCase().includes(q) ||
-          p.lastName.toLowerCase().includes(q) ||
-          p.email.toLowerCase().includes(q) ||
-          p.studentProfile?.studentNumber?.toLowerCase().includes(q),
-      ),
-    );
-  }
+  const filtered = search
+    ? withProfiles.filter(
+        (u) =>
+          u.firstName.toLowerCase().includes(search.toLowerCase()) ||
+          u.lastName.toLowerCase().includes(search.toLowerCase()) ||
+          u.email.toLowerCase().includes(search.toLowerCase()),
+      )
+    : withProfiles;
 
-  res.json(profiles);
+  res.json(filtered);
 });
 
-// ── Clinical Passport (Ward / Duty-Day based) ─────────────────────────────────
+// ── Student profile ────────────────────────────────────────────────────────────
 
-router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void> => {
+router.get("/students/:id", requireAuth, async (req, res): Promise<void> => {
   const { id } = req.params;
   const session = req.session;
 
-  // Students can only view their own passport
   if (session.role === "student" && session.userId !== id) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
 
-  // Fetch all active departments that have duty day requirements
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  if (!user || user.role !== "student") {
+    res.status(404).json({ error: "Student not found" });
+    return;
+  }
+
+  const [profile] = await db
+    .select()
+    .from(studentProfilesTable)
+    .where(eq(studentProfilesTable.userId, id));
+
+  res.json({ ...user, studentProfile: profile ?? null });
+});
+
+// ── Clinical Passport ──────────────────────────────────────────────────────────
+
+router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void> => {
+  const { id } = req.params;
+  const session = req.session;
+
+  if (session.role === "student" && session.userId !== id) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
   const allDepts = await db
     .select()
     .from(departmentsTable)
     .where(eq(departmentsTable.isActive, true));
 
-  // Include all departments with requiredDutyDays > 0
   const wardDepts = allDepts.filter(d => d.requiredDutyDays > 0);
 
-  // Count officially-verified duty verifications per department for this student
   const verifiedDuties = await db
     .select()
     .from(dutyVerificationsTable)
@@ -143,13 +150,11 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
       ),
     );
 
-  // Fetch all active clinical cases for case-based progress
   const allCases = await db
     .select()
     .from(clinicalCasesTable)
     .where(eq(clinicalCasesTable.isActive, true));
 
-  // Fetch verified case completions for this student
   const verifiedCompletions = await db
     .select()
     .from(caseCompletionsTable)
@@ -160,7 +165,6 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
       ),
     );
 
-  // Build per-ward progress
   const wards = wardDepts.map(dept => {
     const completedDutyDays = verifiedDuties.filter(
       dv => dv.departmentId === dept.id,
@@ -169,7 +173,6 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
     const completedDutyHours = completedDutyDays *
       (dept.requiredDutyDays > 0 ? dept.requiredDutyHours / dept.requiredDutyDays : 0);
 
-    // Cases for this ward: match by case category === department name
     const wardCases = allCases.filter(
       c => c.category.toLowerCase() === dept.name.toLowerCase(),
     );
@@ -197,7 +200,6 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
       ? Math.min(1, completedDutyDays / dept.requiredDutyDays)
       : 0;
 
-    // If ward has required cases, completion is limited by both days and cases
     let completionPct = daysPct;
     if (requiredCases.length > 0) {
       const totalCasesRequired = requiredCases.reduce((s, c) => s + c.required, 0);
@@ -226,7 +228,6 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
     };
   });
 
-  // Overall completion = avg across all wards weighted by required days
   const totalRequired = wardDepts.reduce((s, d) => s + d.requiredDutyDays, 0);
   const totalCompleted = wards.reduce((s, w) => s + Math.min(w.completedDutyDays, w.requiredDutyDays), 0);
   const overallCompletion = totalRequired > 0 ? totalCompleted / totalRequired : 0;
@@ -239,6 +240,176 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
     wards,
   });
 });
+
+// ── Ward Detail (for Clinical Passport drill-down) ────────────────────────────
+
+router.get("/students/:id/ward-detail/:departmentId", requireAuth, async (req, res): Promise<void> => {
+  const { id: studentId, departmentId } = req.params;
+  const session = req.session;
+
+  if (session.role === "student" && session.userId !== studentId) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const [dept] = await db.select().from(departmentsTable).where(eq(departmentsTable.id, departmentId));
+  if (!dept) {
+    res.status(404).json({ error: "Department not found" });
+    return;
+  }
+
+  // Get all schedules for this department (to find attendance records)
+  const scheduleList = await db
+    .select({
+      id: schedulesTable.id,
+      dutyDate: schedulesTable.dutyDate,
+      startTime: schedulesTable.startTime,
+      endTime: schedulesTable.endTime,
+    })
+    .from(schedulesTable)
+    .where(eq(schedulesTable.departmentId, departmentId));
+
+  const scheduleIds = scheduleList.map(s => s.id);
+  const scheduleMap = new Map(scheduleList.map(s => [s.id, s]));
+
+  // Attendance records for this student in this ward
+  let attendanceHistory: object[] = [];
+  if (scheduleIds.length > 0) {
+    const records = await db
+      .select()
+      .from(attendanceTable)
+      .where(
+        and(
+          eq(attendanceTable.studentId, studentId),
+          inArray(attendanceTable.scheduleId, scheduleIds),
+        ),
+      );
+
+    attendanceHistory = records.map(r => {
+      const schedule = scheduleMap.get(r.scheduleId);
+      let lateMinutes = 0;
+      if ((r.status === "late" || r.status === "present") && r.timeIn && schedule?.startTime) {
+        try {
+          const scheduledStart = new Date(`${schedule.dutyDate}T${schedule.startTime}:00`);
+          const actualTimeIn = new Date(r.timeIn as unknown as string);
+          lateMinutes = Math.max(0, Math.floor((actualTimeIn.getTime() - scheduledStart.getTime()) / 60000));
+        } catch {
+          lateMinutes = 0;
+        }
+      }
+      return {
+        id: r.id,
+        scheduleId: r.scheduleId,
+        dutyDate: schedule?.dutyDate ?? "",
+        timeIn: r.timeIn,
+        timeOut: r.timeOut,
+        status: r.status,
+        dutyHours: r.dutyHours,
+        lateMinutes,
+        gpsVerified: r.gpsVerified,
+        faceVerified: r.faceVerified,
+      };
+    }).sort((a: any, b: any) => (b.dutyDate > a.dutyDate ? 1 : -1));
+  }
+
+  // Verification history for this student in this ward
+  const verifications = await db
+    .select()
+    .from(dutyVerificationsTable)
+    .where(
+      and(
+        eq(dutyVerificationsTable.studentId, studentId),
+        eq(dutyVerificationsTable.departmentId, departmentId),
+      ),
+    );
+
+  const verificationHistory = await Promise.all(
+    verifications.map(async v => {
+      const [ci] = await db
+        .select({ firstName: usersTable.firstName, lastName: usersTable.lastName })
+        .from(usersTable)
+        .where(eq(usersTable.id, v.ciId));
+
+      const selectedCaseRows = await db
+        .select({ caseName: clinicalCasesTable.name })
+        .from(dutyVerificationCasesTable)
+        .leftJoin(clinicalCasesTable, eq(dutyVerificationCasesTable.clinicalCaseId, clinicalCasesTable.id))
+        .where(eq(dutyVerificationCasesTable.dutyVerificationId, v.id));
+
+      return {
+        id: v.id,
+        dutyDate: v.dutyDate,
+        status: v.status,
+        ciName: ci ? `${ci.firstName} ${ci.lastName}` : v.ciId,
+        ciRemarks: v.ciRemarks,
+        ciVerifiedAt: v.ciVerifiedAt,
+        schedulerConfirmedAt: v.schedulerConfirmedAt,
+        selectedCases: selectedCaseRows.map(c => c.caseName).filter(Boolean),
+      };
+    }),
+  );
+
+  verificationHistory.sort((a, b) => (b.dutyDate > a.dutyDate ? 1 : -1));
+
+  // Case progress for this ward
+  const wardCases = await db
+    .select()
+    .from(clinicalCasesTable)
+    .where(
+      and(
+        eq(clinicalCasesTable.isActive, true),
+        sql`LOWER(${clinicalCasesTable.category}) = LOWER(${dept.name})`,
+      ),
+    );
+
+  let caseProgress: object[] = [];
+  if (wardCases.length > 0) {
+    const caseIds = wardCases.map(c => c.id);
+    const completions = await db
+      .select()
+      .from(caseCompletionsTable)
+      .where(
+        and(
+          eq(caseCompletionsTable.studentId, studentId),
+          eq(caseCompletionsTable.status, "verified"),
+          inArray(caseCompletionsTable.clinicalCaseId, caseIds),
+        ),
+      );
+
+    const caseCounts: Record<string, number> = {};
+    for (const c of completions) {
+      caseCounts[c.clinicalCaseId] = (caseCounts[c.clinicalCaseId] ?? 0) + 1;
+    }
+
+    caseProgress = wardCases.map(c => ({
+      caseId: c.id,
+      caseName: c.name,
+      required: c.requiredCount,
+      verified: caseCounts[c.id] ?? 0,
+      remaining: Math.max(0, c.requiredCount - (caseCounts[c.id] ?? 0)),
+    }));
+  }
+
+  // Statistics
+  const completedDutyDays = verifications.filter(v => v.status === "officially_verified").length;
+  const absenceCount = (attendanceHistory as any[]).filter(r => r.status === "absent").length;
+  const totalLateMinutes = (attendanceHistory as any[]).reduce((sum, r) => sum + (r.lateMinutes ?? 0), 0);
+
+  res.json({
+    departmentId,
+    wardName: dept.name,
+    requiredDutyDays: dept.requiredDutyDays,
+    requiredDutyHours: dept.requiredDutyHours,
+    completedDutyDays,
+    absenceCount,
+    totalLateMinutes,
+    attendanceHistory,
+    verificationHistory,
+    cases: caseProgress,
+  });
+});
+
+// ── Attendance history ────────────────────────────────────────────────────────
 
 router.get("/students/:id/attendance", requireAuth, async (req, res): Promise<void> => {
   const { id } = req.params;
@@ -256,6 +427,8 @@ router.get("/students/:id/attendance", requireAuth, async (req, res): Promise<vo
 
   res.json(records);
 });
+
+// ── Hours ─────────────────────────────────────────────────────────────────────
 
 router.get("/students/:id/hours", requireAuth, async (req, res): Promise<void> => {
   const { id } = req.params;

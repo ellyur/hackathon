@@ -8,22 +8,25 @@ import {
   attendanceTable,
   schedulesTable,
   scheduleStudentsTable,
+  departmentsTable,
+  dutyVerificationsTable,
 } from "@workspace/db";
-import { eq, and, count, sql } from "drizzle-orm";
+import { eq, and, count } from "drizzle-orm";
 import { requireRole } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
 
-// Scoring weights
+// Scoring weights (must sum to ≤ 120 to keep scores in 0-100 range from base 50)
 const WEIGHTS = {
-  needsRequiredCase: 40,
-  noConflict: 25,
-  attendanceAbove95: 20,
-  lowerHours: 15,
-  highPriorityMakeup: 10,
-  moreThan5Late: -20,
-  moreThan3Absent: -30,
-  alreadyCompletedCase: -40,
+  needsRequiredCase: 30,        // Missing required clinical case for this ward
+  noConflict: 25,               // No scheduling conflict on this date
+  attendanceAbove95: 15,        // Good attendance record
+  remainingDutyDays: 15,        // Student still needs duty days in this ward
+  balancedSection: 10,          // Section underrepresented in this schedule
+  highPriorityMakeup: 10,       // Needs a makeup duty
+  moreThan5Late: -20,           // Too many late records
+  moreThan3Absent: -30,         // Too many absences
+  alreadyCompletedCase: -30,    // Already completed all required cases (penalty)
 };
 
 interface StudentStats {
@@ -94,26 +97,42 @@ async function scoreStudent(
   targetCaseIds: string[],
   targetCaseRequirements: Record<string, number>,
   scheduleDate?: string,
+  departmentId?: string,
+  sectionCounts?: Record<string, number>,
 ): Promise<{ score: number; reasons: Array<{ criterion: string; weight: number; applied: boolean; description: string }> }> {
   const reasons: Array<{ criterion: string; weight: number; applied: boolean; description: string }> = [];
   let score = 50;
 
-  // Needs required case
+  // ── Missing Required Clinical Case ────────────────────────────────────────────
   const needsCase =
     targetCaseIds.length === 0 ||
     targetCaseIds.some((cid) => {
       const required = targetCaseRequirements[cid] ?? 1;
       return (stats.verifiedCaseCounts[cid] ?? 0) < required;
     });
-  reasons.push({ criterion: "Needs Required Clinical Case", weight: WEIGHTS.needsRequiredCase, applied: needsCase, description: needsCase ? "Student still needs case exposure in this rotation" : "Student has completed required cases" });
+  reasons.push({
+    criterion: "Missing Required Clinical Case",
+    weight: WEIGHTS.needsRequiredCase,
+    applied: needsCase,
+    description: needsCase
+      ? "Student still needs clinical case exposure in this ward"
+      : "Student has already completed all required cases",
+  });
   if (needsCase) score += WEIGHTS.needsRequiredCase;
 
-  // Already completed (penalty)
+  // Already completed all (penalty)
   const alreadyCompleted = targetCaseIds.length > 0 && !needsCase;
-  reasons.push({ criterion: "Already Completed Required Case", weight: WEIGHTS.alreadyCompletedCase, applied: alreadyCompleted, description: alreadyCompleted ? "Student has already completed all required cases" : "Student still has cases to complete" });
+  reasons.push({
+    criterion: "All Required Cases Completed",
+    weight: WEIGHTS.alreadyCompletedCase,
+    applied: alreadyCompleted,
+    description: alreadyCompleted
+      ? "Student has already completed all required cases for this ward"
+      : "Student still has cases to complete",
+  });
   if (alreadyCompleted) score += WEIGHTS.alreadyCompletedCase;
 
-  // No conflict
+  // ── No Scheduling Conflict ─────────────────────────────────────────────────────
   let hasConflict = false;
   if (scheduleDate) {
     const conflictLinks = await db
@@ -131,45 +150,135 @@ async function scoreStudent(
       }
     }
   }
-  reasons.push({ criterion: "No Existing Duty Conflict", weight: WEIGHTS.noConflict, applied: !hasConflict, description: hasConflict ? "Student has another duty on this date" : "Student has no scheduling conflicts" });
+  reasons.push({
+    criterion: "No Schedule Conflict",
+    weight: WEIGHTS.noConflict,
+    applied: !hasConflict,
+    description: hasConflict
+      ? "Student already has a duty assigned on this date"
+      : "Student has no scheduling conflicts on this date",
+  });
   if (!hasConflict) score += WEIGHTS.noConflict;
 
-  // Attendance >= 95%
+  // ── Good Attendance ───────────────────────────────────────────────────────────
   const goodAttendance = stats.attendanceRate >= 95;
-  reasons.push({ criterion: "Attendance Rate Above 95%", weight: WEIGHTS.attendanceAbove95, applied: goodAttendance, description: `Student attendance rate: ${stats.attendanceRate}%` });
+  reasons.push({
+    criterion: "Good Attendance Record",
+    weight: WEIGHTS.attendanceAbove95,
+    applied: goodAttendance,
+    description: `Student attendance rate: ${stats.attendanceRate}%`,
+  });
   if (goodAttendance) score += WEIGHTS.attendanceAbove95;
 
-  // Lower hours
-  const lowerHours = stats.totalHoursCompleted < 250;
-  reasons.push({ criterion: "Lower Completed Duty Hours", weight: WEIGHTS.lowerHours, applied: lowerHours, description: `Student has completed ${stats.totalHoursCompleted.toFixed(1)} hours` });
-  if (lowerHours) score += WEIGHTS.lowerHours;
+  // ── Remaining Duty Days in Target Ward ────────────────────────────────────────
+  let remainingDutyDays = 0;
+  let requiredDutyDays = 0;
+  if (departmentId) {
+    const [dept] = await db.select().from(departmentsTable).where(eq(departmentsTable.id, departmentId));
+    if (dept) {
+      requiredDutyDays = dept.requiredDutyDays;
+      const [verifiedDuties] = await db
+        .select({ cnt: count() })
+        .from(dutyVerificationsTable)
+        .where(
+          and(
+            eq(dutyVerificationsTable.studentId, stats.id),
+            eq(dutyVerificationsTable.departmentId, departmentId),
+            eq(dutyVerificationsTable.status, "officially_verified"),
+          ),
+        );
+      const completedDays = Number(verifiedDuties?.cnt ?? 0);
+      remainingDutyDays = Math.max(0, requiredDutyDays - completedDays);
+    }
+  }
+  const needsDutyDays = remainingDutyDays > 0;
+  reasons.push({
+    criterion: "Remaining Duty Days in Ward",
+    weight: WEIGHTS.remainingDutyDays,
+    applied: needsDutyDays,
+    description: needsDutyDays
+      ? `Student needs ${remainingDutyDays} more duty day${remainingDutyDays !== 1 ? "s" : ""} in this ward`
+      : requiredDutyDays === 0
+      ? "No duty day requirements configured for this ward"
+      : "Student has completed all required duty days in this ward",
+  });
+  if (needsDutyDays) score += WEIGHTS.remainingDutyDays;
 
-  // Needs makeup
-  reasons.push({ criterion: "High Priority Make-up Duty", weight: WEIGHTS.highPriorityMakeup, applied: stats.needsMakeup, description: stats.needsMakeup ? "Student needs a make-up duty" : "Student does not need make-up" });
+  // ── Balanced Section Distribution ─────────────────────────────────────────────
+  let sectionBalanced = false;
+  if (sectionCounts && stats.section) {
+    const totalAssigned = Object.values(sectionCounts).reduce((a, b) => a + b, 0);
+    const sectionCount = sectionCounts[stats.section] ?? 0;
+    const avgPerSection = totalAssigned > 0
+      ? totalAssigned / Object.keys(sectionCounts).length
+      : 0;
+    sectionBalanced = sectionCount <= avgPerSection;
+  } else if (!stats.section) {
+    sectionBalanced = false;
+  } else {
+    // No students yet → all sections are equally represented (balanced)
+    sectionBalanced = true;
+  }
+  reasons.push({
+    criterion: "Balanced Section Distribution",
+    weight: WEIGHTS.balancedSection,
+    applied: sectionBalanced,
+    description: stats.section
+      ? sectionBalanced
+        ? `Section ${stats.section} is underrepresented in this schedule`
+        : `Section ${stats.section} already has sufficient representation`
+      : "No section information available for this student",
+  });
+  if (sectionBalanced) score += WEIGHTS.balancedSection;
+
+  // ── High Priority Makeup ──────────────────────────────────────────────────────
+  reasons.push({
+    criterion: "High Priority Makeup Duty",
+    weight: WEIGHTS.highPriorityMakeup,
+    applied: stats.needsMakeup,
+    description: stats.needsMakeup
+      ? "Student has a pending makeup duty"
+      : "Student does not need a makeup duty",
+  });
   if (stats.needsMakeup) score += WEIGHTS.highPriorityMakeup;
 
-  // Too many late
+  // ── Penalties ─────────────────────────────────────────────────────────────────
   const tooManyLate = stats.lateCount > 5;
-  reasons.push({ criterion: "More than 5 Late Records", weight: WEIGHTS.moreThan5Late, applied: tooManyLate, description: `Student has ${stats.lateCount} late record(s)` });
+  reasons.push({
+    criterion: "Excessive Late Records",
+    weight: WEIGHTS.moreThan5Late,
+    applied: tooManyLate,
+    description: `Student has ${stats.lateCount} late record${stats.lateCount !== 1 ? "s" : ""}`,
+  });
   if (tooManyLate) score += WEIGHTS.moreThan5Late;
 
-  // Too many absences
   const tooManyAbsent = stats.absenceCount > 3;
-  reasons.push({ criterion: "More than 3 Absences", weight: WEIGHTS.moreThan3Absent, applied: tooManyAbsent, description: `Student has ${stats.absenceCount} absence(s)` });
+  reasons.push({
+    criterion: "Excessive Absences",
+    weight: WEIGHTS.moreThan3Absent,
+    applied: tooManyAbsent,
+    description: `Student has ${stats.absenceCount} absence${stats.absenceCount !== 1 ? "s" : ""}`,
+  });
   if (tooManyAbsent) score += WEIGHTS.moreThan3Absent;
 
   return { score: Math.max(0, Math.min(100, score)), reasons };
 }
+
+// ── GET /api/recommendations ──────────────────────────────────────────────────
 
 router.get("/recommendations", requireRole("scheduler", "admin"), async (req, res): Promise<void> => {
   const { scheduleId, caseIds } = req.query as { scheduleId?: string; caseIds?: string };
 
   const targetCaseIds = caseIds ? caseIds.split(",").filter(Boolean) : [];
   let scheduleDate: string | undefined;
+  let departmentId: string | undefined;
 
   if (scheduleId) {
     const [sch] = await db.select().from(schedulesTable).where(eq(schedulesTable.id, scheduleId));
-    if (sch) scheduleDate = sch.dutyDate;
+    if (sch) {
+      scheduleDate = sch.dutyDate;
+      departmentId = sch.departmentId;
+    }
   }
 
   // Fetch required counts for targeted cases
@@ -183,6 +292,25 @@ router.get("/recommendations", requireRole("scheduler", "admin"), async (req, re
     }
   }
 
+  // Get already-assigned students to compute section distribution
+  const sectionCounts: Record<string, number> = {};
+  if (scheduleId) {
+    const assigned = await db
+      .select({ studentId: scheduleStudentsTable.studentId })
+      .from(scheduleStudentsTable)
+      .where(eq(scheduleStudentsTable.scheduleId, scheduleId));
+
+    for (const a of assigned) {
+      const [profile] = await db
+        .select({ section: studentProfilesTable.section })
+        .from(studentProfilesTable)
+        .where(eq(studentProfilesTable.userId, a.studentId));
+      if (profile?.section) {
+        sectionCounts[profile.section] = (sectionCounts[profile.section] ?? 0) + 1;
+      }
+    }
+  }
+
   const students = await db
     .select()
     .from(usersTable)
@@ -191,7 +319,14 @@ router.get("/recommendations", requireRole("scheduler", "admin"), async (req, re
   const recommendations = await Promise.all(
     students.map(async (u) => {
       const stats = await buildStudentStats(u.id);
-      const { score, reasons } = await scoreStudent(stats, targetCaseIds, targetCaseRequirements, scheduleDate);
+      const { score, reasons } = await scoreStudent(
+        stats,
+        targetCaseIds,
+        targetCaseRequirements,
+        scheduleDate,
+        departmentId,
+        sectionCounts,
+      );
       return { studentId: u.id, score, reasons, student: stats };
     }),
   );
@@ -199,6 +334,8 @@ router.get("/recommendations", requireRole("scheduler", "admin"), async (req, re
   recommendations.sort((a, b) => b.score - a.score);
   res.json(recommendations);
 });
+
+// ── GET /api/recommendations/explanation ─────────────────────────────────────
 
 router.get("/recommendations/explanation", requireRole("scheduler", "admin"), async (req, res): Promise<void> => {
   const { studentId, scheduleId } = req.query as { studentId?: string; scheduleId?: string };
@@ -217,13 +354,34 @@ router.get("/recommendations/explanation", requireRole("scheduler", "admin"), as
   }
 
   let scheduleDate: string | undefined;
+  let departmentId: string | undefined;
+  const sectionCounts: Record<string, number> = {};
+
   if (scheduleId) {
     const [sch] = await db.select().from(schedulesTable).where(eq(schedulesTable.id, scheduleId));
-    if (sch) scheduleDate = sch.dutyDate;
+    if (sch) {
+      scheduleDate = sch.dutyDate;
+      departmentId = sch.departmentId;
+    }
+
+    const assigned = await db
+      .select({ studentId: scheduleStudentsTable.studentId })
+      .from(scheduleStudentsTable)
+      .where(eq(scheduleStudentsTable.scheduleId, scheduleId));
+
+    for (const a of assigned) {
+      const [profile] = await db
+        .select({ section: studentProfilesTable.section })
+        .from(studentProfilesTable)
+        .where(eq(studentProfilesTable.userId, a.studentId));
+      if (profile?.section) {
+        sectionCounts[profile.section] = (sectionCounts[profile.section] ?? 0) + 1;
+      }
+    }
   }
 
   const stats = await buildStudentStats(studentId);
-  const { score, reasons } = await scoreStudent(stats, [], {}, scheduleDate);
+  const { score, reasons } = await scoreStudent(stats, [], {}, scheduleDate, departmentId, sectionCounts);
 
   const appliedReasons = reasons.filter((r) => r.applied && r.weight > 0);
   const appliedPenalties = reasons.filter((r) => r.applied && r.weight < 0);
