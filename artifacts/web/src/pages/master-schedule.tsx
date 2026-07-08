@@ -271,8 +271,14 @@ export function MasterSchedulePage() {
 
   // ── Generate recommendations ──────────────────────────────────────────────
   const generateRecommendations = async () => {
-    if (!form.hospitalId || !form.departmentId || !form.ciId || !form.startTime || !form.endTime) {
-      toast({ title: 'Missing fields', description: 'Please fill in all required fields first.', variant: 'destructive' });
+    const missing: string[] = [];
+    if (!form.hospitalId) missing.push('Hospital');
+    if (!form.departmentId) missing.push('Department');
+    if (!form.ciId) missing.push('Clinical Instructor');
+    if (!form.startTime) missing.push('Start Time (select AM/PM)');
+    if (!form.endTime) missing.push('End Time (select AM/PM)');
+    if (missing.length > 0) {
+      toast({ title: 'Missing fields', description: missing.join(', '), variant: 'destructive' });
       return;
     }
     setLoadingRecs(true);
