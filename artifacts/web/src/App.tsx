@@ -22,7 +22,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
     return this.props.children;
   }
 }
-import { Route, Switch, Router as WouterRouter } from 'wouter';
+import { Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
 import { ProtectedRoute } from '@/components/protected-route';
 import { AppShell } from '@/components/app-shell';
 
@@ -81,70 +81,72 @@ const PlaceholderPage = ({ title }: { title: string }) => (
 );
 
 function Router() {
+  const [location] = useLocation();
+
+  // Public pages — no auth required, no AppShell
+  if (location === '/') return <Landing />;
+  if (location === '/login') return <Login />;
+
+  // Everything else is protected and rendered inside AppShell.
+  // IMPORTANT: the Switch here is NOT nested inside a <Route>, so Wouter
+  // never creates a nested base. Every inner Route matches the full path
+  // exactly as expected.
   return (
-    <Switch>
-      <Route path="/" component={Landing} />
-      <Route path="/login" component={Login} />
-      
-      {/* Protected Routes wrapped in Shell */}
-      <Route path="/:rest*">
-        <ProtectedRoute>
-          <AppShell>
-            <Switch>
-              <Route path="/dashboard" component={Dashboard} />
-              
-              <Route path="/notifications" component={NotificationsPage} />
-              <Route path="/announcements" component={AnnouncementsPage} />
-              <Route path="/settings/profile" component={ProfileSettingsPage} />
+    <ProtectedRoute>
+      <AppShell>
+        <Switch>
+          <Route path="/dashboard" component={Dashboard} />
 
-              {/* Student */}
-              <Route path="/schedule" component={MySchedulePage} />
-              <Route path="/schedule/:id" component={TimeInSimulatorPage} />
-              <Route path="/profile/face-setup" component={FaceSetupPage} />
-              <Route path="/passport" component={ClinicalPassportPage} />
-              <Route path="/passport/submit" component={SubmitCasePage} />
-              <Route path="/attendance" component={AttendanceHistoryPage} />
-              <Route path="/slots" component={AvailableSlotsPage} />
-              <Route path="/slots/my-applications" component={MyApplicationsPage} />
+          <Route path="/notifications" component={NotificationsPage} />
+          <Route path="/announcements" component={AnnouncementsPage} />
+          <Route path="/settings/profile" component={ProfileSettingsPage} />
 
-              {/* CI */}
-              <Route path="/duties" component={MyDutiesPage} />
-              <Route path="/duties/:id/attendance" component={AttendanceRosterPage} />
-              <Route path="/duties/:id/verify" component={VerifyCasePage} />
+          {/* Student */}
+          <Route path="/schedule" component={MySchedulePage} />
+          <Route path="/schedule/:id" component={TimeInSimulatorPage} />
+          <Route path="/profile/face-setup" component={FaceSetupPage} />
+          <Route path="/passport" component={ClinicalPassportPage} />
+          <Route path="/passport/submit" component={SubmitCasePage} />
+          <Route path="/attendance" component={AttendanceHistoryPage} />
+          <Route path="/slots" component={AvailableSlotsPage} />
+          <Route path="/slots/my-applications" component={MyApplicationsPage} />
 
-              {/* Scheduler */}
-              <Route path="/schedules" component={MasterSchedulePage} />
-              <Route path="/schedules/create" component={CreateSchedulePage} />
-              <Route path="/schedules/:id/edit" component={EditSchedulePage} />
-              <Route path="/schedules/:id/recommendations" component={StudentRecommendationsPage} />
-              <Route path="/students" component={StudentRosterPage} />
-              <Route path="/students/:id" component={StudentProfilePage} />
-              <Route path="/slots/create" component={CreateSlotPage} />
-              <Route path="/slots/:id/applications" component={SlotApplicationsPage} />
-              <Route path="/makeup-duties" component={MakeupDutiesQueuePage} />
-              <Route path="/case-gaps" component={CaseGapsMatrixPage} />
-              <Route path="/verifications" component={PendingVerificationsPage} />
-              <Route path="/verifications/:id" component={ReviewVerificationPage} />
-              <Route path="/announcements/manage" component={ManageAnnouncementsPage} />
+          {/* CI */}
+          <Route path="/duties" component={MyDutiesPage} />
+          <Route path="/duties/:id/attendance" component={AttendanceRosterPage} />
+          <Route path="/duties/:id/verify" component={VerifyCasePage} />
 
-              {/* Admin */}
-              <Route path="/admin/users" component={AdminUsersPage} />
-              <Route path="/admin/users/create" component={CreateUserPage} />
-              <Route path="/admin/hospitals" component={AdminHospitalsPage} />
-              <Route path="/admin/hospitals/:id/departments" component={AdminDepartmentsPage} />
-              <Route path="/admin/cases" component={AdminCasesPage} />
-              <Route path="/admin/recommendation-weights" component={RecommendationWeightsPage} />
-              <Route path="/admin/analytics" component={AdminAnalyticsPage} />
-              <Route path="/admin/reports" component={AdminReportsPage} />
-              <Route path="/admin/audit" component={AdminAuditPage} />
-              <Route path="/admin/settings" component={AdminSettingsPage} />
+          {/* Scheduler */}
+          <Route path="/schedules" component={MasterSchedulePage} />
+          <Route path="/schedules/create" component={CreateSchedulePage} />
+          <Route path="/schedules/:id/edit" component={EditSchedulePage} />
+          <Route path="/schedules/:id/recommendations" component={StudentRecommendationsPage} />
+          <Route path="/students" component={StudentRosterPage} />
+          <Route path="/students/:id" component={StudentProfilePage} />
+          <Route path="/slots/create" component={CreateSlotPage} />
+          <Route path="/slots/:id/applications" component={SlotApplicationsPage} />
+          <Route path="/makeup-duties" component={MakeupDutiesQueuePage} />
+          <Route path="/case-gaps" component={CaseGapsMatrixPage} />
+          <Route path="/verifications" component={PendingVerificationsPage} />
+          <Route path="/verifications/:id" component={ReviewVerificationPage} />
+          <Route path="/announcements/manage" component={ManageAnnouncementsPage} />
 
-              <Route component={NotFound} />
-            </Switch>
-          </AppShell>
-        </ProtectedRoute>
-      </Route>
-    </Switch>
+          {/* Admin */}
+          <Route path="/admin/users" component={AdminUsersPage} />
+          <Route path="/admin/users/create" component={CreateUserPage} />
+          <Route path="/admin/hospitals" component={AdminHospitalsPage} />
+          <Route path="/admin/hospitals/:id/departments" component={AdminDepartmentsPage} />
+          <Route path="/admin/cases" component={AdminCasesPage} />
+          <Route path="/admin/recommendation-weights" component={RecommendationWeightsPage} />
+          <Route path="/admin/analytics" component={AdminAnalyticsPage} />
+          <Route path="/admin/reports" component={AdminReportsPage} />
+          <Route path="/admin/audit" component={AdminAuditPage} />
+          <Route path="/admin/settings" component={AdminSettingsPage} />
+
+          <Route component={NotFound} />
+        </Switch>
+      </AppShell>
+    </ProtectedRoute>
   );
 }
 
