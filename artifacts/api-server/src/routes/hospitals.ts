@@ -9,21 +9,20 @@ const router: IRouter = Router();
 // ── Hospitals ─────────────────────────────────────────────────────────────────
 
 router.get("/hospitals", requireAuth, async (_req, res): Promise<void> => {
-  const hospitals = await db
-    .select()
-    .from(hospitalsTable)
-    .where(eq(hospitalsTable.isActive, true));
+  const [hospitals, allDepts] = await Promise.all([
+    db.select().from(hospitalsTable).where(eq(hospitalsTable.isActive, true)),
+    db.select().from(departmentsTable).where(eq(departmentsTable.isActive, true)),
+  ]);
 
-  const withDepts = await Promise.all(
-    hospitals.map(async (h) => {
-      const departments = await db
-        .select()
-        .from(departmentsTable)
-        .where(and(eq(departmentsTable.hospitalId, h.id), eq(departmentsTable.isActive, true)));
-      return { ...h, departments };
-    }),
-  );
+  // Group departments by hospitalId in JS — single query instead of N+1
+  const deptsByHospital = new Map<string, typeof allDepts>();
+  for (const d of allDepts) {
+    const list = deptsByHospital.get(d.hospitalId) ?? [];
+    list.push(d);
+    deptsByHospital.set(d.hospitalId, list);
+  }
 
+  const withDepts = hospitals.map(h => ({ ...h, departments: deptsByHospital.get(h.id) ?? [] }));
   res.json(withDepts);
 });
 

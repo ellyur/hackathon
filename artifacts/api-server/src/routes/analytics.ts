@@ -86,8 +86,8 @@ router.get("/analytics/students-at-risk", requireRole("admin", "scheduler"), asy
 
   const studentIds = students.map((s) => s.id);
 
-  // Fetch profiles, absences, late counts, verified cases, and total hours in parallel
-  const [profiles, absenceRows, lateRows, verifiedRows, totalCasesRow] = await Promise.all([
+  // Fetch profiles, absences, late counts, verified cases, duty hours, and total required in parallel
+  const [profiles, absenceRows, lateRows, verifiedRows, hoursRows, totalCasesRow] = await Promise.all([
     db.select().from(studentProfilesTable).where(inArray(studentProfilesTable.userId, studentIds)),
     db.select({ studentId: attendanceTable.studentId, cnt: count() })
       .from(attendanceTable)
@@ -101,6 +101,10 @@ router.get("/analytics/students-at-risk", requireRole("admin", "scheduler"), asy
       .from(caseCompletionsTable)
       .where(and(inArray(caseCompletionsTable.studentId, studentIds), eq(caseCompletionsTable.status, "verified")))
       .groupBy(caseCompletionsTable.studentId),
+    db.select({ studentId: attendanceTable.studentId, totalHours: sum(attendanceTable.dutyHours) })
+      .from(attendanceTable)
+      .where(and(inArray(attendanceTable.studentId, studentIds), sql`${attendanceTable.dutyHours} IS NOT NULL`))
+      .groupBy(attendanceTable.studentId),
     db.select({ totalRequired: sql<number>`COALESCE(SUM(${clinicalCasesTable.requiredCount}), 1)` })
       .from(clinicalCasesTable).where(eq(clinicalCasesTable.isActive, true)),
   ]);
@@ -109,6 +113,7 @@ router.get("/analytics/students-at-risk", requireRole("admin", "scheduler"), asy
   const absenceMap = new Map(absenceRows.map((r) => [r.studentId, Number(r.cnt)]));
   const lateMap = new Map(lateRows.map((r) => [r.studentId, Number(r.cnt)]));
   const verifiedMap = new Map(verifiedRows.map((r) => [r.studentId, Number(r.cnt)]));
+  const hoursMap = new Map(hoursRows.map((r) => [r.studentId, Math.round(Number(r.totalHours ?? 0) * 100) / 100]));
   const totalRequired = Math.max(1, Number(totalCasesRow[0]?.totalRequired ?? 1));
 
   const atRisk = students
@@ -135,7 +140,7 @@ router.get("/analytics/students-at-risk", requireRole("admin", "scheduler"), asy
         absenceCount,
         lateCount,
         caseCompletionRate: Math.round(caseCompletionRate * 100) / 100,
-        hoursCompleted: 0, // attendance hours tracking not yet implemented
+        hoursCompleted: hoursMap.get(s.id) ?? 0,
         hoursRequired,
         isAtRisk,
       };
