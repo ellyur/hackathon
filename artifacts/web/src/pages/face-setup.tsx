@@ -95,15 +95,16 @@ export function FaceSetupPage() {
       return;
     }
 
-    stopCamera();
     setStep('uploading');
 
     try {
-      // Load face-api.js models (cached after first load)
+      // Load models first (cached after first load) — camera stays open during this
       await loadFaceApiModels();
 
-      // Extract 128-element face descriptor from the video frame
+      // Detect face from the LIVE video before stopping the camera
       const descriptor = await detectFaceDescriptor(vid);
+      stopCamera();
+
       if (!descriptor) {
         throw new Error('No face detected. Make sure your face is clearly visible and well-lit, then try again.');
       }

@@ -135,10 +135,11 @@ export function TimeInSimulatorPage() {
     setFaceDetected(true); // show "verifying…" overlay
 
     try {
-      // Load models (cached after first call) then extract descriptor
+      // Load models (cached after first call) — camera stays open during this
       await loadFaceApiModels();
-      const descriptor = await detectFaceDescriptor(vid);
 
+      // Detect from the LIVE video before stopping the camera
+      const descriptor = await detectFaceDescriptor(vid);
       stopCamera();
 
       if (!descriptor) {
