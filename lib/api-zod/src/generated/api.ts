@@ -97,6 +97,37 @@ export const GetMeResponse = zod.object({
 
 
 /**
+ * @summary Request a password reset token
+ */
+export const ForgotPasswordBody = zod.object({
+  "email": zod.string().email()
+})
+
+export const ForgotPasswordResponse = zod.object({
+  "message": zod.string(),
+  "resetToken": zod.string().optional().describe('Only issued because no email provider is configured for this demo project'),
+  "expiresAt": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Reset password using a token
+ */
+export const resetPasswordBodyNewPasswordMin = 8;
+
+
+
+export const ResetPasswordBody = zod.object({
+  "token": zod.string(),
+  "newPassword": zod.string().min(resetPasswordBodyNewPasswordMin)
+})
+
+export const ResetPasswordResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
  * @summary List all users
  */
 export const ListUsersQueryParams = zod.object({

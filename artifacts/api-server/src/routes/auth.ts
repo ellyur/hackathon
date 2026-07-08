@@ -1,7 +1,14 @@
 import { Router, type IRouter } from "express";
-import { db, usersTable, studentProfilesTable, ciProfilesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import {
+  db,
+  usersTable,
+  studentProfilesTable,
+  ciProfilesTable,
+  passwordResetTokensTable,
+} from "@workspace/db";
+import { eq, and, gt, isNull } from "drizzle-orm";
 import bcrypt from "bcrypt";
+import { randomUUID, randomBytes } from "crypto";
 import { requireAuth } from "../middlewares/auth.js";
 import { signToken } from "../lib/jwt.js";
 
@@ -66,6 +73,84 @@ router.post("/auth/logout", (req, res): void => {
     res.clearCookie("connect.sid");
     res.json({ message: "Logged out" });
   });
+});
+
+router.post("/auth/forgot-password", async (req, res): Promise<void> => {
+  const { email } = req.body as { email?: string };
+  if (!email) {
+    res.status(400).json({ error: "Email is required" });
+    return;
+  }
+
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.email, email.toLowerCase()));
+
+  // Always respond with 200 to avoid leaking which emails are registered.
+  if (!user || !user.isActive) {
+    res.json({ message: "If an account exists for that email, a reset link has been issued." });
+    return;
+  }
+
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+
+  await db.insert(passwordResetTokensTable).values({
+    id: randomUUID(),
+    userId: user.id,
+    token,
+    expiresAt,
+  });
+
+  // No email provider is configured for this project, so the reset token is
+  // returned directly in the response for the demo/reset-password flow to consume.
+  res.json({
+    message: "If an account exists for that email, a reset link has been issued.",
+    resetToken: token,
+    expiresAt,
+  });
+});
+
+router.post("/auth/reset-password", async (req, res): Promise<void> => {
+  const { token, newPassword } = req.body as { token?: string; newPassword?: string };
+  if (!token || !newPassword) {
+    res.status(400).json({ error: "Token and new password are required" });
+    return;
+  }
+  if (newPassword.length < 8) {
+    res.status(400).json({ error: "Password must be at least 8 characters" });
+    return;
+  }
+
+  const [resetRecord] = await db
+    .select()
+    .from(passwordResetTokensTable)
+    .where(
+      and(
+        eq(passwordResetTokensTable.token, token),
+        isNull(passwordResetTokensTable.usedAt),
+        gt(passwordResetTokensTable.expiresAt, new Date()),
+      ),
+    );
+
+  if (!resetRecord) {
+    res.status(400).json({ error: "Invalid or expired reset token" });
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await db
+    .update(usersTable)
+    .set({ passwordHash })
+    .where(eq(usersTable.id, resetRecord.userId));
+
+  await db
+    .update(passwordResetTokensTable)
+    .set({ usedAt: new Date() })
+    .where(eq(passwordResetTokensTable.id, resetRecord.id));
+
+  res.json({ message: "Password has been reset. You can now log in." });
 });
 
 router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {

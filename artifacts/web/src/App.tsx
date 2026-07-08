@@ -29,6 +29,8 @@ import { AppShell } from '@/components/app-shell';
 // Pages
 import Landing from '@/pages/landing';
 import { Login } from '@/pages/login';
+import { ForgotPasswordPage } from '@/pages/forgot-password';
+import { ResetPasswordPage } from '@/pages/reset-password';
 import { Dashboard } from '@/pages/dashboard';
 import { ClinicalPassportPage } from '@/pages/passport';
 import { SubmitCasePage } from '@/pages/submit-case';
@@ -86,6 +88,8 @@ function Router() {
   // Public pages — no auth required, no AppShell
   if (location === '/') return <Landing />;
   if (location === '/login') return <Login />;
+  if (location === '/forgot-password') return <ForgotPasswordPage />;
+  if (location === '/reset-password') return <ResetPasswordPage />;
 
   // Everything else is protected and rendered inside AppShell.
   // IMPORTANT: the Switch here is NOT nested inside a <Route>, so Wouter

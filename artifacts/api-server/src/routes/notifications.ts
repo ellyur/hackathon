@@ -2,9 +2,22 @@ import { Router, type IRouter } from "express";
 import { db, notificationsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { requireAuth } from "../middlewares/auth.js";
+import { requireAuth, requireRole } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
+
+// Admin-only notification log — view all notifications sent across the system.
+router.get("/notifications/all", requireRole("admin"), async (req, res): Promise<void> => {
+  const { userId, type } = req.query as { userId?: string; type?: string };
+  const conditions = [];
+  if (userId) conditions.push(eq(notificationsTable.userId, userId));
+  if (type) conditions.push(eq(notificationsTable.type, type as typeof notificationsTable.$inferSelect.type));
+
+  const notifications = conditions.length
+    ? await db.select().from(notificationsTable).where(and(...conditions)).orderBy(desc(notificationsTable.createdAt))
+    : await db.select().from(notificationsTable).orderBy(desc(notificationsTable.createdAt));
+  res.json(notifications);
+});
 
 router.get("/notifications", requireAuth, async (req, res): Promise<void> => {
   const notifications = await db

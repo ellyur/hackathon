@@ -12,6 +12,10 @@ import recommendationsRouter from "./recommendations.js";
 import notificationsRouter from "./notifications.js";
 import announcementsRouter from "./announcements.js";
 import analyticsRouter from "./analytics.js";
+import academicRouter from "./academic.js";
+import academicSchedulesRouter from "./academic-schedules.js";
+import evaluationsRouter from "./evaluations.js";
+import reportsRouter from "./reports.js";
 
 const router: IRouter = Router();
 

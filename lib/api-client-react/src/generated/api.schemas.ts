@@ -15,6 +15,27 @@ export interface LoginCredentials {
   password: string;
 }
 
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ForgotPasswordResult {
+  message: string;
+  /** Only issued because no email provider is configured for this demo project */
+  resetToken?: string;
+  expiresAt?: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  /** @minLength 8 */
+  newPassword: string;
+}
+
+export interface MessageResponse {
+  message: string;
+}
+
 export type AuthUserRole = typeof AuthUserRole[keyof typeof AuthUserRole];
 
 

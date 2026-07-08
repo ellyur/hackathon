@@ -7,3 +7,7 @@ export * from "./slots";
 export * from "./notifications";
 export * from "./announcements";
 export * from "./audit";
+export * from "./academic";
+export * from "./password-resets";
+export * from "./evaluations";
+export * from "./academic-schedules";

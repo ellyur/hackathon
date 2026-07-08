@@ -7,6 +7,7 @@ import {
   studentProfilesTable,
   auditLogsTable,
   notificationsTable,
+  hospitalsTable,
 } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -33,6 +34,23 @@ setInterval(() => {
 }, 10 * 60 * 1000).unref();
 
 const router: IRouter = Router();
+
+/** Great-circle distance between two lat/lng points, in meters. */
+function haversineDistanceMeters(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const R = 6371000; // Earth radius in meters
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 router.get("/attendance", requireAuth, async (req, res): Promise<void> => {
   const { scheduleId, studentId } = req.query as {
@@ -160,6 +178,33 @@ router.post("/attendance/time-in", requireRole("student"), async (req, res): Pro
   if (!schedule) {
     res.status(404).json({ error: "Schedule not found" });
     return;
+  }
+
+  // ── Server-side GPS radius enforcement ─────────────────────────────────────
+  // Never trust the client's gpsVerified flag alone — recompute distance from
+  // the hospital's configured attendance radius so the check can't be spoofed.
+  const [hospital] = await db
+    .select()
+    .from(hospitalsTable)
+    .where(eq(hospitalsTable.id, schedule.hospitalId));
+
+  if (
+    hospital &&
+    typeof body.studentLatitude === "number" &&
+    typeof body.studentLongitude === "number"
+  ) {
+    const distanceMeters = haversineDistanceMeters(
+      hospital.latitude,
+      hospital.longitude,
+      body.studentLatitude,
+      body.studentLongitude,
+    );
+    if (distanceMeters > hospital.attendanceRadius) {
+      res.status(400).json({
+        error: `You are ${Math.round(distanceMeters)}m from ${hospital.name}, which is outside the ${hospital.attendanceRadius}m attendance radius.`,
+      });
+      return;
+    }
   }
 
   // Verify the student is actually assigned to this schedule
