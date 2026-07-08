@@ -48,7 +48,7 @@ export function MasterSchedulePage() {
         <div className="flex gap-2">
           <Button variant="outline"><FileDown className="w-4 h-4 mr-2" /> Export</Button>
           <Button asChild>
-            <Link href="/schedules/new">
+            <Link href="/schedules/create">
               <CalendarIcon className="w-4 h-4 mr-2" /> New Schedule
             </Link>
           </Button>

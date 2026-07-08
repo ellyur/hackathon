@@ -17,7 +17,8 @@ import {
   X,
   Stethoscope,
   PieChart,
-  ScanFace
+  ScanFace,
+  PlusCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -204,5 +205,3 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Needed icon imported above but missing from lucide
-import { PlusCircle } from 'lucide-react';

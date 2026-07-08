@@ -9,7 +9,7 @@ import {
   clinicalCasesTable,
   hospitalsTable,
 } from "@workspace/db";
-import { eq, and, count, sql, desc, inArray } from "drizzle-orm";
+import { eq, and, count, sql, desc, inArray, gte, not } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
@@ -100,39 +100,41 @@ router.get("/analytics/case-gaps", requireRole("admin", "scheduler"), async (_re
     .from(clinicalCasesTable)
     .where(eq(clinicalCasesTable.isActive, true));
 
-  const matrix = await Promise.all(
-    students.map(async (s) => {
-      const completions = await db
-        .select()
-        .from(caseCompletionsTable)
-        .where(
-          and(eq(caseCompletionsTable.studentId, s.id), eq(caseCompletionsTable.status, "verified")),
-        );
+  const allCompletions = await db
+    .select()
+    .from(caseCompletionsTable)
+    .where(
+      and(
+        eq(caseCompletionsTable.status, "verified"),
+        inArray(caseCompletionsTable.studentId, students.map((s) => s.id)),
+      ),
+    );
 
-      const countMap: Record<string, number> = {};
-      for (const cc of completions) {
-        countMap[cc.clinicalCaseId] = (countMap[cc.clinicalCaseId] ?? 0) + 1;
-      }
-
-      const gaps = cases
-        .filter((c) => (countMap[c.id] ?? 0) < c.requiredCount)
-        .map((c) => ({
+  // Build flat gaps array: one entry per (student, case) pair where remaining > 0
+  const gaps: Array<{ studentId: string; caseId: string; completed: number; required: number; remaining: number }> = [];
+  for (const student of students) {
+    const countMap: Record<string, number> = {};
+    for (const cc of allCompletions.filter((c) => c.studentId === student.id)) {
+      countMap[cc.clinicalCaseId] = (countMap[cc.clinicalCaseId] ?? 0) + 1;
+    }
+    for (const c of cases) {
+      const completed = countMap[c.id] ?? 0;
+      if (completed < c.requiredCount) {
+        gaps.push({
+          studentId: student.id,
           caseId: c.id,
-          caseName: c.name,
+          completed,
           required: c.requiredCount,
-          completed: countMap[c.id] ?? 0,
-          remaining: c.requiredCount - (countMap[c.id] ?? 0),
-        }));
+          remaining: c.requiredCount - completed,
+        });
+      }
+    }
+  }
 
-      return {
-        studentId: s.id,
-        studentName: `${s.firstName} ${s.lastName}`,
-        gaps,
-      };
-    }),
-  );
+  // Strip passwordHash from student users before returning
+  const safeStudents = students.map(({ passwordHash: _pw, ...s }) => s);
 
-  res.json(matrix);
+  res.json({ cases, students: safeStudents, gaps });
 });
 
 router.get("/analytics/attendance-trend", requireRole("admin", "scheduler"), async (_req, res): Promise<void> => {
@@ -169,7 +171,7 @@ router.get("/analytics/hospital-utilization", requireRole("admin", "scheduler"),
       const [{ scheduleCount }] = await db
         .select({ scheduleCount: count() })
         .from(schedulesTable)
-        .where(eq(schedulesTable.hospitalId, h.id));
+        .where(and(eq(schedulesTable.hospitalId, h.id), eq(schedulesTable.status, "active")));
 
       const schedulesForHospital = await db
         .select({ id: schedulesTable.id })
@@ -189,13 +191,67 @@ router.get("/analytics/hospital-utilization", requireRole("admin", "scheduler"),
       return {
         hospitalId: h.id,
         hospitalName: h.name,
-        totalSchedules: Number(scheduleCount),
-        totalStudentAssignments: studentCount,
+        activeRotations: Number(scheduleCount),
+        studentCount,
       };
     }),
   );
 
   res.json(utilization);
+});
+
+router.get("/analytics/makeup-queue", requireRole("admin", "scheduler"), async (_req, res): Promise<void> => {
+  const since = new Date();
+  since.setDate(since.getDate() - 60);
+
+  // Find absence records in the last 60 days where makeup is not yet completed
+  const absences = await db
+    .select({
+      studentId: attendanceTable.studentId,
+      scheduleId: attendanceTable.scheduleId,
+      absenceDate: attendanceTable.createdAt,
+    })
+    .from(attendanceTable)
+    .where(
+      and(
+        eq(attendanceTable.status, "absent"),
+        eq(attendanceTable.needsMakeup, true),
+        eq(attendanceTable.makeupCompleted, false),
+        gte(attendanceTable.createdAt, since),
+      ),
+    )
+    .orderBy(desc(attendanceTable.createdAt));
+
+  if (absences.length === 0) {
+    res.json([]);
+    return;
+  }
+
+  const studentIds = [...new Set(absences.map((a) => a.studentId))];
+  const studentRows = await db
+    .select()
+    .from(usersTable)
+    .where(inArray(usersTable.id, studentIds));
+
+  const studentMap = new Map(studentRows.map((s) => [s.id, s]));
+  const now = Date.now();
+
+  const queue = absences.map((a) => {
+    const student = studentMap.get(a.studentId);
+    const absenceDate = a.absenceDate instanceof Date ? a.absenceDate : new Date(a.absenceDate);
+    const daysSinceAbsence = Math.floor((now - absenceDate.getTime()) / (1000 * 60 * 60 * 24));
+    return {
+      studentId: a.studentId,
+      firstName: student?.firstName ?? "",
+      lastName: student?.lastName ?? "",
+      avatarUrl: student?.avatarUrl ?? null,
+      absenceDate: absenceDate.toISOString().slice(0, 10),
+      scheduleId: a.scheduleId,
+      daysSinceAbsence,
+    };
+  }).sort((a, b) => b.daysSinceAbsence - a.daysSinceAbsence);
+
+  res.json(queue);
 });
 
 export default router;

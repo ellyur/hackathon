@@ -53,6 +53,20 @@ import { ReviewVerificationPage } from '@/pages/review-verification';
 import { CreateUserPage } from '@/pages/create-user';
 import { AdminAnalyticsPage } from '@/pages/admin-analytics';
 import { ProfileSettingsPage } from '@/pages/profile-settings';
+import { NotificationsPage } from '@/pages/notifications';
+import { AnnouncementsPage } from '@/pages/announcements';
+import { AttendanceHistoryPage } from '@/pages/attendance-history';
+import { MyApplicationsPage } from '@/pages/my-applications';
+import { StudentRecommendationsPage } from '@/pages/student-recommendations';
+import { VerifyCasePage } from '@/pages/verify-case';
+import { ManageAnnouncementsPage } from '@/pages/manage-announcements';
+import { AdminHospitalsPage } from '@/pages/admin-hospitals';
+import { AdminDepartmentsPage } from '@/pages/admin-departments';
+import { AdminCasesPage } from '@/pages/admin-cases';
+import { RecommendationWeightsPage } from '@/pages/recommendation-weights';
+import { AdminReportsPage } from '@/pages/admin-reports';
+import { AdminAuditPage } from '@/pages/admin-audit';
+import { AdminSettingsPage } from '@/pages/admin-settings';
 
 const queryClient = new QueryClient();
 
@@ -79,8 +93,8 @@ function Router() {
             <Switch>
               <Route path="/dashboard" component={Dashboard} />
               
-              <Route path="/notifications"><PlaceholderPage title="Notification Center" /></Route>
-              <Route path="/announcements"><PlaceholderPage title="Announcements" /></Route>
+              <Route path="/notifications" component={NotificationsPage} />
+              <Route path="/announcements" component={AnnouncementsPage} />
               <Route path="/settings/profile" component={ProfileSettingsPage} />
 
               {/* Student */}
@@ -89,20 +103,20 @@ function Router() {
               <Route path="/profile/face-setup" component={FaceSetupPage} />
               <Route path="/passport" component={ClinicalPassportPage} />
               <Route path="/passport/submit" component={SubmitCasePage} />
-              <Route path="/attendance"><PlaceholderPage title="Attendance History" /></Route>
+              <Route path="/attendance" component={AttendanceHistoryPage} />
               <Route path="/slots" component={AvailableSlotsPage} />
-              <Route path="/slots/my-applications"><PlaceholderPage title="My Applications" /></Route>
+              <Route path="/slots/my-applications" component={MyApplicationsPage} />
 
               {/* CI */}
               <Route path="/duties" component={MyDutiesPage} />
               <Route path="/duties/:id/attendance" component={AttendanceRosterPage} />
-              <Route path="/duties/:id/verify"><PlaceholderPage title="Verify Student Case" /></Route>
+              <Route path="/duties/:id/verify" component={VerifyCasePage} />
 
               {/* Scheduler */}
               <Route path="/schedules" component={MasterSchedulePage} />
               <Route path="/schedules/create" component={CreateSchedulePage} />
               <Route path="/schedules/:id/edit" component={EditSchedulePage} />
-              <Route path="/schedules/:id/recommendations"><PlaceholderPage title="Student Recommendations" /></Route>
+              <Route path="/schedules/:id/recommendations" component={StudentRecommendationsPage} />
               <Route path="/students" component={StudentRosterPage} />
               <Route path="/students/:id" component={StudentProfilePage} />
               <Route path="/slots/create" component={CreateSlotPage} />
@@ -111,19 +125,19 @@ function Router() {
               <Route path="/case-gaps" component={CaseGapsMatrixPage} />
               <Route path="/verifications" component={PendingVerificationsPage} />
               <Route path="/verifications/:id" component={ReviewVerificationPage} />
-              <Route path="/announcements/manage"><PlaceholderPage title="Manage Announcements" /></Route>
+              <Route path="/announcements/manage" component={ManageAnnouncementsPage} />
 
               {/* Admin */}
               <Route path="/admin/users" component={AdminUsersPage} />
               <Route path="/admin/users/create" component={CreateUserPage} />
-              <Route path="/admin/hospitals"><PlaceholderPage title="Manage Hospitals" /></Route>
-              <Route path="/admin/hospitals/:id/departments"><PlaceholderPage title="Manage Departments" /></Route>
-              <Route path="/admin/cases"><PlaceholderPage title="Clinical Cases Library" /></Route>
-              <Route path="/admin/recommendation-weights"><PlaceholderPage title="Recommendation Weights" /></Route>
+              <Route path="/admin/hospitals" component={AdminHospitalsPage} />
+              <Route path="/admin/hospitals/:id/departments" component={AdminDepartmentsPage} />
+              <Route path="/admin/cases" component={AdminCasesPage} />
+              <Route path="/admin/recommendation-weights" component={RecommendationWeightsPage} />
               <Route path="/admin/analytics" component={AdminAnalyticsPage} />
-              <Route path="/admin/reports"><PlaceholderPage title="Generate Reports" /></Route>
-              <Route path="/admin/audit"><PlaceholderPage title="Audit Logs" /></Route>
-              <Route path="/admin/settings"><PlaceholderPage title="System Settings" /></Route>
+              <Route path="/admin/reports" component={AdminReportsPage} />
+              <Route path="/admin/audit" component={AdminAuditPage} />
+              <Route path="/admin/settings" component={AdminSettingsPage} />
 
               <Route component={NotFound} />
             </Switch>

@@ -10,39 +10,14 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Pencil, BookOpen } from 'lucide-react';
+import { Plus, Pencil, BookOpen, Loader2 } from 'lucide-react';
+import { useListClinicalCases, useCreateClinicalCase, useUpdateClinicalCase } from '@workspace/api-client-react';
+import { useQueryClient } from '@tanstack/react-query';
 
-type Category = 'Delivery Room' | 'Medical-Surgical' | 'Pediatrics' | 'OB' | 'ICU';
+const CATEGORIES = ['Delivery Room', 'Medical-Surgical', 'Pediatrics', 'OB', 'ICU'] as const;
+type Category = typeof CATEGORIES[number];
 
-interface ClinicalCase {
-  id: string;
-  name: string;
-  description: string;
-  category: Category;
-  requiredCount: number;
-  isActive: boolean;
-}
-
-const MOCK_CASES: ClinicalCase[] = [
-  { id: 'c-001', name: 'Normal Spontaneous Delivery', description: 'Assist in normal vaginal delivery with maternal/fetal monitoring.', category: 'Delivery Room', requiredCount: 5, isActive: true },
-  { id: 'c-002', name: 'Episiotomy Care', description: 'Post-delivery perineal wound care and assessment.', category: 'Delivery Room', requiredCount: 3, isActive: true },
-  { id: 'c-003', name: 'Newborn Care', description: 'Initial newborn assessment, APGAR scoring and thermoregulation.', category: 'Delivery Room', requiredCount: 5, isActive: true },
-  { id: 'c-004', name: 'Wound Dressing', description: 'Sterile wound dressing change using aseptic technique.', category: 'Medical-Surgical', requiredCount: 8, isActive: true },
-  { id: 'c-005', name: 'IV Therapy', description: 'Intravenous line insertion and fluid management.', category: 'Medical-Surgical', requiredCount: 10, isActive: true },
-  { id: 'c-006', name: 'Post-Op Monitoring', description: 'Post-operative vital signs and complication monitoring.', category: 'Medical-Surgical', requiredCount: 5, isActive: false },
-  { id: 'c-007', name: 'Pediatric Vital Signs', description: 'Age-appropriate vital sign assessment for pediatric patients.', category: 'Pediatrics', requiredCount: 6, isActive: true },
-  { id: 'c-008', name: 'Pediatric Medication Admin', description: 'Weight-based medication calculation and administration.', category: 'Pediatrics', requiredCount: 5, isActive: true },
-  { id: 'c-009', name: 'Fever Management', description: 'Tepid sponge bath and antipyretic administration.', category: 'Pediatrics', requiredCount: 4, isActive: true },
-  { id: 'c-010', name: 'Prenatal Assessment', description: 'Leopold\'s maneuver and fundal height measurement.', category: 'OB', requiredCount: 5, isActive: true },
-  { id: 'c-011', name: 'Postpartum Care', description: 'Uterine involution assessment and lochia monitoring.', category: 'OB', requiredCount: 4, isActive: true },
-  { id: 'c-012', name: 'Breastfeeding Support', description: 'Lactation support and proper latch technique education.', category: 'OB', requiredCount: 3, isActive: true },
-  { id: 'c-013', name: 'Ventilator Care', description: 'Endotracheal tube care and ventilator parameter monitoring.', category: 'ICU', requiredCount: 3, isActive: true },
-  { id: 'c-014', name: 'Hemodynamic Monitoring', description: 'Arterial line and CVP monitoring in critically ill patients.', category: 'ICU', requiredCount: 3, isActive: true },
-  { id: 'c-015', name: 'Code Blue Response', description: 'Cardiopulmonary resuscitation and emergency response.', category: 'ICU', requiredCount: 2, isActive: false },
-];
-
-const CATEGORIES: Category[] = ['Delivery Room', 'Medical-Surgical', 'Pediatrics', 'OB', 'ICU'];
-const CATEGORY_COLORS: Record<Category, string> = {
+const CATEGORY_COLORS: Record<string, string> = {
   'Delivery Room': 'bg-pink-100 text-pink-700 border-pink-200',
   'Medical-Surgical': 'bg-blue-100 text-blue-700 border-blue-200',
   'Pediatrics': 'bg-yellow-100 text-yellow-700 border-yellow-200',
@@ -50,52 +25,90 @@ const CATEGORY_COLORS: Record<Category, string> = {
   'ICU': 'bg-red-100 text-red-700 border-red-200',
 };
 
-const emptyForm = { name: '', description: '', category: 'Delivery Room' as Category, requiredCount: '1', isActive: true };
+const emptyForm = { name: '', description: '', category: 'Delivery Room' as string, requiredCount: '1', isActive: true };
 
 export function AdminCasesPage() {
   const { toast } = useToast();
-  const [cases, setCases] = useState(MOCK_CASES);
+  const queryClient = useQueryClient();
+  const { data: cases = [], isLoading } = useListClinicalCases();
+  const createMutation = useCreateClinicalCase();
+  const updateMutation = useUpdateClinicalCase();
+
   const [tab, setTab] = useState('All');
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<ClinicalCase | null>(null);
+  const [editTargetId, setEditTargetId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [editForm, setEditForm] = useState(emptyForm);
 
   const filtered = tab === 'All' ? cases : cases.filter(c => c.category === tab);
 
   const handleAdd = () => {
-    const newCase: ClinicalCase = {
-      id: `c-${Date.now()}`,
-      name: form.name,
-      description: form.description,
-      category: form.category,
-      requiredCount: Number(form.requiredCount),
-      isActive: form.isActive,
-    };
-    setCases(prev => [...prev, newCase]);
-    setForm(emptyForm);
-    setAddOpen(false);
-    toast({ title: 'Case added', description: `${form.name} has been added to the library.` });
+    createMutation.mutate(
+      {
+        data: {
+          name: form.name,
+          description: form.description || undefined,
+          category: form.category,
+          requiredCount: Number(form.requiredCount),
+          isActive: form.isActive,
+        },
+      },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries();
+          setForm(emptyForm);
+          setAddOpen(false);
+          toast({ title: 'Case added', description: `${form.name} has been added to the library.` });
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to add case.', variant: 'destructive' }),
+      },
+    );
   };
 
   const handleEdit = () => {
-    if (!editTarget) return;
-    setCases(prev => prev.map(c => c.id === editTarget.id
-      ? { ...c, name: editForm.name, description: editForm.description, category: editForm.category, requiredCount: Number(editForm.requiredCount) }
-      : c
-    ));
-    setEditOpen(false);
-    toast({ title: 'Case updated', description: `${editForm.name} has been updated.` });
+    if (!editTargetId) return;
+    updateMutation.mutate(
+      {
+        id: editTargetId,
+        data: {
+          name: editForm.name,
+          description: editForm.description || undefined,
+          category: editForm.category,
+          requiredCount: Number(editForm.requiredCount),
+          isActive: editForm.isActive,
+        },
+      },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries();
+          setEditOpen(false);
+          toast({ title: 'Case updated', description: `${editForm.name} has been updated.` });
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to update case.', variant: 'destructive' }),
+      },
+    );
   };
 
-  const toggleActive = (id: string) => {
-    setCases(prev => prev.map(c => c.id === id ? { ...c, isActive: !c.isActive } : c));
+  const toggleActive = (c: typeof cases[number]) => {
+    updateMutation.mutate(
+      { id: c.id, data: { name: c.name, category: c.category, requiredCount: c.requiredCount, isActive: !c.isActive } },
+      {
+        onSuccess: () => queryClient.invalidateQueries(),
+        onError: () => toast({ title: 'Error', description: 'Failed to update status.', variant: 'destructive' }),
+      },
+    );
   };
 
-  const openEdit = (c: ClinicalCase) => {
-    setEditTarget(c);
-    setEditForm({ name: c.name, description: c.description, category: c.category, requiredCount: String(c.requiredCount), isActive: c.isActive });
+  const openEdit = (c: typeof cases[number]) => {
+    setEditTargetId(c.id);
+    setEditForm({
+      name: c.name,
+      description: c.description ?? '',
+      category: c.category,
+      requiredCount: String(c.requiredCount),
+      isActive: c.isActive,
+    });
     setEditOpen(true);
   };
 
@@ -111,7 +124,7 @@ export function AdminCasesPage() {
       </div>
       <div>
         <Label>Category</Label>
-        <Select value={values.category} onValueChange={v => onChange({ ...values, category: v as Category })}>
+        <Select value={values.category} onValueChange={v => onChange({ ...values, category: v })}>
           <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
           <SelectContent>
             {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
@@ -145,7 +158,9 @@ export function AdminCasesPage() {
           <CaseForm values={form} onChange={setForm} />
           <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-            <Button onClick={handleAdd} disabled={!form.name}>Add Case</Button>
+            <Button onClick={handleAdd} disabled={!form.name || createMutation.isPending}>
+              {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add Case'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -156,76 +171,84 @@ export function AdminCasesPage() {
           <CaseForm values={editForm} onChange={setEditForm} />
           <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button onClick={handleEdit}>Save Changes</Button>
+            <Button onClick={handleEdit} disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Changes'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Card>
-        <CardContent className="pt-4 pb-0 px-4">
-          <Tabs value={tab} onValueChange={setTab}>
-            <TabsList className="mb-4">
-              <TabsTrigger value="All">All ({cases.length})</TabsTrigger>
-              {CATEGORIES.map(c => (
-                <TabsTrigger key={c} value={c}>{c} ({cases.filter(x => x.category === c).length})</TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </CardContent>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Case Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead className="text-center">Required Count</TableHead>
-                <TableHead className="text-center">Status</TableHead>
-                <TableHead className="text-center">Active</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map(c => (
-                <TableRow key={c.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <BookOpen className="w-4 h-4 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">{c.name}</p>
-                        <p className="text-xs text-muted-foreground line-clamp-1">{c.description}</p>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${CATEGORY_COLORS[c.category]}`}>
-                      {c.category}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-center font-mono font-medium">{c.requiredCount}</TableCell>
-                  <TableCell className="text-center">
-                    {c.isActive
-                      ? <Badge className="bg-emerald-500 text-white">Active</Badge>
-                      : <Badge variant="secondary">Inactive</Badge>}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Switch checked={c.isActive} onCheckedChange={() => toggleActive(c.id)} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(c)}>
-                      <Pencil className="w-4 h-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filtered.length === 0 && (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="pt-4 pb-0 px-4">
+            <Tabs value={tab} onValueChange={setTab}>
+              <TabsList className="mb-4">
+                <TabsTrigger value="All">All ({cases.length})</TabsTrigger>
+                {CATEGORIES.map(c => (
+                  <TabsTrigger key={c} value={c}>{c} ({cases.filter(x => x.category === c).length})</TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </CardContent>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-10">No cases in this category.</TableCell>
+                  <TableHead>Case Name</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead className="text-center">Required Count</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-center">Active</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {filtered.map(c => (
+                  <TableRow key={c.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">{c.name}</p>
+                          <p className="text-xs text-muted-foreground line-clamp-1">{c.description}</p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${CATEGORY_COLORS[c.category] ?? 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                        {c.category}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center font-mono font-medium">{c.requiredCount}</TableCell>
+                    <TableCell className="text-center">
+                      {c.isActive
+                        ? <Badge className="bg-emerald-500 text-white">Active</Badge>
+                        : <Badge variant="secondary">Inactive</Badge>}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Switch checked={c.isActive} onCheckedChange={() => toggleActive(c)} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(c)}>
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {filtered.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-10">No cases in this category.</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
