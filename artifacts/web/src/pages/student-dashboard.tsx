@@ -36,8 +36,8 @@ function formatTime(t: string): string {
 function verificationStatusBadge(status: string) {
   switch (status) {
     case 'waiting_ci': return <Badge variant="secondary" className="text-xs">Waiting for CI</Badge>;
-    case 'pending_scheduler': return <Badge className="bg-amber-500 hover:bg-amber-600 text-xs">Pending Scheduler</Badge>;
-    case 'officially_verified': return <Badge className="bg-emerald-500 hover:bg-emerald-600 text-xs">Verified ✓</Badge>;
+    case 'pending_scheduler': return <Badge variant="warning" className="text-xs">Pending Scheduler</Badge>;
+    case 'officially_verified': return <Badge variant="success" className="text-xs">Verified ✓</Badge>;
     default: return <Badge variant="outline" className="text-xs">{status}</Badge>;
   }
 }

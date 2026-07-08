@@ -194,7 +194,7 @@ export function AdminAnalyticsPage() {
                           {risk === 'High' ? (
                             <Badge variant="destructive">High</Badge>
                           ) : risk === 'Medium' ? (
-                            <Badge className="bg-amber-500 text-white">Medium</Badge>
+                            <Badge variant="warning">Medium</Badge>
                           ) : (
                             <Badge variant="outline">Low</Badge>
                           )}
@@ -240,7 +240,7 @@ export function AdminAnalyticsPage() {
                         <TableCell className="text-center">{h.activeRotations}</TableCell>
                         <TableCell className="text-center">
                           {h.activeRotations > 0 ? (
-                            <Badge className="bg-emerald-500 text-white">Active</Badge>
+                            <Badge variant="success">Active</Badge>
                           ) : (
                             <Badge variant="outline">Idle</Badge>
                           )}

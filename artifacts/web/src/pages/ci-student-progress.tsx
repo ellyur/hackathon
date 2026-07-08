@@ -54,8 +54,8 @@ interface StudentUser {
 }
 
 function caseStatusBadge(status: WardCase['status']) {
-  if (status === 'complete') return <Badge className="bg-emerald-500 text-white text-xs">Done</Badge>;
-  if (status === 'in_progress') return <Badge className="bg-amber-500 text-white text-xs">In Progress</Badge>;
+  if (status === 'complete') return <Badge variant="success" className="text-xs">Done</Badge>;
+  if (status === 'in_progress') return <Badge variant="warning" className="text-xs">In Progress</Badge>;
   return <Badge variant="destructive" className="text-xs">Deficient</Badge>;
 }
 

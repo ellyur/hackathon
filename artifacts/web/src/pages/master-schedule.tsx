@@ -105,10 +105,10 @@ const STATUS_CHIP: Record<string, { bg: string; label: string }> = {
 };
 
 function statusBadge(status: string) {
-  if (status === 'active') return <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white">Active</Badge>;
-  if (status === 'upcoming') return <Badge variant="secondary">Upcoming</Badge>;
-  if (status === 'cancelled') return <Badge variant="destructive">Cancelled</Badge>;
-  return <Badge variant="outline">Completed</Badge>;
+  if (status === 'active') return <Badge variant="success">Active</Badge>;
+  if (status === 'upcoming') return <Badge variant="upcoming">Upcoming</Badge>;
+  if (status === 'cancelled') return <Badge variant="cancelled">Cancelled</Badge>;
+  return <Badge variant="completed">Completed</Badge>;
 }
 
 // ── ScheduleChip ──────────────────────────────────────────────────────────────

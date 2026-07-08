@@ -10,7 +10,7 @@ import { useGetMakeupQueue } from '@workspace/api-client-react';
 
 function PriorityBadge({ days }: { days: number }) {
   if (days > 14) return <Badge variant="destructive" className="gap-1"><AlertTriangle className="h-3 w-3" />{days}d</Badge>;
-  if (days >= 7) return <Badge className="bg-amber-500 hover:bg-amber-600 gap-1"><Clock className="h-3 w-3" />{days}d</Badge>;
+  if (days >= 7) return <Badge variant="warning" className="gap-1"><Clock className="h-3 w-3" />{days}d</Badge>;
   return <Badge variant="outline">{days}d</Badge>;
 }
 

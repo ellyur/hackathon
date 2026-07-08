@@ -145,7 +145,7 @@ export function ManageAnnouncementsPage() {
                   </TableCell>
                   <TableCell>
                     {ann.isPinned ? (
-                      <Badge className="bg-amber-500 hover:bg-amber-600 gap-1">
+                      <Badge variant="warning" className="gap-1">
                         <Pin className="h-3 w-3" />
                         Pinned
                       </Badge>

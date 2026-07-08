@@ -242,8 +242,8 @@ export function DutyVerificationDetailPage() {
           <StatusTimeline status={dv.status as DVStatus} ciVerifiedAt={dv.ciVerifiedAt} />
           <div className="mt-4 text-center">
             {dv.status === 'waiting_ci' && <Badge variant="secondary" className="text-sm">Waiting for Clinical Instructor</Badge>}
-            {dv.status === 'pending_scheduler' && <Badge className="bg-amber-500 hover:bg-amber-600 text-sm">Pending Scheduler Confirmation</Badge>}
-            {dv.status === 'officially_verified' && <Badge className="bg-emerald-500 hover:bg-emerald-600 text-sm">Officially Verified ✓</Badge>}
+            {dv.status === 'pending_scheduler' && <Badge variant="warning" className="text-sm">Pending Scheduler Confirmation</Badge>}
+            {dv.status === 'officially_verified' && <Badge variant="success" className="text-sm">Officially Verified ✓</Badge>}
           </div>
         </CardContent>
       </Card>

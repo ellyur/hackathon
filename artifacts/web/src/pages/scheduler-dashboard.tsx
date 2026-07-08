@@ -251,7 +251,7 @@ export function SchedulerDashboard() {
                             {v.department?.name ?? '—'} · {v.dutyDate}
                           </p>
                         </div>
-                        <Badge className="bg-amber-500 hover:bg-amber-600 text-xs shrink-0 ml-2">Confirm</Badge>
+                        <Badge variant="warning" className="text-xs shrink-0 ml-2">Confirm</Badge>
                       </div>
                     </Link>
                   ))}

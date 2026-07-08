@@ -9,9 +9,9 @@ import { useGetTodayDuties, useListSchedules } from '@workspace/api-client-react
 import { useListDutyVerifications } from '@/hooks/use-duty-verifications';
 
 function statusBadge(status: string) {
-  if (status === 'active') return <Badge className="bg-emerald-500 text-white">Active</Badge>;
-  if (status === 'upcoming') return <Badge variant="secondary">Upcoming</Badge>;
-  return <Badge variant="outline">Completed</Badge>;
+  if (status === 'active') return <Badge variant="success">Active</Badge>;
+  if (status === 'upcoming') return <Badge variant="upcoming">Upcoming</Badge>;
+  return <Badge variant="completed">Completed</Badge>;
 }
 
 export function CIDashboard() {

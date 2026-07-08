@@ -47,14 +47,14 @@ interface WardDetail { departmentId: string; wardName: string; requiredDutyDays:
 // ── Badges ────────────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: WardProgress['status'] }) {
-  if (status === 'complete') return <Badge className="bg-emerald-500 hover:bg-emerald-600 shrink-0"><CheckCircle2 className="w-3 h-3 mr-1" /> Complete</Badge>;
+  if (status === 'complete') return <Badge variant="success" className="shrink-0"><CheckCircle2 className="w-3 h-3 mr-1" /> Complete</Badge>;
   if (status === 'in_progress') return <Badge variant="secondary" className="shrink-0"><Clock className="w-3 h-3 mr-1" /> In Progress</Badge>;
   return <Badge variant="outline" className="shrink-0 text-muted-foreground"><Circle className="w-3 h-3 mr-1" /> Not Started</Badge>;
 }
 
 function VerifStatusBadge({ status }: { status: string }) {
-  if (status === 'officially_verified') return <Badge className="bg-emerald-500 hover:bg-emerald-600 text-xs">Verified ✓</Badge>;
-  if (status === 'pending_scheduler') return <Badge className="bg-amber-500 hover:bg-amber-600 text-xs">Pending Scheduler</Badge>;
+  if (status === 'officially_verified') return <Badge variant="success" className="text-xs">Verified ✓</Badge>;
+  if (status === 'pending_scheduler') return <Badge variant="warning" className="text-xs">Pending Scheduler</Badge>;
   if (status === 'waiting_ci') return <Badge variant="secondary" className="text-xs">Waiting for CI</Badge>;
   return <Badge variant="outline" className="text-xs capitalize">{status.replace(/_/g, ' ')}</Badge>;
 }
@@ -181,8 +181,8 @@ function WardDetailSheet({ ward, studentId, open, onClose }: { ward: WardProgres
                             <span className="text-xs text-amber-600 font-medium">+{r.lateMinutes}min late</span>
                           )}
                           <Badge
-                            variant={r.status === 'present' ? 'default' : r.status === 'late' ? 'secondary' : 'destructive'}
-                            className={`text-xs capitalize ${r.status === 'present' ? 'bg-emerald-500 hover:bg-emerald-600' : ''}`}
+                            variant={r.status === 'present' ? 'success' : r.status === 'late' ? 'secondary' : 'destructive'}
+                            className="text-xs capitalize"
                           >
                             {r.status}
                           </Badge>
@@ -362,7 +362,7 @@ function ClinicalCasesOverview({ wards }: { wards: WardProgress[] }) {
                     <span className="text-xs text-muted-foreground">/{c.required}</span>
                   </div>
                   {c.status === 'complete' && (
-                    <Badge className="bg-emerald-500 hover:bg-emerald-600 text-xs shrink-0">Done</Badge>
+                    <Badge variant="success" className="text-xs shrink-0">Done</Badge>
                   )}
                   {c.status === 'in_progress' && (
                     <Badge variant="secondary" className="text-xs shrink-0">In Progress</Badge>

@@ -17,7 +17,7 @@ function GapCell({ value }: { value: number }) {
   if (value <= 2)
     return (
       <div className="flex justify-center">
-        <Badge className="bg-amber-500 hover:bg-amber-600 text-white min-w-[28px] justify-center">{value}</Badge>
+        <Badge variant="warning" className="min-w-[28px] justify-center">{value}</Badge>
       </div>
     );
   return (

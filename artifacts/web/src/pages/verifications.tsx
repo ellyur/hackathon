@@ -18,7 +18,7 @@ function getRowClass(days: number) {
 
 function WaitBadge({ days }: { days: number }) {
   if (days > 7) return <Badge variant="destructive">{days}d</Badge>;
-  if (days > 3) return <Badge className="bg-amber-500 hover:bg-amber-600">{days}d</Badge>;
+  if (days > 3) return <Badge variant="warning">{days}d</Badge>;
   return <Badge variant="outline">{days}d</Badge>;
 }
 

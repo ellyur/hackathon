@@ -39,6 +39,15 @@
   --color-destructive-foreground: hsl(var(--destructive-foreground));
   --color-destructive-border: var(--destructive-border);
 
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+
+  --color-navy: hsl(var(--navy));
+  --color-navy-foreground: hsl(var(--navy-foreground));
+
   --color-chart-1: hsl(var(--chart-1));
   --color-chart-2: hsl(var(--chart-2));
   --color-chart-3: hsl(var(--chart-3));
@@ -66,85 +75,126 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* ─── SIPAG Brand Design System ──────────────────────────────────────────────
+   Primary Action: Medical Orange  #F7931E  →  hsl(32 93% 54%)
+   Brand / Sidebar: Navy Blue      #173B73  →  hsl(217 67% 27%)
+   Background:                     #F8FAFC  →  hsl(210 40% 98%)
+   Card:                           #FFFFFF
+   Border:                         #E5E7EB  →  hsl(220 13% 91%)
+   Text Primary:                   #1F2937  →  hsl(220 26% 14%)
+   Text Secondary:                 #6B7280  →  hsl(220 9% 46%)
+   Success Green:                  #10B981  →  hsl(160 84% 39%)
+   Danger Red:                     #EF4444  →  hsl(0 84% 60%)
+────────────────────────────────────────────────────────────────────────────── */
+
 :root {
   --button-outline: rgba(0, 0, 0, 0.1);
-  --badge-outline: rgba(0, 0, 0, 0.05);
+  --badge-outline: rgba(0, 0, 0, 0.06);
 
   --opaque-button-border-intensity: -8;
 
   --elevate-1: rgba(0, 0, 0, 0.03);
-  --elevate-2: rgba(0, 0, 0, 0.08);
+  --elevate-2: rgba(0, 0, 0, 0.07);
 
-  --background: 210 20% 98%;
-  --foreground: 220 40% 15%;
+  /* ── Base ── */
+  --background: 210 40% 98%;          /* #F8FAFC — light gray page bg */
+  --foreground: 220 26% 14%;          /* #1F2937 — primary text */
 
-  --border: 214 32% 91%;
+  --border: 220 13% 91%;              /* #E5E7EB */
+  --input: 220 13% 91%;
+  --ring: 32 93% 54%;                 /* Orange focus ring */
 
-  --card: 0 0% 100%;
-  --card-foreground: 220 40% 15%;
-  --card-border: 214 32% 91%;
-
-  --sidebar: 220 40% 15%;
-  --sidebar-foreground: 210 20% 98%;
-  --sidebar-border: 220 40% 20%;
-  --sidebar-primary: 215 90% 45%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 40% 20%;
-  --sidebar-accent-foreground: 210 20% 98%;
-  --sidebar-ring: 215 90% 45%;
+  /* ── Cards / Popovers ── */
+  --card: 0 0% 100%;                  /* white */
+  --card-foreground: 220 26% 14%;
+  --card-border: 220 13% 91%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 220 40% 15%;
-  --popover-border: 214 32% 91%;
+  --popover-foreground: 220 26% 14%;
+  --popover-border: 220 13% 91%;
 
-  --primary: 215 90% 45%;
+  /* ── PRIMARY — Medical Orange (buttons, links, CTAs) ── */
+  --primary: 32 93% 54%;              /* #F7931E */
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 210 25% 90%;
-  --secondary-foreground: 220 40% 15%;
+  /* ── SECONDARY — Light neutral ── */
+  --secondary: 217 30% 94%;
+  --secondary-foreground: 217 67% 27%;
 
-  --muted: 214 32% 91%;
-  --muted-foreground: 215 16% 47%;
+  /* ── MUTED ── */
+  --muted: 220 14% 96%;
+  --muted-foreground: 220 9% 46%;     /* #6B7280 */
 
-  --accent: 215 90% 95%;
-  --accent-foreground: 215 90% 45%;
+  /* ── ACCENT — Soft orange tint (hover states) ── */
+  --accent: 32 93% 96%;
+  --accent-foreground: 32 93% 40%;
 
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 210 40% 98%;
+  /* ── DESTRUCTIVE ── */
+  --destructive: 0 84% 60%;           /* Red */
+  --destructive-foreground: 0 0% 100%;
 
-  --input: 214 32% 91%;
-  --ring: 215 90% 45%;
+  /* ── SUCCESS ── */
+  --success: 142 71% 45%;            /* Green */
+  --success-foreground: 0 0% 100%;
 
-  --chart-1: 215 90% 45%;
-  --chart-2: 210 40% 60%;
-  --chart-3: 200 40% 80%;
-  --chart-4: 180 40% 50%;
-  --chart-5: 220 40% 20%;
+  /* ── WARNING ── */
+  --warning: 32 93% 54%;             /* Orange (same as primary) */
+  --warning-foreground: 0 0% 100%;
 
-  --app-font-sans: 'Plus Jakarta Sans', sans-serif;
+  /* ── NAVY (secondary brand color, used for headings / navy buttons) ── */
+  --navy: 217 67% 27%;               /* #173B73 */
+  --navy-foreground: 0 0% 100%;
+
+  /* ── SIDEBAR — Dark Navy Blue ── */
+  --sidebar: 217 60% 19%;            /* Deep navy sidebar bg */
+  --sidebar-foreground: 210 40% 95%; /* Near-white text */
+  --sidebar-border: 217 50% 25%;
+
+  /* Active nav item uses orange */
+  --sidebar-primary: 32 93% 54%;     /* Orange for active item */
+  --sidebar-primary-foreground: 0 0% 100%;
+
+  /* Hover state: slightly lighter navy */
+  --sidebar-accent: 217 55% 26%;
+  --sidebar-accent-foreground: 210 40% 95%;
+  --sidebar-ring: 32 93% 54%;
+
+  /* ── CHARTS — Navy, Orange, Green, Gray only ── */
+  --chart-1: 32 93% 54%;             /* Orange */
+  --chart-2: 217 67% 27%;            /* Navy */
+  --chart-3: 142 71% 45%;            /* Green */
+  --chart-4: 220 9% 46%;             /* Gray */
+  --chart-5: 217 67% 55%;            /* Light navy */
+
+  /* ── Typography ── */
+  --app-font-sans: 'Inter', 'Poppins', system-ui, -apple-system, sans-serif;
   --app-font-serif: Georgia, serif;
-  --app-font-mono: Menlo, monospace;
-  --radius: 0.5rem;
-  
-  --shadow-2xs: 0px 2px 0px 0px hsl(220 40% 15% / 0.05);
-  --shadow-xs: 0px 2px 0px 0px hsl(220 40% 15% / 0.05);
-  --shadow-sm:
-    0px 2px 0px 0px hsl(220 40% 15% / 0.05),
-    0px 1px 2px -1px hsl(220 40% 15% / 0.05);
-  --shadow:
-    0px 2px 0px 0px hsl(220 40% 15% / 0.05),
-    0px 1px 2px -1px hsl(220 40% 15% / 0.05);
-  --shadow-md:
-    0px 2px 0px 0px hsl(220 40% 15% / 0.05),
-    0px 2px 4px -1px hsl(220 40% 15% / 0.05);
-  --shadow-lg:
-    0px 2px 0px 0px hsl(220 40% 15% / 0.05),
-    0px 4px 6px -1px hsl(220 40% 15% / 0.05);
-  --shadow-xl:
-    0px 2px 0px 0px hsl(220 40% 15% / 0.05),
-    0px 8px 10px -1px hsl(220 40% 15% / 0.05);
-  --shadow-2xl: 0px 2px 0px 0px hsl(220 40% 15% / 0.05);
+  --app-font-mono: 'Menlo', 'Consolas', monospace;
 
+  /* ── Shape ── */
+  --radius: 0.625rem;               /* 10px — slightly more rounded than before */
+
+  /* ── Shadows — crisp, premium ── */
+  --shadow-2xs: 0px 1px 2px 0px hsl(217 60% 10% / 0.04);
+  --shadow-xs:  0px 1px 3px 0px hsl(217 60% 10% / 0.06);
+  --shadow-sm:
+    0px 1px 3px 0px hsl(217 60% 10% / 0.06),
+    0px 1px 2px -1px hsl(217 60% 10% / 0.04);
+  --shadow:
+    0px 2px 4px 0px hsl(217 60% 10% / 0.06),
+    0px 1px 2px -1px hsl(217 60% 10% / 0.04);
+  --shadow-md:
+    0px 4px 8px -2px hsl(217 60% 10% / 0.08),
+    0px 2px 4px -2px hsl(217 60% 10% / 0.04);
+  --shadow-lg:
+    0px 8px 16px -4px hsl(217 60% 10% / 0.10),
+    0px 4px 6px -4px hsl(217 60% 10% / 0.05);
+  --shadow-xl:
+    0px 16px 24px -6px hsl(217 60% 10% / 0.12),
+    0px 6px 10px -4px hsl(217 60% 10% / 0.06);
+  --shadow-2xl: 0px 24px 48px -12px hsl(217 60% 10% / 0.18);
+
+  /* Computed border helpers */
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
@@ -154,79 +204,86 @@
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
+/* ── Dark mode (keep navy family, darken further) ── */
 .dark {
   --button-outline: rgba(255, 255, 255, 0.1);
-  --badge-outline: rgba(255, 255, 255, 0.05);
-
+  --badge-outline: rgba(255, 255, 255, 0.06);
   --opaque-button-border-intensity: 9;
-
   --elevate-1: rgba(255, 255, 255, 0.04);
   --elevate-2: rgba(255, 255, 255, 0.09);
 
-  --background: 220 40% 10%;
-  --foreground: 210 20% 98%;
+  --background: 217 60% 10%;
+  --foreground: 210 40% 96%;
 
-  --border: 220 40% 18%;
+  --border: 217 50% 20%;
+  --input: 217 50% 20%;
+  --ring: 32 93% 60%;
 
-  --card: 220 40% 12%;
-  --card-foreground: 210 20% 98%;
-  --card-border: 220 40% 18%;
+  --card: 217 55% 13%;
+  --card-foreground: 210 40% 96%;
+  --card-border: 217 50% 20%;
 
-  --sidebar: 220 40% 12%;
-  --sidebar-foreground: 210 20% 98%;
-  --sidebar-border: 220 40% 18%;
-  --sidebar-primary: 215 90% 60%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 40% 18%;
-  --sidebar-accent-foreground: 210 20% 98%;
-  --sidebar-ring: 215 90% 60%;
+  --popover: 217 55% 13%;
+  --popover-foreground: 210 40% 96%;
+  --popover-border: 217 50% 20%;
 
-  --popover: 220 40% 12%;
-  --popover-foreground: 210 20% 98%;
-  --popover-border: 220 40% 18%;
-
-  --primary: 215 90% 60%;
+  --primary: 32 93% 60%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 220 40% 18%;
-  --secondary-foreground: 210 20% 98%;
+  --secondary: 217 50% 20%;
+  --secondary-foreground: 210 40% 90%;
 
-  --muted: 220 40% 18%;
-  --muted-foreground: 215 20% 65%;
+  --muted: 217 50% 18%;
+  --muted-foreground: 220 10% 58%;
 
-  --accent: 215 90% 25%;
-  --accent-foreground: 215 90% 60%;
+  --accent: 32 60% 20%;
+  --accent-foreground: 32 93% 65%;
 
-  --destructive: 0 62% 30%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 0 70% 50%;
+  --destructive-foreground: 0 0% 100%;
 
-  --input: 220 40% 18%;
-  --ring: 215 90% 60%;
+  --success: 142 60% 40%;
+  --success-foreground: 0 0% 100%;
 
-  --chart-1: 215 90% 60%;
-  --chart-2: 210 40% 40%;
-  --chart-3: 200 40% 30%;
-  --chart-4: 180 40% 40%;
-  --chart-5: 220 40% 70%;
+  --warning: 32 80% 55%;
+  --warning-foreground: 0 0% 100%;
 
-  --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.5);
-  --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.5);
+  --navy: 217 67% 50%;
+  --navy-foreground: 0 0% 100%;
+
+  --sidebar: 217 65% 12%;
+  --sidebar-foreground: 210 40% 92%;
+  --sidebar-border: 217 50% 18%;
+  --sidebar-primary: 32 93% 60%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 217 55% 18%;
+  --sidebar-accent-foreground: 210 40% 92%;
+  --sidebar-ring: 32 93% 60%;
+
+  --chart-1: 32 93% 60%;
+  --chart-2: 217 60% 55%;
+  --chart-3: 142 60% 50%;
+  --chart-4: 220 10% 55%;
+  --chart-5: 217 50% 70%;
+
+  --shadow-2xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.3);
+  --shadow-xs:  0px 1px 3px 0px hsl(0 0% 0% / 0.4);
   --shadow-sm:
-    0px 2px 0px 0px hsl(0 0% 0% / 0.5),
-    0px 1px 2px -1px hsl(0 0% 0% / 0.5);
+    0px 1px 3px 0px hsl(0 0% 0% / 0.4),
+    0px 1px 2px -1px hsl(0 0% 0% / 0.3);
   --shadow:
-    0px 2px 0px 0px hsl(0 0% 0% / 0.5),
-    0px 1px 2px -1px hsl(0 0% 0% / 0.5);
+    0px 2px 4px 0px hsl(0 0% 0% / 0.4),
+    0px 1px 2px -1px hsl(0 0% 0% / 0.3);
   --shadow-md:
-    0px 2px 0px 0px hsl(0 0% 0% / 0.5),
-    0px 2px 4px -1px hsl(0 0% 0% / 0.5);
+    0px 4px 8px -2px hsl(0 0% 0% / 0.5),
+    0px 2px 4px -2px hsl(0 0% 0% / 0.3);
   --shadow-lg:
-    0px 2px 0px 0px hsl(0 0% 0% / 0.5),
-    0px 4px 6px -1px hsl(0 0% 0% / 0.5);
+    0px 8px 16px -4px hsl(0 0% 0% / 0.5),
+    0px 4px 6px -4px hsl(0 0% 0% / 0.3);
   --shadow-xl:
-    0px 2px 0px 0px hsl(0 0% 0% / 0.5),
-    0px 8px 10px -1px hsl(0 0% 0% / 0.5);
-  --shadow-2xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.5);
+    0px 16px 24px -6px hsl(0 0% 0% / 0.6),
+    0px 6px 10px -4px hsl(0 0% 0% / 0.3);
+  --shadow-2xl: 0px 24px 48px -12px hsl(0 0% 0% / 0.7);
 }
 
 @layer base {
@@ -236,6 +293,14 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    letter-spacing: -0.02em;
   }
 }
 
@@ -303,5 +368,35 @@
   .border.hover-elevate-2:not(.no-hover-interaction-elevate)::after,
   .border.active-elevate-2:not(.no-active-interaction-elevate)::after {
     inset: -1px;
+  }
+
+  /* ── SIPAG Status Badge Utilities ── */
+  .badge-success {
+    @apply bg-emerald-50 text-emerald-700 border border-emerald-200;
+  }
+  .badge-warning {
+    @apply bg-orange-50 text-orange-700 border border-orange-200;
+  }
+  .badge-info {
+    @apply bg-blue-50 text-blue-700 border border-blue-200;
+  }
+  .badge-danger {
+    @apply bg-red-50 text-red-700 border border-red-200;
+  }
+
+  /* ── Smooth page transitions ── */
+  .page-fade-in {
+    animation: fadeInUp 0.2s ease-out;
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 }

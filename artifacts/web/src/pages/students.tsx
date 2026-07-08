@@ -125,7 +125,7 @@ export function StudentRosterPage() {
                             At Risk
                           </Badge>
                         ) : (
-                          <Badge className="bg-emerald-500 hover:bg-emerald-600">On Track</Badge>
+                          <Badge variant="success">On Track</Badge>
                         )}
                       </TableCell>
                     </TableRow>

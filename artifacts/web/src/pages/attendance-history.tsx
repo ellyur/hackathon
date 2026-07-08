@@ -10,12 +10,6 @@ import type { AttendanceRecord, Schedule } from '@workspace/api-client-react';
 
 type AttendanceStatus = 'present' | 'late' | 'absent';
 
-const statusConfig: Record<AttendanceStatus, { label: string; className: string }> = {
-  present: { label: 'Present', className: 'bg-emerald-500 text-white' },
-  late:    { label: 'Late',    className: 'bg-amber-100 text-amber-700' },
-  absent:  { label: 'Absent',  className: '' },
-};
-
 const methodLabel: Record<string, string> = {
   biometric:   'Face Scan',
   ci_assisted: 'CI Assisted',
@@ -25,10 +19,10 @@ const methodLabel: Record<string, string> = {
 
 function StatusBadge({ status }: { status: string }) {
   const s = status as AttendanceStatus;
+  if (s === 'present') return <Badge variant="success">Present</Badge>;
+  if (s === 'late') return <Badge variant="warning">Late</Badge>;
   if (s === 'absent') return <Badge variant="destructive">Absent</Badge>;
-  const cfg = statusConfig[s];
-  if (!cfg) return <Badge variant="outline">{status}</Badge>;
-  return <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${cfg.className}`}>{cfg.label}</span>;
+  return <Badge variant="outline">{status}</Badge>;
 }
 
 function formatDate(dateStr: string | undefined | null): string {

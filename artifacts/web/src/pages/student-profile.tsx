@@ -16,10 +16,13 @@ import {
 } from '@workspace/api-client-react';
 
 function StatusBadge({ status }: { status: string }) {
-  if (status === 'present' || status === 'completed') return <Badge className="bg-emerald-500 hover:bg-emerald-600">Completed</Badge>;
+  if (status === 'present') return <Badge variant="success">Present</Badge>;
+  if (status === 'completed') return <Badge variant="completed">Completed</Badge>;
   if (status === 'absent') return <Badge variant="destructive">Absent</Badge>;
-  if (status === 'upcoming') return <Badge variant="secondary">Upcoming</Badge>;
-  if (status === 'late') return <Badge className="bg-amber-500 hover:bg-amber-600">Late</Badge>;
+  if (status === 'upcoming') return <Badge variant="upcoming">Upcoming</Badge>;
+  if (status === 'late') return <Badge variant="warning">Late</Badge>;
+  if (status === 'active') return <Badge variant="success">Active</Badge>;
+  if (status === 'cancelled') return <Badge variant="cancelled">Cancelled</Badge>;
   return <Badge variant="outline">{status}</Badge>;
 }
 

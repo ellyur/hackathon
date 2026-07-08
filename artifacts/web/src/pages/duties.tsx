@@ -9,10 +9,10 @@ import type { Schedule } from '@workspace/api-client-react';
 
 function statusBadge(status: string) {
   if (status === 'active')
-    return <Badge className="bg-emerald-500 text-white hover:bg-emerald-600">Active</Badge>;
+    return <Badge variant="success">Active</Badge>;
   if (status === 'upcoming')
-    return <Badge variant="secondary">Upcoming</Badge>;
-  return <Badge variant="outline">Completed</Badge>;
+    return <Badge variant="upcoming">Upcoming</Badge>;
+  return <Badge variant="completed">Completed</Badge>;
 }
 
 function DutyCard({ duty }: { duty: Schedule }) {

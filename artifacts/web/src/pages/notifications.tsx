@@ -173,7 +173,7 @@ export function NotificationsPage() {
       <div className="flex items-center gap-2">
         <Bell className="h-4 w-4 text-muted-foreground" />
         {unreadCount > 0 ? (
-          <Badge className="bg-blue-500 text-white">{unreadCount} unread</Badge>
+          <Badge variant="info">{unreadCount} unread</Badge>
         ) : (
           <span className="text-sm text-muted-foreground">No unread notifications</span>
         )}

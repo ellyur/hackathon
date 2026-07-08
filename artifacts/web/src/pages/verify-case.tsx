@@ -127,7 +127,7 @@ export function VerifyCasePage() {
         <Badge variant="secondary" className="text-sm px-3 py-1.5">
           <Clock className="w-3.5 h-3.5 mr-1" /> {pending} Pending
         </Badge>
-        <Badge className="bg-emerald-500 text-white text-sm px-3 py-1.5 hover:bg-emerald-600">
+        <Badge variant="success" className="text-sm px-3 py-1.5">
           <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> {verified} Verified
         </Badge>
         <Badge variant="destructive" className="text-sm px-3 py-1.5">
@@ -153,7 +153,7 @@ export function VerifyCasePage() {
                 </div>
                 {sub.status === 'pending' && <Badge variant="secondary">Pending Review</Badge>}
                 {sub.status === 'verified' && (
-                  <Badge className="bg-emerald-500 text-white hover:bg-emerald-600">Verified</Badge>
+                  <Badge variant="success">Verified</Badge>
                 )}
                 {sub.status === 'rejected' && <Badge variant="destructive">Rejected</Badge>}
               </div>

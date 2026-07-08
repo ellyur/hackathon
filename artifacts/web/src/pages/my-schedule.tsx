@@ -12,11 +12,11 @@ import { useListDutyVerifications, useRequestDutyVerification } from '@/hooks/us
 
 type ScheduleStatus = 'upcoming' | 'active' | 'completed' | 'cancelled';
 
-const statusConfig: Record<ScheduleStatus, { label: string; className: string }> = {
-  upcoming: { label: 'Upcoming', className: 'bg-blue-100 text-blue-700' },
-  active: { label: 'Active', className: 'bg-emerald-500 text-white' },
-  completed: { label: 'Completed', className: '' },
-  cancelled: { label: 'Cancelled', className: '' },
+const statusConfig: Record<ScheduleStatus, { label: string; variant: 'upcoming' | 'success' | 'completed' | 'cancelled' | 'outline' }> = {
+  upcoming: { label: 'Upcoming', variant: 'upcoming' },
+  active: { label: 'Active', variant: 'success' },
+  completed: { label: 'Completed', variant: 'completed' },
+  cancelled: { label: 'Cancelled', variant: 'cancelled' },
 };
 
 function formatDate(dateStr: string): string {
@@ -69,9 +69,9 @@ function verificationStatusBadge(status: string) {
     case 'waiting_ci':
       return <Badge variant="secondary" className="text-xs">Waiting for CI</Badge>;
     case 'pending_scheduler':
-      return <Badge className="bg-amber-500 hover:bg-amber-600 text-xs">Pending Scheduler</Badge>;
+      return <Badge variant="warning" className="text-xs">Pending Scheduler</Badge>;
     case 'officially_verified':
-      return <Badge className="bg-emerald-500 hover:bg-emerald-600 text-xs">Verified ✓</Badge>;
+      return <Badge variant="success" className="text-xs">Verified ✓</Badge>;
     default:
       return <Badge variant="outline" className="text-xs">{status}</Badge>;
   }
@@ -122,9 +122,7 @@ function ScheduleCard({
             )}
             <AttendanceBadge record={attendanceRecord} />
             {!attendanceRecord && (
-              config.className
-                ? <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${config.className}`}>{config.label}</span>
-                : <Badge variant={status === 'cancelled' ? 'destructive' : 'outline'}>{config.label}</Badge>
+              <Badge variant={config.variant}>{config.label}</Badge>
             )}
           </div>
         </div>
