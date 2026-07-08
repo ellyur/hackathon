@@ -87,11 +87,11 @@ router.get("/attendance", requireAuth, async (req, res): Promise<void> => {
         .from(attendanceTable)
         .orderBy(desc(attendanceTable.createdAt));
 
-  // Enrich each record with lightweight student profile (name, section, year level)
+  // Enrich each record with lightweight student profile (name only — section/yearLevel live on studentProfilesTable)
   const studentIds = [...new Set(records.map(r => r.studentId))];
   const students = studentIds.length > 0
     ? await db
-        .select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName, section: usersTable.section, yearLevel: usersTable.yearLevel })
+        .select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName })
         .from(usersTable)
         .where(inArray(usersTable.id, studentIds))
     : [];

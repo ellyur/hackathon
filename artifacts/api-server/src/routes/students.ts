@@ -179,10 +179,31 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
     ),
   ]);
 
+  // Helper: flexible match between a case category and a department.
+  // Handles mismatches like "OB" vs code "OB", "Med-Surg" vs code "MED-SURG",
+  // "Pediatrics" vs name "Pediatric Ward" (code "PEDIA" → cat includes code).
+  // Guards: empty/blank codes never match (avoids matching all categories).
+  function categoryMatchesDept(category: string, deptName: string, deptCode: string): boolean {
+    const cat  = category.toLowerCase().replace(/[-\s]/g, "");
+    const code = deptCode.toLowerCase().replace(/[-\s]/g, "");
+    const name = deptName.toLowerCase().replace(/[-\s]/g, "");
+    if (!cat) return false;
+    // Exact match against code (e.g. "OB" === "OB", "medsurg" === "medsurg")
+    if (code.length >= 2 && cat === code) return true;
+    // Exact match against normalised name (e.g. "obward" === "obward")
+    if (cat === name) return true;
+    // Name contains full category (e.g. "pediatricward".includes("pediatrics") is false, but we check next)
+    if (name.includes(cat)) return true;
+    // Category contains code — handles "pediatrics".includes("pedia") ✓
+    // Guard: code must be ≥ 4 chars to avoid false positives on very short codes (e.g. "ER", "DR")
+    if (code.length >= 4 && cat.includes(code)) return true;
+    return false;
+  }
+
   // Include wards that have duty day requirements OR have clinical cases assigned
   const wardDepts = allDepts.filter(
     d => d.requiredDutyDays > 0 ||
-         allCases.some(c => c.category.toLowerCase() === d.name.toLowerCase()),
+         allCases.some(c => categoryMatchesDept(c.category, d.name, d.code)),
   );
 
   const verifiedCompletions = await db
@@ -203,7 +224,7 @@ router.get("/students/:id/passport", requireAuth, async (req, res): Promise<void
 
     // Clinical Cases for this ward — status is INDEPENDENT of duty hours
     const wardCases = allCases.filter(
-      c => c.category.toLowerCase() === dept.name.toLowerCase(),
+      c => categoryMatchesDept(c.category, dept.name, dept.code),
     );
 
     const requiredCases = wardCases.map(c => {
@@ -390,16 +411,28 @@ router.get("/students/:id/ward-detail/:departmentId", requireAuth, async (req, r
 
   verificationHistory.sort((a, b) => (b.dutyDate > a.dutyDate ? 1 : -1));
 
-  // Case progress for this ward
-  const wardCases = await db
+  // Case progress for this ward — fetch all active cases and filter in JS
+  // to avoid SQL-level category/name mismatch (e.g. "OB" vs "OB Ward", "Pediatrics" vs "Pediatric Ward")
+  const allActiveCases = await db
     .select()
     .from(clinicalCasesTable)
-    .where(
-      and(
-        eq(clinicalCasesTable.isActive, true),
-        sql`LOWER(${clinicalCasesTable.category}) = LOWER(${dept.name})`,
-      ),
-    );
+    .where(eq(clinicalCasesTable.isActive, true));
+
+  function categoryMatchesDeptWD(category: string, deptName: string, deptCode: string): boolean {
+    const cat  = category.toLowerCase().replace(/[-\s]/g, "");
+    const code = deptCode.toLowerCase().replace(/[-\s]/g, "");
+    const name = deptName.toLowerCase().replace(/[-\s]/g, "");
+    if (!cat) return false;
+    if (code.length >= 2 && cat === code) return true;
+    if (cat === name) return true;
+    if (name.includes(cat)) return true;
+    if (code.length >= 4 && cat.includes(code)) return true;
+    return false;
+  }
+
+  const wardCases = allActiveCases.filter(c =>
+    categoryMatchesDeptWD(c.category, dept.name, dept.code),
+  );
 
   let caseProgress: object[] = [];
   if (wardCases.length > 0) {
@@ -412,6 +445,7 @@ router.get("/students/:id/ward-detail/:departmentId", requireAuth, async (req, r
           eq(caseCompletionsTable.studentId, studentId),
           eq(caseCompletionsTable.status, "verified"),
           inArray(caseCompletionsTable.clinicalCaseId, caseIds),
+          eq(caseCompletionsTable.departmentId, departmentId),
         ),
       );
 
