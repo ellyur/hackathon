@@ -1,0 +1,149 @@
+Redesign the entire SIPAG UI to match the branding of the attached logo.
+
+DO NOT redesign the logo.
+
+Use the logo as the primary source of the application's visual identity.
+
+========================================================= BRAND IDENTITY
+Application Name: SIPAG
+
+Meaning: Smart Integrated Platform for Academic and Clinical Scheduling
+
+Design Style: Modern Professional Healthcare Clean Minimalist Premium Enterprise-grade
+
+The application should feel like software used by hospitals and universities, not a generic admin dashboard.
+
+========================================================= COLOR PALETTE
+Primary Color Navy Blue
+
+Use approximately: #173B73
+
+Secondary Color Medical Orange
+
+Use approximately: #F7931E
+
+Background
+
+Light Gray #F8FAFC
+
+Cards
+
+White
+
+Border
+
+#E5E7EB
+
+Text
+
+Primary #1F2937
+
+Secondary #6B7280Success
+
+Green
+
+Warning
+
+Orange
+
+Danger
+
+Red
+
+========================================================= SIDEBAR
+Dark Navy Blue background.
+
+Selected menu
+
+Orange background or Orange left indicator.
+
+Icons
+
+White
+
+Hover
+
+Slightly lighter navy.
+
+========================================================= TOP NAVBAR
+White background.
+
+Soft shadow.
+
+Notification icon.
+
+Profile dropdown.
+
+Display SIPAG logo on the left.
+
+========================================================= BUTTONS
+Primary
+
+Orange
+
+Hover
+
+Slightly darker orange
+
+Secondary
+
+Navy Blue
+
+Outline Buttons
+
+White background Navy border
+
+Danger
+
+Red
+
+========================================================= CARDS
+Rounded corners
+
+Soft shadow
+
+Large padding
+
+Minimal
+
+Dashboard statistic cards should use small colored icons matching the branding.
+TABLES
+Modern
+
+Striped hover effect
+
+Rounded container
+
+Soft borders
+
+Status badges
+
+Green
+
+Completed
+
+Orange
+
+Pending
+
+Blue
+
+Upcoming
+
+Red
+
+Cancelled
+
+========================================================= FORMS
+Rounded inputs
+
+Blue focus state
+
+Orange primary action button
+
+Large spacing
+
+========================================================= CALENDAR
+Modern monthly calendar
+
+Today's date
