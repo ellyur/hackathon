@@ -1,0 +1,69 @@
+☑ EINC
+
+☑ Medication Administration
+
+☑ IV Insertion
+
+☑ Vital Signs
+
+☐ Foley Catheter
+
+☐ CPR
+
+One duty can contain multiple cases.
+
+Remarks Performed procedure independently.
+
+Needs improvement in sterile technique. Buttons Verify Duty Return to Student (optional) Cancel
+
+When verified:
+
+Status becomes
+
+Pending Scheduler Confirmation
+
+Student Progress
+The CI can monitor every assigned student.
+
+View:
+
+Clinical Passport Completed Cases Remaining Cases Completed Duty Hours Attendance Late History Absences
+
+Read-only.
+
+Notifications
+Receive:
+
+New Verification Requests Schedule Updates Duty Changes Announcements 7. Profile Edit Profile Change Password Things the CI SHOULD NOT Have
+
+❌ Create Hospital
+
+❌ Create Schedule
+
+❌ Edit Schedule
+
+❌ Assign Students
+
+❌ Manage Users
+
+❌ Configure System
+
+❌ Change Duty Hours Requirement
+
+❌ Confirm Final Clinical Passport
+
+That belongs to the Scheduler.CI Workflow Scheduler creates Duty ↓ Student attends Duty ↓ GPS + Face Attendance ↓ Duty Ends ↓ Student requests Duty Verification ↓ CI receives notification ↓ CI opens request ↓ CI selects completed clinical cases ↓ CI writes remarks ↓ CI clicks Verify ↓ Status
+
+Pending Scheduler Confirmation| Module | Purpose | | --------------------- | ------------------------------------------------------- | | 📊 Dashboard | Overview of duties, students, and pending verifications | | 📅 My Duty Schedule | View assigned clinical duties | | 👥 Student Attendance | Monitor attendance and handle absences/remarks | | ✅ Duty Verification | Verify completed procedures after duty | | 📖 Student Progress | View students' clinical passport and progress | | 🔔 Notifications | Receive requests and schedule updates | | 👤 Profile | Manage account settings | 💡 One feature I'd add
+
+A "Verify All Students" option for duties where many students completed the same activities.
+
+Example:
+
+Duty: Delivery Room Students: 10
+
+The CI can:
+
+Open each student's record individually (for different cases), or Select multiple students and apply common cases if appropriate, then adjust individual differences before submitting.
+
+This saves time for the CI while still allowing accurate verification for each student.

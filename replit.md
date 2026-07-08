@@ -52,6 +52,24 @@ lib/
 scripts/        # Seed script, post-merge setup
 ```
 
+## Replit Setup (first-time)
+
+These steps were run once after importing to Replit and are required if starting fresh:
+
+```bash
+# 1. Install all workspace dependencies
+pnpm install
+
+# 2. Push the Drizzle schema to the connected PostgreSQL database
+pnpm --filter @workspace/db run push
+```
+
+After that, start both workflows (`API Server` and `Start application`) — they can be started from the Replit workflow panel or restarted via the shell.
+
+Required secrets must be set in Replit's Secrets panel before the workflows will start:
+- `DATABASE_URL`
+- `SESSION_SECRET`
+
 ## User Preferences
 
 - Keep existing project structure and stack — no restructuring
