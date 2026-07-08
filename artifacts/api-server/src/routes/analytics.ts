@@ -8,49 +8,68 @@ import {
   caseCompletionsTable,
   clinicalCasesTable,
   hospitalsTable,
+  studentProfilesTable,
 } from "@workspace/db";
-import { eq, and, count, sql, desc, inArray, gte, not } from "drizzle-orm";
+import { eq, and, count, sum, sql, desc, inArray, gte } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
 
 router.get("/analytics/overview", requireRole("admin", "scheduler"), async (_req, res): Promise<void> => {
-  const [{ totalStudents }] = await db
-    .select({ totalStudents: count() })
-    .from(usersTable)
-    .where(and(eq(usersTable.role, "student"), eq(usersTable.isActive, true)));
+  const [
+    [{ totalStudents }],
+    [{ activeSchedules }],
+    [{ upcomingSchedules }],
+    [{ totalHospitals }],
+    [{ totalAttendance }],
+    [{ presentCount }],
+    [{ verifiedCases }],
+    [{ totalRequired }],
+    [{ pendingVerifications }],
+    [{ studentsNeedingMakeup }],
+  ] = await Promise.all([
+    db.select({ totalStudents: count() }).from(usersTable)
+      .where(and(eq(usersTable.role, "student"), eq(usersTable.isActive, true))),
+    db.select({ activeSchedules: count() }).from(schedulesTable)
+      .where(eq(schedulesTable.status, "active")),
+    db.select({ upcomingSchedules: count() }).from(schedulesTable)
+      .where(eq(schedulesTable.status, "upcoming")),
+    db.select({ totalHospitals: count() }).from(hospitalsTable)
+      .where(eq(hospitalsTable.isActive, true)),
+    db.select({ totalAttendance: count() }).from(attendanceTable),
+    db.select({ presentCount: count() }).from(attendanceTable)
+      .where(sql`${attendanceTable.status} IN ('present', 'late')`),
+    db.select({ verifiedCases: count() }).from(caseCompletionsTable)
+      .where(eq(caseCompletionsTable.status, "verified")),
+    db.select({ totalRequired: sql<number>`COALESCE(SUM(${clinicalCasesTable.requiredCount}), 0)` })
+      .from(clinicalCasesTable).where(eq(clinicalCasesTable.isActive, true)),
+    db.select({ pendingVerifications: count() }).from(caseCompletionsTable)
+      .where(eq(caseCompletionsTable.status, "pending")),
+    db.select({ studentsNeedingMakeup: sql<number>`COUNT(DISTINCT ${attendanceTable.studentId})` })
+      .from(attendanceTable)
+      .where(and(eq(attendanceTable.needsMakeup, true), eq(attendanceTable.makeupCompleted, false))),
+  ]);
 
-  const [{ activeSchedules }] = await db
-    .select({ activeSchedules: count() })
-    .from(schedulesTable)
-    .where(eq(schedulesTable.status, "active"));
+  const ta = Number(totalAttendance);
+  const attendanceRate = ta > 0 ? Number(presentCount) / ta : 1;
 
-  const [{ totalAttendance }] = await db
-    .select({ totalAttendance: count() })
-    .from(attendanceTable);
-
-  const [{ presentCount }] = await db
-    .select({ presentCount: count() })
-    .from(attendanceTable)
-    .where(
-      sql`${attendanceTable.status} IN ('present', 'late')`,
-    );
-
-  const attendanceRate =
-    Number(totalAttendance) > 0
-      ? Math.round((Number(presentCount) / Number(totalAttendance)) * 100)
-      : 100;
-
-  const [{ totalCases }] = await db
-    .select({ totalCases: count() })
-    .from(caseCompletionsTable)
-    .where(eq(caseCompletionsTable.status, "verified"));
+  // completionRate = verified / (students × required-per-student), clamped to [0, 1]
+  const totalStudentsNum = Number(totalStudents);
+  const totalRequiredNum = Number(totalRequired);
+  const cohortCapacity = totalStudentsNum * totalRequiredNum;
+  const completionRate = cohortCapacity > 0
+    ? Math.min(1, Number(verifiedCases) / cohortCapacity)
+    : 0;
 
   res.json({
     totalStudents: Number(totalStudents),
     activeRotations: Number(activeSchedules),
+    completionRate,
     attendanceRate,
-    verifiedCases: Number(totalCases),
+    totalHospitals: Number(totalHospitals),
+    pendingVerifications: Number(pendingVerifications),
+    studentsNeedingMakeup: Number(studentsNeedingMakeup),
+    upcomingDutiesCount: Number(upcomingSchedules),
   });
 });
 
@@ -60,33 +79,70 @@ router.get("/analytics/students-at-risk", requireRole("admin", "scheduler"), asy
     .from(usersTable)
     .where(and(eq(usersTable.role, "student"), eq(usersTable.isActive, true)));
 
-  const atRisk = await Promise.all(
-    students.map(async (s) => {
-      const [{ absences }] = await db
-        .select({ absences: count() })
-        .from(attendanceTable)
-        .where(and(eq(attendanceTable.studentId, s.id), eq(attendanceTable.status, "absent")));
+  if (students.length === 0) {
+    res.json([]);
+    return;
+  }
 
-      const [{ verified }] = await db
-        .select({ verified: count() })
-        .from(caseCompletionsTable)
-        .where(
-          and(eq(caseCompletionsTable.studentId, s.id), eq(caseCompletionsTable.status, "verified")),
-        );
+  const studentIds = students.map((s) => s.id);
 
-      const risk = Number(absences) >= 3 || Number(verified) < 5;
+  // Fetch profiles, absences, late counts, verified cases, and total hours in parallel
+  const [profiles, absenceRows, lateRows, verifiedRows, totalCasesRow] = await Promise.all([
+    db.select().from(studentProfilesTable).where(inArray(studentProfilesTable.userId, studentIds)),
+    db.select({ studentId: attendanceTable.studentId, cnt: count() })
+      .from(attendanceTable)
+      .where(and(inArray(attendanceTable.studentId, studentIds), eq(attendanceTable.status, "absent")))
+      .groupBy(attendanceTable.studentId),
+    db.select({ studentId: attendanceTable.studentId, cnt: count() })
+      .from(attendanceTable)
+      .where(and(inArray(attendanceTable.studentId, studentIds), eq(attendanceTable.status, "late")))
+      .groupBy(attendanceTable.studentId),
+    db.select({ studentId: caseCompletionsTable.studentId, cnt: count() })
+      .from(caseCompletionsTable)
+      .where(and(inArray(caseCompletionsTable.studentId, studentIds), eq(caseCompletionsTable.status, "verified")))
+      .groupBy(caseCompletionsTable.studentId),
+    db.select({ totalRequired: sql<number>`COALESCE(SUM(${clinicalCasesTable.requiredCount}), 1)` })
+      .from(clinicalCasesTable).where(eq(clinicalCasesTable.isActive, true)),
+  ]);
+
+  const profileMap = new Map(profiles.map((p) => [p.userId, p]));
+  const absenceMap = new Map(absenceRows.map((r) => [r.studentId, Number(r.cnt)]));
+  const lateMap = new Map(lateRows.map((r) => [r.studentId, Number(r.cnt)]));
+  const verifiedMap = new Map(verifiedRows.map((r) => [r.studentId, Number(r.cnt)]));
+  const totalRequired = Math.max(1, Number(totalCasesRow[0]?.totalRequired ?? 1));
+
+  const atRisk = students
+    .map((s) => {
+      const profile = profileMap.get(s.id);
+      const absenceCount = absenceMap.get(s.id) ?? 0;
+      const lateCount = lateMap.get(s.id) ?? 0;
+      const verifiedCount = verifiedMap.get(s.id) ?? 0;
+      const hoursRequired = profile?.totalHoursRequired ?? 500;
+
+      const caseCompletionRate = verifiedCount / totalRequired;
+      // Risk score: weighted sum of absence rate (60%) + case incompletion (40%), capped at 1
+      const absenceScore = Math.min(absenceCount / 5, 1);
+      const caseScore = Math.max(0, 1 - caseCompletionRate);
+      const riskScore = Math.min(1, absenceScore * 0.6 + caseScore * 0.4);
+
+      const isAtRisk = absenceCount >= 3 || caseCompletionRate < 0.5;
       return {
-        id: s.id,
-        name: `${s.firstName} ${s.lastName}`,
-        email: s.email,
-        absences: Number(absences),
-        verifiedCases: Number(verified),
-        isAtRisk: risk,
+        studentId: s.id,
+        firstName: s.firstName,
+        lastName: s.lastName,
+        avatarUrl: s.avatarUrl ?? null,
+        riskScore: Math.round(riskScore * 100) / 100,
+        absenceCount,
+        lateCount,
+        caseCompletionRate: Math.round(caseCompletionRate * 100) / 100,
+        hoursCompleted: 0, // attendance hours tracking not yet implemented
+        hoursRequired,
+        isAtRisk,
       };
-    }),
-  );
+    })
+    .filter((s) => s.isAtRisk);
 
-  res.json(atRisk.filter((s) => s.isAtRisk));
+  res.json(atRisk);
 });
 
 router.get("/analytics/case-gaps", requireRole("admin", "scheduler"), async (_req, res): Promise<void> => {
