@@ -3,10 +3,11 @@ import {
   db,
   clinicalCasesTable,
   caseCompletionsTable,
+  dutyVerificationCasesTable,
   usersTable,
   auditLogsTable,
 } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
 
@@ -86,6 +87,52 @@ router.patch("/cases/:id", requireRole("admin"), async (req, res): Promise<void>
     .from(clinicalCasesTable)
     .where(eq(clinicalCasesTable.id, id));
   res.json(updated);
+});
+
+router.delete("/cases/:id", requireRole("admin"), async (req, res): Promise<void> => {
+  const { id } = req.params;
+
+  const [c] = await db.select().from(clinicalCasesTable).where(eq(clinicalCasesTable.id, id));
+  if (!c) {
+    res.status(404).json({ error: "Case not found" });
+    return;
+  }
+
+  // Guard: block hard-delete if the case has been used in any completion or verification
+  const [usedInCompletion] = await db
+    .select({ id: caseCompletionsTable.id })
+    .from(caseCompletionsTable)
+    .where(eq(caseCompletionsTable.clinicalCaseId, id))
+    .limit(1);
+
+  const [usedInVerification] = await db
+    .select({ id: dutyVerificationCasesTable.id })
+    .from(dutyVerificationCasesTable)
+    .where(eq(dutyVerificationCasesTable.clinicalCaseId, id))
+    .limit(1);
+
+  if (usedInCompletion || usedInVerification) {
+    res.status(409).json({
+      error: "This case has already been used in student records and cannot be deleted. Deactivate it instead.",
+      inUse: true,
+    });
+    return;
+  }
+
+  await db.delete(clinicalCasesTable).where(eq(clinicalCasesTable.id, id));
+
+  await db.insert(auditLogsTable).values({
+    id: randomUUID(),
+    userId: req.session.userId!,
+    action: "case_deleted",
+    entityType: "clinical_case",
+    entityId: id,
+    oldValue: { name: c.name, category: c.category },
+    newValue: null,
+    ipAddress: req.ip ?? "",
+  });
+
+  res.json({ message: "Case deleted" });
 });
 
 // ── Case Completions ─────────────────────────────────────────────────────────

@@ -10,9 +10,40 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Pencil, BookOpen, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, BookOpen, Loader2 } from 'lucide-react';
 import { useListClinicalCases, useCreateClinicalCase, useUpdateClinicalCase } from '@workspace/api-client-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useMutation } from '@tanstack/react-query';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+
+function getAuthToken() { return localStorage.getItem('authToken'); }
+async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = getAuthToken();
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options?.headers },
+    credentials: 'include',
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(json.error ?? res.statusText), { inUse: json.inUse ?? false });
+  return json as T;
+}
+
+function useDeleteClinicalCase() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch<{ message: string }>(`/api/cases/${id}`, { method: 'DELETE' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cases'] }),
+  });
+}
 
 const CATEGORIES = ['Delivery Room', 'Medical-Surgical', 'Pediatrics', 'OB', 'ICU'] as const;
 type Category = typeof CATEGORIES[number];
@@ -34,9 +65,12 @@ export function AdminCasesPage() {
   const createMutation = useCreateClinicalCase();
   const updateMutation = useUpdateClinicalCase();
 
+  const deleteMutation = useDeleteClinicalCase();
+
   const [tab, setTab] = useState('All');
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [editTargetId, setEditTargetId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [editForm, setEditForm] = useState(emptyForm);
@@ -90,6 +124,28 @@ export function AdminCasesPage() {
         onError: () => toast({ title: 'Error', description: 'Failed to update case.', variant: 'destructive' }),
       },
     );
+  };
+
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    deleteMutation.mutate(deleteTarget.id, {
+      onSuccess: () => {
+        setDeleteTarget(null);
+        toast({ title: 'Case deleted', description: `${deleteTarget.name} has been removed.` });
+      },
+      onError: (e: any) => {
+        setDeleteTarget(null);
+        if (e?.inUse) {
+          toast({
+            title: 'Cannot delete — case is in use',
+            description: 'This case appears in student records. Deactivate it using the toggle instead.',
+            variant: 'destructive',
+          });
+        } else {
+          toast({ title: 'Error', description: e?.message ?? 'Failed to delete case.', variant: 'destructive' });
+        }
+      },
+    });
   };
 
   const toggleActive = (c: typeof cases[number]) => {
@@ -158,6 +214,27 @@ export function AdminCasesPage() {
         </div>
         <Button onClick={() => setAddOpen(true)}><Plus className="w-4 h-4 mr-2" />Add Case</Button>
       </div>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{deleteTarget?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the case from the library. If it has been used in any student records, deletion will be blocked and you can deactivate it instead.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="sm:max-w-sm">
@@ -240,9 +317,14 @@ export function AdminCasesPage() {
                       <Switch checked={c.isActive} onCheckedChange={() => toggleActive(c)} />
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(c)}>
-                        <Pencil className="w-4 h-4" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => openEdit(c)}>
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setDeleteTarget({ id: c.id, name: c.name })}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
