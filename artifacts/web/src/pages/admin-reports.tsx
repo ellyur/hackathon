@@ -18,11 +18,11 @@ interface ReportConfig {
 
 const REPORTS: ReportConfig[] = [
   { id: 'student-progress', title: 'Student Progress Report', description: 'Per-student summary of duties attended, hours logged, and overall attendance rate.', icon: Users, color: 'text-blue-500 bg-blue-50' },
-  { id: 'attendance-summary', title: 'Attendance Summary Report', description: 'Aggregated attendance records broken down by hospital and department, including present/absent/late rates.', icon: ClipboardList, color: 'text-teal-500 bg-teal-50' },
-  { id: 'case-compliance', title: 'Case Compliance Report', description: 'Analysis of case gap distribution — identifies which cases are most frequently incomplete across the student cohort.', icon: FileText, color: 'text-purple-500 bg-purple-50' },
+  { id: 'attendance-summary', title: 'Attendance Summary Report', description: 'Aggregated attendance records broken down by hospital and department, including present/absent/late rates.', icon: ClipboardList, color: 'text-primary bg-primary/10' },
+  { id: 'case-compliance', title: 'Case Compliance Report', description: 'Analysis of case gap distribution — identifies which cases are most frequently incomplete across the student cohort.', icon: FileText, color: 'text-blue-700 bg-blue-50' },
   { id: 'ci-performance', title: 'Clinical Instructor Performance', description: 'CI schedule counts, completion rates, and upcoming/cancelled duties per instructor.', icon: UserCheck, color: 'text-orange-500 bg-orange-50' },
   { id: 'makeup-duty', title: 'Makeup Duty Status', description: 'All scheduled duties with status — useful for tracking completion across the cohort.', icon: CalendarClock, color: 'text-red-500 bg-red-50' },
-  { id: 'completion-forecast', title: 'Program Completion Forecast', description: 'Projected graduation risk analysis — estimates which students are on track vs. at-risk of not completing requirements.', icon: TrendingUp, color: 'text-emerald-500 bg-emerald-50' },
+  { id: 'completion-forecast', title: 'Program Completion Forecast', description: 'Projected graduation risk analysis — estimates which students are on track vs. at-risk of not completing requirements.', icon: TrendingUp, color: 'text-emerald-600 bg-emerald-50' },
 ];
 
 function authHeaders(): Record<string, string> {

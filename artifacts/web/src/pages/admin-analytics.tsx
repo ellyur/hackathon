@@ -37,14 +37,14 @@ export function AdminAnalyticsPage() {
       value: `${Math.round((overview.attendanceRate ?? 0) * 100)}%`,
       sub: 'Across all duties',
       icon: CalendarCheck,
-      color: 'text-teal-500',
+      color: 'text-primary',
     },
     {
       label: 'Case Completion',
       value: `${Math.round((overview.completionRate ?? 0) * 100)}%`,
       sub: 'Verified cases',
       icon: TrendingUp,
-      color: 'text-emerald-500',
+      color: 'text-success',
     },
     {
       label: 'Pending Reviews',

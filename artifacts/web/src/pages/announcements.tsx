@@ -22,7 +22,7 @@ const mockAnnouncements: Announcement[] = [
   {
     id: '1',
     title: 'Updated Clinical Rotation Guidelines for AY 2024-2025',
-    body: 'Please be informed that the clinical rotation guidelines have been updated effective July 1, 2024. All students are required to complete a minimum of 200 hours per rotation cycle. Please review the updated guidelines posted on the school portal. Attendance must be logged via the ClinicalFlow app for all rotations starting July 1. Failure to comply may result in invalidation of hours.',
+    body: 'Please be informed that the clinical rotation guidelines have been updated effective July 1, 2024. All students are required to complete a minimum of 200 hours per rotation cycle. Please review the updated guidelines posted on the school portal. Attendance must be logged via the SIPAG app for all rotations starting July 1. Failure to comply may result in invalidation of hours.',
     isPinned: true,
     targetRole: 'all',
     createdAt: new Date(Date.now() - 86400000).toISOString(),
@@ -31,7 +31,7 @@ const mockAnnouncements: Announcement[] = [
   {
     id: '2',
     title: 'Mandatory Orientation for New CI Evaluators',
-    body: 'All newly appointed Clinical Instructors are required to attend the orientation session on June 22, 2024 at 2:00 PM via Zoom. Topics include case verification procedures, grading criteria, and use of the ClinicalFlow verification portal.',
+    body: 'All newly appointed Clinical Instructors are required to attend the orientation session on June 22, 2024 at 2:00 PM via Zoom. Topics include case verification procedures, grading criteria, and use of the SIPAG verification portal.',
     isPinned: true,
     targetRole: 'ci',
     createdAt: new Date(Date.now() - 172800000).toISOString(),
@@ -49,7 +49,7 @@ const mockAnnouncements: Announcement[] = [
   {
     id: '4',
     title: 'System Maintenance Notice — June 20, 2024',
-    body: 'ClinicalFlow will undergo scheduled maintenance on June 20, 2024 from 12:00 AM to 4:00 AM. During this period, the app will be unavailable. Please record your time-in/out before or after the maintenance window.',
+    body: 'SIPAG will undergo scheduled maintenance on June 20, 2024 from 12:00 AM to 4:00 AM. During this period, the app will be unavailable. Please record your time-in/out before or after the maintenance window.',
     isPinned: false,
     targetRole: 'all',
     createdAt: new Date(Date.now() - 345600000).toISOString(),
@@ -69,8 +69,8 @@ const mockAnnouncements: Announcement[] = [
 const roleBadgeVariant: Record<TargetRole, string> = {
   all: 'bg-slate-100 text-slate-700',
   student: 'bg-blue-100 text-blue-700',
-  ci: 'bg-purple-100 text-purple-700',
-  scheduler: 'bg-amber-100 text-amber-700',
+  ci: 'bg-sky-100 text-sky-700',
+  scheduler: 'bg-orange-100 text-orange-700',
 };
 
 const roleLabel: Record<TargetRole, string> = {

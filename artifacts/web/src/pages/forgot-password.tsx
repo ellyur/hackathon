@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Stethoscope, AlertCircle, CheckCircle2, KeyRound } from 'lucide-react';
+import { AlertCircle, CheckCircle2, KeyRound } from 'lucide-react';
 import { useForgotPassword } from '@workspace/api-client-react';
 
 export function ForgotPasswordPage() {
@@ -37,11 +37,12 @@ export function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
-      <div className="mb-8 flex items-center gap-3 text-primary font-bold text-3xl tracking-tight">
-        <div className="w-12 h-12 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-lg">
-          <Stethoscope className="w-7 h-7" />
+      <div className="mb-8 flex items-center gap-3">
+        <img src="/sipag-logo.png" alt="SIPAG" className="w-12 h-12 rounded-xl object-contain bg-white shadow-lg" />
+        <div>
+          <div className="font-bold text-2xl tracking-wide leading-none" style={{ color: 'hsl(217 67% 27%)' }}>SIPAG</div>
+          <div className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium mt-0.5">Smart Integrated Platform</div>
         </div>
-        ClinicalFlow
       </div>
 
       <Card className="w-full max-w-md shadow-xl border-border/50">

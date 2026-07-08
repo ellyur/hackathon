@@ -24,7 +24,7 @@ const ACTION_COLORS: Record<string, string> = {
   login: 'bg-blue-100 text-blue-700 border-blue-200',
   case_verified: 'bg-emerald-100 text-emerald-700 border-emerald-200',
   case_rejected: 'bg-red-100 text-red-700 border-red-200',
-  schedule_created: 'bg-purple-100 text-purple-700 border-purple-200',
+  schedule_created: 'bg-blue-100 text-blue-700 border-blue-200',
   user_created: 'bg-orange-100 text-orange-700 border-orange-200',
   user_deactivated: 'bg-gray-100 text-gray-700 border-gray-200',
 };

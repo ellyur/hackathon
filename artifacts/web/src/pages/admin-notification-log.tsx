@@ -26,8 +26,8 @@ const TYPE_COLORS: Record<string, string> = {
   schedule_assigned: 'bg-blue-100 text-blue-700',
   case_approved: 'bg-green-100 text-green-700',
   case_rejected: 'bg-red-100 text-red-700',
-  attendance: 'bg-teal-100 text-teal-700',
-  evaluation: 'bg-purple-100 text-purple-700',
+  attendance: 'bg-sky-100 text-sky-700',
+  evaluation: 'bg-orange-100 text-orange-700',
 };
 
 function authHeaders(): Record<string, string> {

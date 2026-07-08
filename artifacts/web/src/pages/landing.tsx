@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowRight, Stethoscope, Activity, ClipboardCheck, ShieldCheck, MapPin } from 'lucide-react';
+import { ArrowRight, Activity, ClipboardCheck, ShieldCheck, MapPin } from 'lucide-react';
 import { Link } from 'wouter';
 
 export default function Landing() {
@@ -10,11 +10,12 @@ export default function Landing() {
       {/* Navbar */}
       <header className="fixed top-0 inset-x-0 h-16 bg-background/80 backdrop-blur-md border-b z-50">
         <div className="container mx-auto h-full flex items-center justify-between px-4 md:px-6">
-          <div className="flex items-center gap-2 text-primary font-bold text-xl tracking-tight">
-            <div className="w-8 h-8 rounded-md bg-primary text-primary-foreground flex items-center justify-center">
-              <Stethoscope className="w-5 h-5" />
+          <div className="flex items-center gap-2.5">
+            <img src="/sipag-logo.png" alt="SIPAG" className="w-9 h-9 rounded-lg object-contain bg-white shadow-sm" />
+            <div>
+              <div className="font-bold text-xl tracking-wide leading-none" style={{ color: 'hsl(217 67% 27%)' }}>SIPAG</div>
+              <div className="text-[9px] text-muted-foreground uppercase tracking-widest font-medium leading-none mt-0.5 hidden sm:block">Smart Integrated Platform</div>
             </div>
-            ClinicalFlow
           </div>
           <div className="flex items-center gap-4">
             <Link href="/login" className="text-sm font-medium hover:text-primary transition-colors">Sign In</Link>
@@ -162,7 +163,7 @@ export default function Landing() {
           <ShieldCheck className="w-16 h-16 mx-auto mb-6 opacity-80" />
           <h2 className="text-3xl md:text-5xl font-bold mb-6">Ready to upgrade your clinical rotations?</h2>
           <p className="text-primary-foreground/80 text-lg mb-10">
-            Join the programs already using ClinicalFlow to ensure compliance and streamline their schedules.
+            Join the programs already using SIPAG to ensure compliance and streamline their schedules.
           </p>
           <Button size="lg" variant="secondary" className="rounded-full text-base px-10 h-14" asChild>
             <Link href="/login">Launch Platform</Link>

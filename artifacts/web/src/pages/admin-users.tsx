@@ -16,10 +16,10 @@ import { UserPlus, Upload, Pencil, UserX, UserCheck, Search, ChevronLeft, Chevro
 type Role = 'admin' | 'scheduler' | 'ci' | 'student';
 
 const ROLE_COLORS: Record<Role, string> = {
-  admin: 'bg-purple-100 text-purple-700 border-purple-200',
-  scheduler: 'bg-blue-100 text-blue-700 border-blue-200',
-  ci: 'bg-teal-100 text-teal-700 border-teal-200',
-  student: 'bg-green-100 text-green-700 border-green-200',
+  admin: 'bg-blue-100 text-blue-800 border-blue-200',
+  scheduler: 'bg-orange-100 text-orange-700 border-orange-200',
+  ci: 'bg-sky-100 text-sky-700 border-sky-200',
+  student: 'bg-emerald-100 text-emerald-700 border-emerald-200',
 };
 
 const PAGE_SIZE = 10;
