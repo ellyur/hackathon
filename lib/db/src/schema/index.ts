@@ -13,3 +13,4 @@ export * from "./evaluations";
 export * from "./academic-schedules";
 export * from "./duty-verifications";
 export * from "./academic-year-settings";
+export * from "./system-settings";

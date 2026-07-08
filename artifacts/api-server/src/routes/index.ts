@@ -18,6 +18,7 @@ import evaluationsRouter from "./evaluations.js";
 import reportsRouter from "./reports.js";
 import dutyVerificationsRouter from "./duty-verifications.js";
 import academicYearSettingsRouter from "./academic-year-settings.js";
+import settingsRouter from "./settings.js";
 
 const router: IRouter = Router();
 
@@ -40,5 +41,6 @@ router.use(evaluationsRouter);
 router.use(reportsRouter);
 router.use(dutyVerificationsRouter);
 router.use(academicYearSettingsRouter);
+router.use(settingsRouter);
 
 export default router;

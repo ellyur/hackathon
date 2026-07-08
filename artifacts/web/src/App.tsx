@@ -54,6 +54,7 @@ import { PendingVerificationsPage } from '@/pages/verifications';
 import { ReviewVerificationPage } from '@/pages/review-verification';
 import { CreateUserPage } from '@/pages/create-user';
 import { AdminUserEditPage } from '@/pages/admin-user-edit';
+import { AdminUsersImportPage } from '@/pages/admin-users-import';
 import { AdminAnalyticsPage } from '@/pages/admin-analytics';
 import { ProfileSettingsPage } from '@/pages/profile-settings';
 import { NotificationsPage } from '@/pages/notifications';
@@ -152,6 +153,7 @@ function Router() {
           {/* Admin */}
           <Route path="/admin/users" component={AdminUsersPage} />
           <Route path="/admin/users/create" component={CreateUserPage} />
+          <Route path="/admin/users/import" component={AdminUsersImportPage} />
           <Route path="/admin/users/:id/edit" component={AdminUserEditPage} />
           <Route path="/admin/hospitals" component={AdminHospitalsPage} />
           <Route path="/admin/hospitals/:id/departments" component={AdminDepartmentsPage} />

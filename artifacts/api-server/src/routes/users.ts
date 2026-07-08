@@ -122,6 +122,86 @@ router.post("/users", requireRole("admin"), async (req, res): Promise<void> => {
   res.status(201).json(profile);
 });
 
+/**
+ * POST /api/users/import
+ * Bulk-create users from a CSV-parsed array.
+ * Body: { users: Array<UserInput> }
+ * Returns: { created, failed, results: [{row, name, email, status, error?}] }
+ */
+router.post("/users/import", requireRole("admin"), async (req, res): Promise<void> => {
+  const { users: rows } = req.body as { users?: unknown[] };
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    res.status(400).json({ error: "users must be a non-empty array" });
+    return;
+  }
+
+  type RowResult = { row: number; name: string; email: string; status: "ok" | "error"; error?: string };
+  const results: RowResult[] = [];
+  let created = 0;
+  let failed = 0;
+
+  for (let i = 0; i < rows.length; i++) {
+    const body = rows[i] as {
+      email?: string; password?: string; role?: string;
+      firstName?: string; lastName?: string; phone?: string;
+      studentNumber?: string; yearLevel?: number; section?: string;
+      program?: string; academicYear?: string;
+      employeeId?: string; specialization?: string;
+    };
+
+    const name = `${body.firstName ?? ""} ${body.lastName ?? ""}`.trim();
+    const email = body.email?.toLowerCase() ?? "";
+
+    try {
+      if (!body.email || !body.password || !body.role || !body.firstName || !body.lastName) {
+        throw new Error("Missing required fields");
+      }
+      const validRoles = ["admin", "scheduler", "ci", "student"];
+      if (!validRoles.includes(body.role)) throw new Error(`Invalid role: ${body.role}`);
+      if (body.password.length < 8) throw new Error("Password must be at least 8 characters");
+
+      const [existing] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, email));
+      if (existing) throw new Error("Email already in use");
+
+      const passwordHash = await bcrypt.hash(body.password, 10);
+      const newId = randomUUID();
+
+      await db.insert(usersTable).values({
+        id: newId, email, passwordHash,
+        role: body.role as "admin" | "scheduler" | "ci" | "student",
+        firstName: body.firstName, lastName: body.lastName,
+        phone: body.phone ?? null, avatarUrl: null, isActive: true,
+      });
+
+      if (body.role === "student") {
+        await db.insert(studentProfilesTable).values({
+          id: randomUUID(), userId: newId,
+          studentNumber: body.studentNumber ?? `BSN-${Date.now()}-${i}`,
+          yearLevel: body.yearLevel ?? 1, section: body.section ?? "A",
+          program: body.program ?? "BSN", academicYear: body.academicYear ?? "2024-2025",
+          totalHoursRequired: 500,
+        });
+      }
+      if (body.role === "ci") {
+        await db.insert(ciProfilesTable).values({
+          id: randomUUID(), userId: newId,
+          employeeId: body.employeeId ?? `CI-${Date.now()}-${i}`,
+          specialization: body.specialization ?? "General",
+        });
+      }
+
+      results.push({ row: i + 1, name, email, status: "ok" });
+      created++;
+    } catch (err: any) {
+      results.push({ row: i + 1, name, email, status: "error", error: err?.message ?? "Unknown error" });
+      failed++;
+    }
+  }
+
+  res.json({ created, failed, results });
+});
+
 router.get("/users/:id", requireAuth, async (req, res): Promise<void> => {
   const { id } = req.params;
   const profile = await getUserProfile(id);

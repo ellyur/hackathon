@@ -9,9 +9,9 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { useListUsers, useDeactivateUser, getListUsersQueryKey, type ListUsersRole } from '@workspace/api-client-react';
+import { useListUsers, useDeactivateUser, useUpdateUser, getListUsersQueryKey, type ListUsersRole } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { UserPlus, Pencil, UserX, Search, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { UserPlus, Upload, Pencil, UserX, UserCheck, Search, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
 type Role = 'admin' | 'scheduler' | 'ci' | 'student';
 
@@ -29,6 +29,7 @@ export function AdminUsersPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('active');
   const [page, setPage] = useState(1);
 
   const { data: users = [], isLoading, isError } = useListUsers(
@@ -36,9 +37,15 @@ export function AdminUsersPage() {
       role: roleFilter !== 'all' ? roleFilter as ListUsersRole : undefined,
       search: search || undefined,
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     { query: { staleTime: 30_000 } as any },
   );
+
+  // Apply status filter client-side
+  const filtered = users.filter(u => {
+    if (statusFilter === 'active') return u.isActive;
+    if (statusFilter === 'inactive') return !u.isActive;
+    return true;
+  });
 
   const deactivateMutation = useDeactivateUser({
     mutation: {
@@ -46,14 +53,22 @@ export function AdminUsersPage() {
         queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
         toast({ title: 'User deactivated', description: 'The user can no longer log in.' });
       },
-      onError: () => {
-        toast({ title: 'Error', description: 'Failed to deactivate user.', variant: 'destructive' });
-      },
+      onError: () => toast({ title: 'Error', description: 'Failed to deactivate user.', variant: 'destructive' }),
     },
   });
 
-  const totalPages = Math.ceil(users.length / PAGE_SIZE);
-  const paginated = users.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const reactivateMutation = useUpdateUser({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
+        toast({ title: 'User reactivated', description: 'The user can now log in again.' });
+      },
+      onError: () => toast({ title: 'Error', description: 'Failed to reactivate user.', variant: 'destructive' }),
+    },
+  });
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className="space-y-6">
@@ -62,12 +77,20 @@ export function AdminUsersPage() {
           <h2 className="text-3xl font-bold tracking-tight">Manage Users</h2>
           <p className="text-muted-foreground mt-1">View and manage all system accounts.</p>
         </div>
-        <Button asChild>
-          <Link href="/admin/users/create">
-            <UserPlus className="w-4 h-4 mr-2" />
-            Add User
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/admin/users/import">
+              <Upload className="w-4 h-4 mr-2" />
+              Import CSV
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/admin/users/create">
+              <UserPlus className="w-4 h-4 mr-2" />
+              Add User
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -92,6 +115,16 @@ export function AdminUsersPage() {
                 <SelectItem value="scheduler">Scheduler</SelectItem>
                 <SelectItem value="ci">CI</SelectItem>
                 <SelectItem value="student">Student</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -140,16 +173,17 @@ export function AdminUsersPage() {
                           : <Badge variant="secondary">Inactive</Badge>}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="icon" asChild>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="icon" asChild title="Edit user">
                             <Link href={`/admin/users/${user.id}/edit`}>
                               <Pencil className="w-4 h-4" />
                             </Link>
                           </Button>
-                          {user.isActive && (
+
+                          {user.isActive ? (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" title="Deactivate user">
                                   <UserX className="w-4 h-4" />
                                 </Button>
                               </AlertDialogTrigger>
@@ -171,6 +205,31 @@ export function AdminUsersPage() {
                                 </AlertDialogFooter>
                               </AlertDialogContent>
                             </AlertDialog>
+                          ) : (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="text-emerald-600 hover:text-emerald-700" title="Reactivate user">
+                                  <UserCheck className="w-4 h-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Reactivate User</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Reactivate <strong>{user.firstName} {user.lastName}</strong>? They will be able to log in again.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    onClick={() => reactivateMutation.mutate({ id: user.id, data: { isActive: true } as any })}
+                                  >
+                                    Reactivate
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           )}
                         </div>
                       </TableCell>
@@ -188,19 +247,14 @@ export function AdminUsersPage() {
               {totalPages > 1 && (
                 <div className="flex items-center justify-between px-4 py-3 border-t">
                   <p className="text-sm text-muted-foreground">
-                    Showing {paginated.length} of {users.length} users
+                    Showing {paginated.length} of {filtered.length} users
                   </p>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="icon" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
                       <ChevronLeft className="w-4 h-4" />
                     </Button>
                     {Array.from({ length: totalPages }, (_, i) => (
-                      <Button
-                        key={i + 1}
-                        variant={page === i + 1 ? 'default' : 'outline'}
-                        size="icon"
-                        onClick={() => setPage(i + 1)}
-                      >
+                      <Button key={i + 1} variant={page === i + 1 ? 'default' : 'outline'} size="icon" onClick={() => setPage(i + 1)}>
                         {i + 1}
                       </Button>
                     ))}
