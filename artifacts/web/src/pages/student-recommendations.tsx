@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link, useRoute } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -13,6 +15,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Info, Sparkles, UserPlus, UserMinus,
   CheckCircle2, Loader2, Save, AlertTriangle, TrendingUp, TrendingDown,
+  Search, X,
 } from 'lucide-react';
 import {
   useGetRecommendations,
@@ -245,6 +248,12 @@ export function StudentRecommendationsPage() {
   const [saving, setSaving] = useState(false);
   const [aiMode, setAiMode] = useState(false);
 
+  // ── Filter / sort state (manual mode) ────────────────────────────────────
+  const [search, setSearch] = useState('');
+  const [filterYear, setFilterYear] = useState('all');
+  const [filterSection, setFilterSection] = useState('all');
+  const [sortBy, setSortBy] = useState<'name-asc' | 'name-desc' | 'year' | 'section'>('name-asc');
+
   const { data: schedule, isLoading: loadingSchedule } = useGetSchedule(scheduleId, {
     query: { enabled: !!scheduleId },
   });
@@ -287,6 +296,42 @@ export function StudentRecommendationsPage() {
       setSaving(false);
     }
   }
+
+  // ── Derived filter options + filtered+sorted list ────────────────────────
+  const availableSections = useMemo(() => {
+    const s = new Set<string>();
+    for (const st of allStudents) {
+      const sec = st.studentProfile?.section;
+      if (sec) s.add(sec);
+    }
+    return [...s].sort();
+  }, [allStudents]);
+
+  const filteredStudents = useMemo(() => {
+    let list = [...allStudents];
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter((s: any) => {
+        const name = `${s.firstName} ${s.lastName}`.toLowerCase();
+        const num = (s.studentProfile?.studentNumber ?? '').toLowerCase();
+        return name.includes(q) || num.includes(q);
+      });
+    }
+    if (filterYear !== 'all') {
+      list = list.filter((s: any) => String(s.studentProfile?.yearLevel) === filterYear);
+    }
+    if (filterSection !== 'all') {
+      list = list.filter((s: any) => s.studentProfile?.section === filterSection);
+    }
+    list.sort((a: any, b: any) => {
+      if (sortBy === 'name-asc') return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
+      if (sortBy === 'name-desc') return `${b.firstName} ${b.lastName}`.localeCompare(`${a.firstName} ${a.lastName}`);
+      if (sortBy === 'year') return (a.studentProfile?.yearLevel ?? 0) - (b.studentProfile?.yearLevel ?? 0);
+      if (sortBy === 'section') return (a.studentProfile?.section ?? '').localeCompare(b.studentProfile?.section ?? '');
+      return 0;
+    });
+    return list;
+  }, [allStudents, search, filterYear, filterSection, sortBy]);
 
   const scheduleAny = schedule as unknown as {
     hospital?: { name: string };
@@ -494,16 +539,95 @@ export function StudentRecommendationsPage() {
       {/* ── MANUAL MODE: All Students ───────────────────────────── */}
       {!aiMode && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">All Students</CardTitle>
+          <CardHeader className="pb-3">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">
+                  All Students
+                  {!loadingStudents && (
+                    <span className="ml-2 text-sm font-normal text-muted-foreground">
+                      {filteredStudents.length} of {allStudents.length}
+                    </span>
+                  )}
+                </CardTitle>
+              </div>
+              {/* Filter + sort bar */}
+              <div className="flex flex-wrap gap-2">
+                {/* Search */}
+                <div className="relative flex-1 min-w-[180px] max-w-xs">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Search name or student no."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    className="pl-8 h-8 text-sm"
+                  />
+                  {search && (
+                    <button type="button" onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                {/* Year filter */}
+                <Select value={filterYear} onValueChange={setFilterYear}>
+                  <SelectTrigger className="h-8 text-sm w-[110px]">
+                    <SelectValue placeholder="Year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Years</SelectItem>
+                    <SelectItem value="1">Year 1</SelectItem>
+                    <SelectItem value="2">Year 2</SelectItem>
+                    <SelectItem value="3">Year 3</SelectItem>
+                    <SelectItem value="4">Year 4</SelectItem>
+                  </SelectContent>
+                </Select>
+                {/* Section filter */}
+                <Select value={filterSection} onValueChange={setFilterSection}>
+                  <SelectTrigger className="h-8 text-sm w-[120px]">
+                    <SelectValue placeholder="Section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Sections</SelectItem>
+                    {availableSections.map(sec => (
+                      <SelectItem key={sec} value={sec}>Section {sec}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {/* Sort */}
+                <Select value={sortBy} onValueChange={v => setSortBy(v as typeof sortBy)}>
+                  <SelectTrigger className="h-8 text-sm w-[140px]">
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="name-asc">Name A → Z</SelectItem>
+                    <SelectItem value="name-desc">Name Z → A</SelectItem>
+                    <SelectItem value="year">Year Level</SelectItem>
+                    <SelectItem value="section">Section</SelectItem>
+                  </SelectContent>
+                </Select>
+                {/* Clear filters */}
+                {(search || filterYear !== 'all' || filterSection !== 'all' || sortBy !== 'name-asc') && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs text-muted-foreground"
+                    onClick={() => { setSearch(''); setFilterYear('all'); setFilterSection('all'); setSortBy('name-asc'); }}
+                  >
+                    <X className="w-3.5 h-3.5 mr-1" /> Clear
+                  </Button>
+                )}
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="p-0 overflow-x-auto">
             {loadingStudents || loadingSchedule ? (
               <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
                 <Loader2 className="w-5 h-5 animate-spin" /> Loading students…
               </div>
-            ) : allStudents.length === 0 ? (
-              <div className="text-center py-16 text-muted-foreground">No students found.</div>
+            ) : filteredStudents.length === 0 ? (
+              <div className="text-center py-16 text-muted-foreground">
+                {allStudents.length === 0 ? 'No students found.' : 'No students match the current filters.'}
+              </div>
             ) : (
               <Table>
                 <TableHeader>
@@ -515,50 +639,48 @@ export function StudentRecommendationsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {[...allStudents]
-                    .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`))
-                    .map((student: any) => {
-                      const isAssigned = assignedIds.includes(student.id);
-                      const profile = student.studentProfile;
-                      return (
-                        <TableRow key={student.id} className={isAssigned ? 'bg-emerald-50/60 dark:bg-emerald-950/20' : ''}>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Avatar className="w-8 h-8">
-                                <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                                  {initials(student.firstName, student.lastName)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <p className="font-medium text-sm">{student.firstName} {student.lastName}</p>
-                              </div>
-                              {isAssigned && (
-                                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 h-4">Assigned</Badge>
-                              )}
+                  {filteredStudents.map((student: any) => {
+                    const isAssigned = assignedIds.includes(student.id);
+                    const profile = student.studentProfile;
+                    return (
+                      <TableRow key={student.id} className={isAssigned ? 'bg-emerald-50/60 dark:bg-emerald-950/20' : ''}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Avatar className="w-8 h-8">
+                              <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                                {initials(student.firstName, student.lastName)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium text-sm">{student.firstName} {student.lastName}</p>
                             </div>
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                            {profile?.studentNumber ?? '—'}
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                            {profile?.yearLevel ? `Year ${profile.yearLevel}` : '—'}
-                            {profile?.section ? ` · ${profile.section}` : ''}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              size="sm"
-                              variant={isAssigned ? 'outline' : 'default'}
-                              className={`h-7 text-xs gap-1 ${isAssigned ? 'text-red-600 border-red-200 hover:bg-red-50' : ''}`}
-                              onClick={() => toggle(student.id)}
-                            >
-                              {isAssigned
-                                ? <><UserMinus className="w-3.5 h-3.5" /> Remove</>
-                                : <><UserPlus className="w-3.5 h-3.5" /> Assign</>}
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                            {isAssigned && (
+                              <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 h-4">Assigned</Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                          {profile?.studentNumber ?? '—'}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                          {profile?.yearLevel ? `Year ${profile.yearLevel}` : '—'}
+                          {profile?.section ? ` · ${profile.section}` : ''}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant={isAssigned ? 'outline' : 'default'}
+                            className={`h-7 text-xs gap-1 ${isAssigned ? 'text-red-600 border-red-200 hover:bg-red-50' : ''}`}
+                            onClick={() => toggle(student.id)}
+                          >
+                            {isAssigned
+                              ? <><UserMinus className="w-3.5 h-3.5" /> Remove</>
+                              : <><UserPlus className="w-3.5 h-3.5" /> Assign</>}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
