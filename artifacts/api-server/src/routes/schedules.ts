@@ -74,38 +74,56 @@ setInterval(autoAdvanceScheduleStatuses, 60 * 1000).unref();
 
 const router: IRouter = Router();
 
-// ── Enrich helper ─────────────────────────────────────────────────────────────
+// ── Bulk enrich (fast — fixed number of queries regardless of schedule count) ──
 
-async function enrichSchedule(schedule: typeof schedulesTable.$inferSelect) {
-  const [studentLinks, hospital, department, ci] = await Promise.all([
+async function bulkEnrichSchedules(schedules: (typeof schedulesTable.$inferSelect)[]) {
+  if (schedules.length === 0) return [];
+
+  const scheduleIds = schedules.map((s) => s.id);
+  const hospitalIds  = [...new Set(schedules.map((s) => s.hospitalId))];
+  const deptIds      = [...new Set(schedules.map((s) => s.departmentId))];
+  const ciIds        = [...new Set(schedules.map((s) => s.ciId).filter(Boolean))] as string[];
+
+  const [studentLinks, hospitals, departments, ciUsers] = await Promise.all([
     db.select({
-        studentId: scheduleStudentsTable.studentId,
-        recommendationScore: scheduleStudentsTable.recommendationScore,
+        scheduleId: scheduleStudentsTable.scheduleId,
+        studentId:  scheduleStudentsTable.studentId,
+        recommendationScore:   scheduleStudentsTable.recommendationScore,
         recommendationReasons: scheduleStudentsTable.recommendationReasons,
       })
       .from(scheduleStudentsTable)
-      .where(eq(scheduleStudentsTable.scheduleId, schedule.id)),
+      .where(inArray(scheduleStudentsTable.scheduleId, scheduleIds)),
 
     db.select({ id: hospitalsTable.id, name: hospitalsTable.name, address: hospitalsTable.address, latitude: hospitalsTable.latitude, longitude: hospitalsTable.longitude, attendanceRadius: hospitalsTable.attendanceRadius })
       .from(hospitalsTable)
-      .where(eq(hospitalsTable.id, schedule.hospitalId))
-      .then(r => r[0] ?? null),
+      .where(inArray(hospitalsTable.id, hospitalIds)),
 
     db.select({ id: departmentsTable.id, name: departmentsTable.name })
       .from(departmentsTable)
-      .where(eq(departmentsTable.id, schedule.departmentId))
-      .then(r => r[0] ?? null),
+      .where(inArray(departmentsTable.id, deptIds)),
 
-    db.select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName, phone: usersTable.phone })
-      .from(usersTable)
-      .where(eq(usersTable.id, schedule.ciId))
-      .then(r => r[0] ?? null),
+    ciIds.length > 0
+      ? db.select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName, phone: usersTable.phone })
+          .from(usersTable)
+          .where(inArray(usersTable.id, ciIds))
+      : Promise.resolve([]),
   ]);
 
-  const studentIds = studentLinks.map((s) => s.studentId);
+  // Build lookup maps
+  const hospitalMap  = new Map(hospitals.map((h) => [h.id, h]));
+  const deptMap      = new Map(departments.map((d) => [d.id, d]));
+  const ciMap        = new Map(ciUsers.map((c) => [c.id, c]));
 
-  // Fetch student names & profiles for classmate display
-  const studentDetails = studentIds.length > 0
+  // Group student links by scheduleId
+  const linksBySchedule = new Map<string, typeof studentLinks>();
+  for (const link of studentLinks) {
+    if (!linksBySchedule.has(link.scheduleId)) linksBySchedule.set(link.scheduleId, []);
+    linksBySchedule.get(link.scheduleId)!.push(link);
+  }
+
+  // Fetch all student details in one shot
+  const allStudentIds = [...new Set(studentLinks.map((l) => l.studentId))];
+  const studentDetails = allStudentIds.length > 0
     ? await db.select({
         id: usersTable.id,
         firstName: usersTable.firstName,
@@ -117,17 +135,31 @@ async function enrichSchedule(schedule: typeof schedulesTable.$inferSelect) {
       })
       .from(usersTable)
       .leftJoin(studentProfilesTable, eq(studentProfilesTable.userId, usersTable.id))
-      .where(inArray(usersTable.id, studentIds))
+      .where(inArray(usersTable.id, allStudentIds))
     : [];
 
-  return {
-    ...schedule,
-    studentIds,
-    students: studentDetails,
-    hospital,
-    department,
-    ci,
-  };
+  const studentMap = new Map(studentDetails.map((s) => [s.id, s]));
+
+  return schedules.map((schedule) => {
+    const links = linksBySchedule.get(schedule.id) ?? [];
+    const studentIds = links.map((l) => l.studentId);
+    const students = studentIds.map((id) => studentMap.get(id)).filter(Boolean);
+    return {
+      ...schedule,
+      studentIds,
+      students,
+      hospital:   hospitalMap.get(schedule.hospitalId) ?? null,
+      department: deptMap.get(schedule.departmentId) ?? null,
+      ci:         schedule.ciId ? (ciMap.get(schedule.ciId) ?? null) : null,
+    };
+  });
+}
+
+// ── Single-schedule enrich (used for create/update responses) ─────────────────
+
+async function enrichSchedule(schedule: typeof schedulesTable.$inferSelect) {
+  const [result] = await bulkEnrichSchedules([schedule]);
+  return result;
 }
 
 // ── GET /schedules ─────────────────────────────────────────────────────────────
@@ -141,13 +173,13 @@ router.get("/schedules", requireAuth, async (req, res): Promise<void> => {
     const ids = links.map((l) => l.scheduleId);
     if (ids.length === 0) { res.json([]); return; }
     const schedules = await db.select().from(schedulesTable).where(inArray(schedulesTable.id, ids)).orderBy(desc(schedulesTable.dutyDate));
-    res.json(await Promise.all(schedules.map(enrichSchedule)));
+    res.json(await bulkEnrichSchedules(schedules));
     return;
   }
 
   if (session.role === "ci") {
     const schedules = await db.select().from(schedulesTable).where(eq(schedulesTable.ciId, session.userId!)).orderBy(desc(schedulesTable.dutyDate));
-    res.json(await Promise.all(schedules.map(enrichSchedule)));
+    res.json(await bulkEnrichSchedules(schedules));
     return;
   }
 
@@ -170,7 +202,7 @@ router.get("/schedules", requireAuth, async (req, res): Promise<void> => {
       : await db.select().from(schedulesTable).orderBy(desc(schedulesTable.dutyDate));
   }
 
-  res.json(await Promise.all(schedules.map(enrichSchedule)));
+  res.json(await bulkEnrichSchedules(schedules));
 });
 
 // ── GET /schedules/recommendations ────────────────────────────────────────────
