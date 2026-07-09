@@ -183,6 +183,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         label: 'Management',
         items: [
           { name: 'Users', href: '/admin/users', icon: Users },
+          { name: 'Students', href: '/students', icon: GraduationCap },
           { name: 'Hospitals', href: '/admin/hospitals', icon: Building2 },
         ],
       },
