@@ -35,6 +35,7 @@ import { Dashboard } from '@/pages/dashboard';
 import { ClinicalPassportPage } from '@/pages/passport';
 import { SubmitCasePage } from '@/pages/submit-case';
 import { AvailableSlotsPage } from '@/pages/slots';
+import { SchedulerSlotsPage } from '@/pages/scheduler-slots';
 import { TimeInSimulatorPage } from '@/pages/time-in';
 import { MasterSchedulePage } from '@/pages/master-schedule';
 import { AttendanceRosterPage } from '@/pages/attendance-roster';
@@ -94,6 +95,13 @@ const PlaceholderPage = ({ title }: { title: string }) => (
   </div>
 );
 
+import { useAuth } from '@/hooks/use-auth';
+function SlotsPage() {
+  const { user } = useAuth();
+  if (user?.role === 'scheduler' || user?.role === 'admin') return <SchedulerSlotsPage />;
+  return <AvailableSlotsPage />;
+}
+
 function Router() {
   const [location] = useLocation();
 
@@ -124,7 +132,7 @@ function Router() {
           <Route path="/passport" component={ClinicalPassportPage} />
           <Route path="/passport/submit" component={SubmitCasePage} />
           <Route path="/attendance" component={AttendanceHistoryPage} />
-          <Route path="/slots" component={AvailableSlotsPage} />
+          <Route path="/slots" component={SlotsPage} />
           <Route path="/slots/my-applications" component={MyApplicationsPage} />
 
           {/* CI */}

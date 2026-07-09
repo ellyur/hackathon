@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Info, Sparkles, UserPlus, UserMinus,
   CheckCircle2, Loader2, Save, AlertTriangle, TrendingUp, TrendingDown,
@@ -21,6 +21,14 @@ import {
   useUpdateSchedule,
 } from '@workspace/api-client-react';
 import type { StudentRecommendation } from '@workspace/api-client-react';
+
+function getAuthToken() { return localStorage.getItem('authToken'); }
+async function apiFetch<T>(path: string): Promise<T> {
+  const token = getAuthToken();
+  const res = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {}, credentials: 'include' });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText);
+  return res.json();
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -235,14 +243,23 @@ export function StudentRecommendationsPage() {
   const [selectedRec, setSelectedRec] = useState<StudentRecommendation | null>(null);
   const [pendingIds, setPendingIds] = useState<string[] | null>(null);
   const [saving, setSaving] = useState(false);
+  const [aiMode, setAiMode] = useState(false);
 
   const { data: schedule, isLoading: loadingSchedule } = useGetSchedule(scheduleId, {
     query: { enabled: !!scheduleId },
   });
 
+  // All students — always loaded for manual assignment
+  const { data: allStudents = [], isLoading: loadingStudents } = useQuery<any[]>({
+    queryKey: ['students'],
+    queryFn: () => apiFetch<any[]>('/api/students'),
+    staleTime: 60_000,
+  });
+
+  // AI recommendations — only fetched when scheduler clicks "Get AI Suggestions"
   const { data: recommendations = [], isLoading: loadingRecs } = useGetRecommendations(
     { scheduleId },
-    { query: { enabled: !!scheduleId } },
+    { query: { enabled: aiMode && !!scheduleId } },
   );
 
   const updateSchedule = useUpdateSchedule();
@@ -296,38 +313,48 @@ export function StudentRecommendationsPage() {
           <Link href="/schedules" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-3">
             <ArrowLeft className="w-4 h-4" /> Back to Schedules
           </Link>
-          <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Sparkles className="w-7 h-7 text-amber-500" /> Student Recommendations
-          </h2>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Assign Students</h2>
           <p className="text-muted-foreground mt-1 text-sm">{scheduleLabel}</p>
         </div>
 
-        {isDirty && (
-          <Button onClick={saveAssignments} disabled={saving} className="gap-2 shrink-0">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Save {pendingIds?.length ?? 0} Assignment{(pendingIds?.length ?? 0) !== 1 ? 's' : ''}
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <Button
+            variant={aiMode ? 'default' : 'outline'}
+            className="gap-2"
+            onClick={() => setAiMode(v => !v)}
+          >
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            {aiMode ? 'Hide AI Suggestions' : 'Get AI Suggestions'}
           </Button>
-        )}
+          {isDirty && (
+            <Button onClick={saveAssignments} disabled={saving} className="gap-2">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save {pendingIds?.length ?? 0} Assignment{(pendingIds?.length ?? 0) !== 1 ? 's' : ''}
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* How it works callout */}
-      <Card className="bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800">
-        <CardContent className="flex gap-3 pt-4 pb-4">
-          <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1">
-              <Sparkles className="w-4 h-4" /> How the AI Recommendation Score Works
-            </p>
-            <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
-              Students start at 50 points. Positive factors add points: missing clinical cases <strong>(+30)</strong>,
-              no schedule conflict <strong>(+25)</strong>, remaining duty days <strong>(+15)</strong>,
-              good attendance &gt;95% <strong>(+15)</strong>, balanced section distribution <strong>(+10)</strong>,
-              makeup duty needed <strong>(+10)</strong>. Penalties apply for excessive absences or late records.
-              Click <em>View Details</em> to see the full breakdown.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      {/* AI explanation callout — only when AI mode is on */}
+      {aiMode && (
+        <Card className="bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800">
+          <CardContent className="flex gap-3 pt-4 pb-4">
+            <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1">
+                <Sparkles className="w-4 h-4" /> How the AI Score Works
+              </p>
+              <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
+                Students start at 50 points. Positive factors: missing clinical cases <strong>(+30)</strong>,
+                no schedule conflict <strong>(+25)</strong>, remaining duty days <strong>(+15)</strong>,
+                good attendance &gt;95% <strong>(+15)</strong>, balanced section distribution <strong>(+10)</strong>,
+                makeup duty needed <strong>(+10)</strong>. Penalties apply for absences and lates.
+                Click <em>Why?</em> to see the full breakdown per student.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Assigned count */}
       {!loadingSchedule && (
@@ -340,136 +367,204 @@ export function StudentRecommendationsPage() {
         </div>
       )}
 
-      {/* Recommendation Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Ranked Recommendations</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0 overflow-x-auto">
-          {loadingRecs || loadingSchedule ? (
-            <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
-              <Loader2 className="w-5 h-5 animate-spin" /> Analyzing students…
-            </div>
-          ) : recommendations.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground">No students available for this schedule.</div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">Rank</TableHead>
-                  <TableHead>Student</TableHead>
-                  <TableHead className="hidden md:table-cell">Year / Section</TableHead>
-                  <TableHead>AI Score</TableHead>
-                  <TableHead className="hidden sm:table-cell">Attendance</TableHead>
-                  <TableHead className="hidden sm:table-cell">Absences</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recommendations.map((rec, idx) => {
-                  const isAssigned = assignedIds.includes(rec.studentId);
-                  const hasConflict = rec.reasons.some(r => r.criterion === 'No Schedule Conflict' && !r.applied);
-                  const profile = rec.student?.studentProfile;
-                  const rating = scoreRating(rec.score);
+      {/* ── AI MODE: Ranked Recommendations ────────────────────── */}
+      {aiMode && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-amber-500" /> AI-Ranked Students
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 overflow-x-auto">
+            {loadingRecs || loadingSchedule ? (
+              <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
+                <Loader2 className="w-5 h-5 animate-spin" /> Analyzing students…
+              </div>
+            ) : recommendations.length === 0 ? (
+              <div className="text-center py-16 text-muted-foreground">No students available for this schedule.</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">Rank</TableHead>
+                    <TableHead>Student</TableHead>
+                    <TableHead className="hidden md:table-cell">Year / Section</TableHead>
+                    <TableHead>AI Score</TableHead>
+                    <TableHead className="hidden sm:table-cell">Attendance</TableHead>
+                    <TableHead className="hidden sm:table-cell">Absences</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recommendations.map((rec, idx) => {
+                    const isAssigned = assignedIds.includes(rec.studentId);
+                    const hasConflict = rec.reasons.some(r => r.criterion === 'No Schedule Conflict' && !r.applied);
+                    const profile = rec.student?.studentProfile;
+                    const rating = scoreRating(rec.score);
 
-                  return (
-                    <TableRow
-                      key={rec.studentId}
-                      className={[
-                        'transition-colors',
-                        isAssigned ? 'bg-emerald-50/60 dark:bg-emerald-950/20' : '',
-                        hasConflict ? 'opacity-60' : '',
-                      ].filter(Boolean).join(' ')}
-                    >
-                      <TableCell>
-                        <span className="font-bold text-muted-foreground">#{idx + 1}</span>
-                      </TableCell>
-
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Avatar className="w-8 h-8">
-                            <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                              {initials(rec.student?.firstName, rec.student?.lastName)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium text-sm leading-tight">
-                              {rec.student?.firstName} {rec.student?.lastName}
-                            </p>
-                            <p className="text-xs text-muted-foreground">{profile?.studentNumber ?? '—'}</p>
+                    return (
+                      <TableRow
+                        key={rec.studentId}
+                        className={[
+                          'transition-colors',
+                          isAssigned ? 'bg-emerald-50/60 dark:bg-emerald-950/20' : '',
+                          hasConflict ? 'opacity-60' : '',
+                        ].filter(Boolean).join(' ')}
+                      >
+                        <TableCell>
+                          <span className="font-bold text-muted-foreground">#{idx + 1}</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Avatar className="w-8 h-8">
+                              <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                                {initials(rec.student?.firstName, rec.student?.lastName)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium text-sm leading-tight">
+                                {rec.student?.firstName} {rec.student?.lastName}
+                              </p>
+                              <p className="text-xs text-muted-foreground">{profile?.studentNumber ?? '—'}</p>
+                            </div>
+                            {isAssigned && (
+                              <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 h-4">Assigned</Badge>
+                            )}
+                            {hasConflict && (
+                              <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4">Conflict</Badge>
+                            )}
                           </div>
-                          {isAssigned && (
-                            <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 h-4">Assigned</Badge>
-                          )}
-                          {hasConflict && (
-                            <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4">Conflict</Badge>
-                          )}
-                        </div>
-                      </TableCell>
-
-                      <TableCell className="hidden md:table-cell">
-                        <span className="text-sm text-muted-foreground">
-                          {profile?.yearLevel ? `Year ${profile.yearLevel}` : '—'}
-                          {profile?.section ? ` · ${profile.section}` : ''}
-                        </span>
-                      </TableCell>
-
-                      <TableCell>
-                        <div className="space-y-1 min-w-[80px]">
-                          <div className="flex items-center gap-1.5">
-                            <span className={`font-bold text-sm ${scoreColor(rec.score)}`}>{rec.score}</span>
-                            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 ${rating.color}`}>
-                              {rating.label}
-                            </Badge>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <span className="text-sm text-muted-foreground">
+                            {profile?.yearLevel ? `Year ${profile.yearLevel}` : '—'}
+                            {profile?.section ? ` · ${profile.section}` : ''}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1 min-w-[80px]">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`font-bold text-sm ${scoreColor(rec.score)}`}>{rec.score}</span>
+                              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 ${rating.color}`}>
+                                {rating.label}
+                              </Badge>
+                            </div>
+                            <div className="relative h-1.5 w-20 rounded-full bg-muted overflow-hidden">
+                              <div
+                                className={`absolute left-0 top-0 h-full rounded-full transition-all ${progressColor(rec.score)}`}
+                                style={{ width: `${rec.score}%` }}
+                              />
+                            </div>
                           </div>
-                          <div className="relative h-1.5 w-20 rounded-full bg-muted overflow-hidden">
-                            <div
-                              className={`absolute left-0 top-0 h-full rounded-full transition-all ${progressColor(rec.score)}`}
-                              style={{ width: `${rec.score}%` }}
-                            />
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell">
+                          <span className="text-sm">{rec.student?.attendanceRate != null ? `${rec.student.attendanceRate}%` : '—'}</span>
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell">
+                          <span className={`text-sm ${(rec.student?.absenceCount ?? 0) > 3 ? 'text-red-600 font-medium' : ''}`}>
+                            {rec.student?.absenceCount ?? 0}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setSelectedRec(rec)}>
+                              Why?
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={isAssigned ? 'outline' : 'default'}
+                              className={`h-7 text-xs gap-1 ${isAssigned ? 'text-red-600 border-red-200 hover:bg-red-50' : ''}`}
+                              disabled={hasConflict && !isAssigned}
+                              onClick={() => toggle(rec.studentId)}
+                            >
+                              {isAssigned ? <><UserMinus className="w-3.5 h-3.5" /> Remove</> : <><UserPlus className="w-3.5 h-3.5" /> Assign</>}
+                            </Button>
                           </div>
-                        </div>
-                      </TableCell>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-                      <TableCell className="hidden sm:table-cell">
-                        <span className="text-sm">{rec.student?.attendanceRate != null ? `${rec.student.attendanceRate}%` : '—'}</span>
-                      </TableCell>
-
-                      <TableCell className="hidden sm:table-cell">
-                        <span className={`text-sm ${(rec.student?.absenceCount ?? 0) > 3 ? 'text-red-600 font-medium' : ''}`}>
-                          {rec.student?.absenceCount ?? 0}
-                        </span>
-                      </TableCell>
-
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs"
-                            onClick={() => setSelectedRec(rec)}
-                          >
-                            Why?
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={isAssigned ? 'outline' : 'default'}
-                            className={`h-7 text-xs gap-1 ${isAssigned ? 'text-red-600 border-red-200 hover:bg-red-50' : ''}`}
-                            disabled={hasConflict && !isAssigned}
-                            onClick={() => toggle(rec.studentId)}
-                          >
-                            {isAssigned ? <><UserMinus className="w-3.5 h-3.5" /> Remove</> : <><UserPlus className="w-3.5 h-3.5" /> Assign</>}
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      {/* ── MANUAL MODE: All Students ───────────────────────────── */}
+      {!aiMode && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">All Students</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 overflow-x-auto">
+            {loadingStudents || loadingSchedule ? (
+              <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
+                <Loader2 className="w-5 h-5 animate-spin" /> Loading students…
+              </div>
+            ) : allStudents.length === 0 ? (
+              <div className="text-center py-16 text-muted-foreground">No students found.</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Student</TableHead>
+                    <TableHead className="hidden md:table-cell">Student No.</TableHead>
+                    <TableHead className="hidden md:table-cell">Year / Section</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[...allStudents]
+                    .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`))
+                    .map((student: any) => {
+                      const isAssigned = assignedIds.includes(student.id);
+                      const profile = student.studentProfile;
+                      return (
+                        <TableRow key={student.id} className={isAssigned ? 'bg-emerald-50/60 dark:bg-emerald-950/20' : ''}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Avatar className="w-8 h-8">
+                                <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                                  {initials(student.firstName, student.lastName)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <p className="font-medium text-sm">{student.firstName} {student.lastName}</p>
+                              </div>
+                              {isAssigned && (
+                                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 h-4">Assigned</Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                            {profile?.studentNumber ?? '—'}
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                            {profile?.yearLevel ? `Year ${profile.yearLevel}` : '—'}
+                            {profile?.section ? ` · ${profile.section}` : ''}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant={isAssigned ? 'outline' : 'default'}
+                              className={`h-7 text-xs gap-1 ${isAssigned ? 'text-red-600 border-red-200 hover:bg-red-50' : ''}`}
+                              onClick={() => toggle(student.id)}
+                            >
+                              {isAssigned
+                                ? <><UserMinus className="w-3.5 h-3.5" /> Remove</>
+                                : <><UserPlus className="w-3.5 h-3.5" /> Assign</>}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Floating save bar */}
       {isDirty && (
