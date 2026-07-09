@@ -8,7 +8,8 @@
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
-    "bcrypt": "^6.0.0"
+    "bcrypt": "^6.0.0",
+    "drizzle-orm": "catalog:"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
