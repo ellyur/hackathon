@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Clock, MapPin, CheckCircle2, AlertCircle, ArrowRight, Loader2, ScanFace, Calendar, CalendarDays, ClipboardCheck, FileCheck } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Cell, Legend,
+  Cell, Legend, PieChart, Pie, RadialBarChart, RadialBar, PolarAngleAxis,
 } from 'recharts';
 import { Link, useLocation } from 'wouter';
 import { useListSchedules, useGetMyFaceDescriptor, useListAttendance } from '@workspace/api-client-react';
@@ -148,6 +148,15 @@ export function StudentDashboard() {
   const verifiedCaseInstances = allWardCases.reduce((s, c) => s + c.verified, 0);
   const casesPct = totalCaseInstances > 0 ? Math.round(verifiedCaseInstances / totalCaseInstances * 100) : 0;
   const overallPct = totalCaseTypes > 0 ? casesPct : Math.round((passport?.overallCompletion ?? 0) * 100);
+
+  // ── Analytics card data ────────────────────────────────────
+  const caseStatusData = [
+    { name: 'Complete',    value: allWardCases.filter(c => c.status === 'complete').length,    fill: 'hsl(var(--primary))' },
+    { name: 'In Progress', value: allWardCases.filter(c => c.status === 'in_progress').length, fill: '#f59e0b' },
+    { name: 'Deficient',  value: allWardCases.filter(c => c.status === 'deficient').length,   fill: '#ef4444' },
+  ].filter(d => d.value > 0);
+
+  const dutyDaysPct = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0;
 
   // ── Chart data ─────────────────────────────────────────────
   // Monthly attendance (last 6 months)
@@ -324,6 +333,52 @@ export function StudentDashboard() {
           </CardContent>
         </Card>
 
+        {/* Case Status Donut Chart */}
+        <Card className="col-span-full md:col-span-1 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Case Status</CardTitle>
+            <CardDescription>Breakdown by completion status</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {caseStatusData.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-[164px] text-muted-foreground text-sm gap-2">
+                <ClipboardCheck className="w-8 h-8 opacity-30" />
+                No case data yet
+              </div>
+            ) : (
+              <div className="flex flex-col items-center">
+                <ResponsiveContainer width="100%" height={164}>
+                  <PieChart>
+                    <Pie
+                      data={caseStatusData}
+                      cx="50%" cy="50%"
+                      innerRadius={48} outerRadius={70}
+                      dataKey="value"
+                      paddingAngle={3}
+                    >
+                      {caseStatusData.map((entry, i) => (
+                        <Cell key={i} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }}
+                      itemStyle={{ fontSize: 12 }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex items-center gap-4 text-xs text-muted-foreground -mt-2">
+                  {caseStatusData.map((d, i) => (
+                    <span key={i} className="flex items-center gap-1">
+                      <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: d.fill }} />
+                      {d.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Slot Applications Status */}
         {myApplications.length > 0 && (
           <Card className="col-span-full md:col-span-1 shadow-sm">
@@ -392,6 +447,56 @@ export function StudentDashboard() {
                   Late
                 </div>
                 <div className="text-2xl font-bold">{lateCount}</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Duty Days Progress */}
+        <Card className="col-span-full md:col-span-1 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Duty Days</CardTitle>
+            <CardDescription>Completed vs required rotation days</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between gap-4">
+              {/* Radial gauge */}
+              <div className="relative shrink-0">
+                <RadialBarChart
+                  width={120} height={120}
+                  cx={60} cy={60}
+                  innerRadius={36} outerRadius={54}
+                  startAngle={210} endAngle={-30}
+                  data={[{ value: dutyDaysPct, fill: 'hsl(var(--primary))' }]}
+                >
+                  <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
+                  <RadialBar dataKey="value" angleAxisId={0} cornerRadius={6} background={{ fill: 'hsl(var(--muted))' }} />
+                </RadialBarChart>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-xl font-bold leading-none">{dutyDaysPct}%</span>
+                  <span className="text-[10px] text-muted-foreground mt-0.5">done</span>
+                </div>
+              </div>
+              {/* Stats */}
+              <div className="flex-1 space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <span className="w-2.5 h-2.5 rounded-full bg-primary inline-block" />
+                    Completed
+                  </span>
+                  <span className="font-bold">{completedDays}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <span className="w-2.5 h-2.5 rounded-full bg-muted-foreground/30 inline-block" />
+                    Remaining
+                  </span>
+                  <span className="font-bold">{Math.max(0, totalDays - completedDays)}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm border-t pt-2">
+                  <span className="text-muted-foreground">Total Required</span>
+                  <span className="font-semibold">{totalDays} days</span>
+                </div>
               </div>
             </div>
           </CardContent>
