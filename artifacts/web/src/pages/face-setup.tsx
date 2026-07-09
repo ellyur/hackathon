@@ -3,21 +3,47 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
 import {
   ScanFace, Camera, CheckCircle2, AlertCircle, RefreshCw,
-  Loader2, ShieldCheck, Aperture,
+  Loader2, ShieldCheck, Aperture, Brain, Scan, Save,
 } from 'lucide-react';
 import { useGetMyFaceDescriptor } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
-import { loadFaceApiModels, detectFaceDescriptor, prefetchFaceApiModels } from '@/lib/face-detection';
+import {
+  loadFaceApiModels, detectFaceDescriptor, prefetchFaceApiModels, areFaceModelsReady,
+} from '@/lib/face-detection';
 
 type Step =
   | 'idle'
   | 'requesting-permission'
   | 'preview'
-  | 'uploading'
+  | 'loading-models'
+  | 'detecting'
+  | 'saving'
   | 'done'
   | 'error';
+
+function StageRow({ icon, label, status }: {
+  icon: React.ReactNode;
+  label: string;
+  status: 'waiting' | 'active' | 'done';
+}) {
+  return (
+    <div className={`flex items-center gap-3 text-sm transition-colors ${
+      status === 'done' ? 'text-emerald-600' :
+      status === 'active' ? 'text-primary font-medium' :
+      'text-muted-foreground'
+    }`}>
+      <span className="w-5 h-5 flex items-center justify-center shrink-0">
+        {status === 'done' ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> :
+         status === 'active' ? <Loader2 className="w-4 h-4 animate-spin" /> :
+         icon}
+      </span>
+      {label}
+    </div>
+  );
+}
 
 export function FaceSetupPage() {
   const { toast } = useToast();
@@ -25,15 +51,26 @@ export function FaceSetupPage() {
   const { data: faceData, isLoading: faceLoading, refetch } =
     useGetMyFaceDescriptor({ query: { staleTime: 30_000 } as never });
 
-  // Warm up face-api.js models in the background as soon as the page loads
-  // so they're ready before the user clicks "Capture".
-  useEffect(() => { prefetchFaceApiModels(); }, []);
+  const [modelsPreloading, setModelsPreloading] = useState(!areFaceModelsReady());
 
-  const [step, setStep]   = useState<Step>('idle');
+  useEffect(() => {
+    if (areFaceModelsReady()) return;
+    setModelsPreloading(true);
+    prefetchFaceApiModels();
+    const interval = setInterval(() => {
+      if (areFaceModelsReady()) {
+        setModelsPreloading(false);
+        clearInterval(interval);
+      }
+    }, 500);
+    return () => clearInterval(interval);
+  }, []);
+
+  const [step, setStep] = useState<Step>('idle');
   const [error, setError] = useState<string | null>(null);
 
-  const videoRef    = useRef<HTMLVideoElement>(null);
-  const streamRef   = useRef<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -81,15 +118,19 @@ export function FaceSetupPage() {
     streamRef.current = stream;
     setStep('preview');
 
-    // Attach stream to video element via RAF to ensure it's mounted
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(() => {/* autoplay policy — playsInline+muted still works */});
+          videoRef.current.play().catch(() => {});
         }
       });
     });
+
+    // Kick off model loading in parallel while camera warms up
+    if (!areFaceModelsReady()) {
+      loadFaceApiModels().catch(() => {});
+    }
   }, []);
 
   const captureAndEnroll = useCallback(async () => {
@@ -99,13 +140,15 @@ export function FaceSetupPage() {
       return;
     }
 
-    setStep('uploading');
-
     try {
-      // Load models first (cached after first load) — camera stays open during this
-      await loadFaceApiModels();
+      // Stage 1 — load models (may already be done from background prefetch)
+      if (!areFaceModelsReady()) {
+        setStep('loading-models');
+        await loadFaceApiModels();
+      }
 
-      // Detect face from the LIVE video before stopping the camera
+      // Stage 2 — detect face from live video
+      setStep('detecting');
       const descriptor = await detectFaceDescriptor(vid);
       stopCamera();
 
@@ -113,8 +156,10 @@ export function FaceSetupPage() {
         throw new Error('No face detected. Make sure your face is clearly visible and well-lit, then try again.');
       }
 
+      // Stage 3 — save to server
+      setStep('saving');
       const res = await fetch('/api/students/me/face-enroll', {
-        method:  'POST',
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(localStorage.getItem('authToken')
@@ -132,7 +177,7 @@ export function FaceSetupPage() {
 
       setStep('done');
       refetch();
-      toast({ title: 'Face enrolled', description: 'You can now time in using face verification.' });
+      toast({ title: 'Face enrolled ✓', description: 'You can now time in using face verification.' });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Enrollment failed. Please try again.');
       setStep('error');
@@ -146,7 +191,8 @@ export function FaceSetupPage() {
   }, [stopCamera]);
 
   const isEnrolled = faceData?.enrolled === true;
-  const showVideo  = step === 'preview';
+  const showVideo = step === 'preview';
+  const isProcessing = step === 'loading-models' || step === 'detecting' || step === 'saving';
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -191,18 +237,26 @@ export function FaceSetupPage() {
         </CardContent>
       </Card>
 
+      {/* AI models preload notice */}
+      {modelsPreloading && step === 'idle' && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-lg border bg-blue-50/60 border-blue-200 text-blue-800 text-sm">
+          <Loader2 className="w-4 h-4 animate-spin shrink-0 text-blue-500" />
+          <span>Loading AI face recognition models in the background — this only happens once…</span>
+        </div>
+      )}
+
       {/* Camera / enroll card */}
       <Card>
         <CardHeader>
           <CardTitle>{isEnrolled ? 'Re-enroll Your Face' : 'Enroll Your Face'}</CardTitle>
           <CardDescription>
-            Face recognition runs locally on your device — no photos leave your browser.
+            Face recognition runs locally on your device — no photos are sent to any server.
           </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-4">
 
-          {/* Live camera preview — always rendered so videoRef stays valid */}
+          {/* Live camera preview */}
           <div className={showVideo ? 'block' : 'hidden'}>
             <div className="space-y-3">
               <p className="text-sm font-medium text-center">
@@ -216,7 +270,6 @@ export function FaceSetupPage() {
                   muted
                   className="w-full h-full object-cover scale-x-[-1]"
                 />
-                {/* Oval guide */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="w-44 h-56 border-2 border-white/60 rounded-full shadow-[0_0_0_9999px_rgba(0,0,0,0.25)]" />
                 </div>
@@ -273,12 +326,55 @@ export function FaceSetupPage() {
             </div>
           )}
 
-          {/* Uploading */}
-          {step === 'uploading' && (
-            <div className="flex flex-col items-center justify-center py-10 gap-4 bg-muted/30 rounded-xl border">
-              <Loader2 className="w-10 h-10 text-primary animate-spin" />
-              <p className="font-medium">Enrolling your face…</p>
-              <p className="text-xs text-muted-foreground">Analysing facial features locally…</p>
+          {/* Multi-stage processing */}
+          {isProcessing && (
+            <div className="flex flex-col gap-5 py-8 px-4 bg-muted/30 rounded-xl border">
+              <div className="text-center">
+                <p className="font-semibold text-base">
+                  {step === 'loading-models' && 'Loading AI models…'}
+                  {step === 'detecting' && 'Detecting your face…'}
+                  {step === 'saving' && 'Saving enrollment…'}
+                </p>
+                {step === 'loading-models' && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    First-time only — about 5–15 seconds depending on your connection.
+                  </p>
+                )}
+              </div>
+
+              <Progress
+                value={
+                  step === 'loading-models' ? 33 :
+                  step === 'detecting' ? 66 :
+                  90
+                }
+                className="h-2"
+              />
+
+              <div className="space-y-3">
+                <StageRow
+                  icon={<Brain className="w-4 h-4" />}
+                  label="Load AI recognition models"
+                  status={
+                    step === 'loading-models' ? 'active' :
+                    step === 'detecting' || step === 'saving' ? 'done' : 'waiting'
+                  }
+                />
+                <StageRow
+                  icon={<Scan className="w-4 h-4" />}
+                  label="Detect and analyse your face"
+                  status={
+                    step === 'detecting' ? 'active' :
+                    step === 'saving' ? 'done' :
+                    step === 'loading-models' ? 'waiting' : 'waiting'
+                  }
+                />
+                <StageRow
+                  icon={<Save className="w-4 h-4" />}
+                  label="Save face profile"
+                  status={step === 'saving' ? 'active' : 'waiting'}
+                />
+              </div>
             </div>
           )}
 
@@ -300,6 +396,19 @@ export function FaceSetupPage() {
             </div>
           )}
 
+        </CardContent>
+      </Card>
+
+      {/* Tips */}
+      <Card className="bg-muted/40 border-dashed">
+        <CardContent className="pt-4 pb-4">
+          <p className="text-sm font-medium mb-2">Tips for best results</p>
+          <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+            <li>Make sure your face is well-lit — avoid bright lights directly behind you</li>
+            <li>Look straight at the camera, keep your face centred in the oval guide</li>
+            <li>Remove glasses or face coverings if recognition fails</li>
+            <li>First use downloads ~7 MB of AI models — subsequent uses are instant</li>
+          </ul>
         </CardContent>
       </Card>
     </div>

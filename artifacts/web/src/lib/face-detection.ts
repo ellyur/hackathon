@@ -18,6 +18,12 @@ function modelsPath(): string {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _faceapi: any = null;
 let _loaded: Promise<void> | null = null;
+let _modelsReady = false;
+
+/** Returns true if models are already loaded and ready — no async wait. */
+export function areFaceModelsReady(): boolean {
+  return _modelsReady;
+}
 
 async function getFaceApi() {
   if (_faceapi) return _faceapi;
@@ -30,6 +36,7 @@ async function getFaceApi() {
 
 /** Load all three required nets (lazy singleton). */
 export async function loadFaceApiModels(): Promise<void> {
+  if (_modelsReady) return;
   if (_loaded) return _loaded;
   _loaded = (async () => {
     try {
@@ -40,6 +47,7 @@ export async function loadFaceApiModels(): Promise<void> {
         faceapi.nets.faceLandmark68Net.loadFromUri(uri),
         faceapi.nets.faceRecognitionNet.loadFromUri(uri),
       ]);
+      _modelsReady = true;
     } catch (err) {
       _loaded = null;
       throw err;
@@ -52,6 +60,7 @@ export async function loadFaceApiModels(): Promise<void> {
 export function resetFaceApiModels(): void {
   _faceapi = null;
   _loaded = null;
+  _modelsReady = false;
 }
 
 /**
