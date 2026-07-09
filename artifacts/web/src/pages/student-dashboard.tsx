@@ -21,10 +21,13 @@ async function apiFetch<T>(path: string): Promise<T> {
   return res.json();
 }
 
+interface WardCase { status: 'complete' | 'in_progress' | 'deficient'; required: number; verified: number; }
+interface WardProgress { requiredCases: WardCase[]; }
 interface StudentPassport {
   totalDutyDaysRequired: number;
   totalDutyDaysCompleted: number;
   overallCompletion: number;
+  wards: WardProgress[];
 }
 
 function formatTime(t: string): string {
@@ -117,7 +120,15 @@ export function StudentDashboard() {
 
   const totalDays = passport?.totalDutyDaysRequired ?? 0;
   const completedDays = passport?.totalDutyDaysCompleted ?? 0;
-  const overallPct = Math.round((passport?.overallCompletion ?? 0) * 100);
+
+  // Case-type stats from wards (matches what the full passport page shows)
+  const allWardCases = (passport?.wards ?? []).flatMap(w => w.requiredCases);
+  const totalCaseTypes = allWardCases.length;
+  const completedCaseTypes = allWardCases.filter(c => c.status === 'complete').length;
+  const totalCaseInstances = allWardCases.reduce((s, c) => s + c.required, 0);
+  const verifiedCaseInstances = allWardCases.reduce((s, c) => s + c.verified, 0);
+  const casesPct = totalCaseInstances > 0 ? Math.round(verifiedCaseInstances / totalCaseInstances * 100) : 0;
+  const overallPct = totalCaseTypes > 0 ? casesPct : Math.round((passport?.overallCompletion ?? 0) * 100);
 
   return (
     <div className="space-y-8">
@@ -206,11 +217,11 @@ export function StudentDashboard() {
           </CardContent>
         </Card>
 
-        {/* Clinical Passport — Duty Days Summary */}
+        {/* Clinical Passport Summary */}
         <Card className="col-span-full md:col-span-1 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">Clinical Passport</CardTitle>
-            <CardDescription>Overall completion</CardDescription>
+            <CardDescription>Overall case completion</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="mt-2 flex items-center justify-center">
@@ -223,7 +234,7 @@ export function StudentDashboard() {
                     stroke="currentColor"
                     strokeWidth="12"
                     strokeDasharray="351.85"
-                    strokeDashoffset={351.85 * (1 - (passport?.overallCompletion ?? 0))}
+                    strokeDashoffset={351.85 * (1 - overallPct / 100)}
                     className="text-primary transition-all duration-1000"
                   />
                 </svg>
@@ -232,14 +243,24 @@ export function StudentDashboard() {
                 </div>
               </div>
             </div>
-            <div className="mt-6 flex justify-between text-sm text-muted-foreground">
-              <div className="text-center">
-                <div className="font-medium text-foreground">{completedDays}</div>
-                <div>Days Done</div>
+            <div className="mt-5 space-y-2">
+              {/* Case types row */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Case Types</span>
+                <span className="font-semibold">
+                  {completedCaseTypes}
+                  <span className="text-muted-foreground font-normal"> / {totalCaseTypes}</span>
+                  <span className="text-muted-foreground font-normal ml-1 text-xs">completed</span>
+                </span>
               </div>
-              <div className="text-center">
-                <div className="font-medium text-foreground">{totalDays}</div>
-                <div>Required</div>
+              {/* Duty days row */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Duty Days</span>
+                <span className="font-semibold">
+                  {completedDays}
+                  <span className="text-muted-foreground font-normal"> / {totalDays}</span>
+                  <span className="text-muted-foreground font-normal ml-1 text-xs">days done</span>
+                </span>
               </div>
             </div>
             <Button variant="outline" className="w-full mt-4" asChild>
