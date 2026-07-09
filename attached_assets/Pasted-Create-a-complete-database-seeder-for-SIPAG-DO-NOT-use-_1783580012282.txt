@@ -1,0 +1,153 @@
+Create a complete database seeder for SIPAG.
+
+DO NOT use placeholder data like John Doe or Test User.
+
+Generate realistic Philippine data that makes the system feel production-ready.
+
+==================================================== ACADEMIC STRUCTURE
+School Year: 2026–2027
+
+Semester: 1st Semester
+
+Course: Bachelor of Science in Nursing
+
+Generate the following year levels:
+
+• 2nd Year • 3rd Year • 4th Year
+
+Each year level must have exactly 5 sections.
+
+Example
+
+Second Year
+
+2A 2B 2C 2D 2E
+
+Third Year
+
+3A 3B 3C 3D 3E Fourth Year
+
+4A 4B 4C 4D 4E
+
+Total Sections
+
+15
+
+==================================================== STUDENTS
+Generate exactly
+
+25 students per section
+
+Total
+
+375 students
+
+Every student must have realistic Philippine information.
+
+Generate:
+
+• Student ID • First Name • Middle Name • Last Name • Email • Mobile Number • Birthdate • Sex • Course • Year Level • Section • School Year • Semester • Emergency Contact Name • Emergency Contact Number • Relationship • City • Nearest Landmark • Transportation Method • Password • Profile Picture Avatar • Active Status
+
+Landmarks should be realistic around Metro Manila.
+
+Examples
+
+SM North EDSA
+
+SM Fairview
+
+Trinoma
+
+Monumento
+
+SM Valenzuela
+
+Robinsons Novaliches
+
+Quezon Memorial Circle
+
+Transportation
+
+Public Transportation
+
+Private Car
+
+Motorcycle
+
+Walking
+
+DO NOT generate Face Registration.
+
+Face Profile must remain NULL.GPS Data must remain empty.
+
+Students should have complete class schedules.
+
+Generate realistic nursing class schedules.
+
+Monday to Saturday.
+
+Example subjects
+
+NCM
+
+Pharmacology
+
+Medical Surgical Nursing
+
+Community Health
+
+OB Nursing
+
+Psychiatric Nursing
+
+Anatomy
+
+Physical Assessment
+
+Health Assessment
+
+No conflicting schedules.
+
+==================================================== CLINICAL INSTRUCTORS
+Generate
+
+15 Clinical Instructors.
+
+Each instructor should have
+
+Full Name
+
+Email
+
+Mobile Number
+
+Employee ID
+
+Specialization
+
+Assigned Hospital
+
+Assigned Sections
+
+Profile PictureActive Status
+
+Face Registration
+
+NULL
+
+==================================================== SCHEDULERS
+Generate
+
+3 Scheduler Accounts.
+
+Include
+
+Employee ID
+
+Name
+
+Email
+
+Phone Number
+
+Password
