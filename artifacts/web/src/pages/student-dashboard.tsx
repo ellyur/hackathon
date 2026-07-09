@@ -81,6 +81,15 @@ export function StudentDashboard() {
   const { data: myVerifications = [] } = useListDutyVerifications();
   const requestVerification = useRequestDutyVerification();
 
+  // Slot applications
+  const { data: myApplications = [] } = useQuery<any[]>({
+    queryKey: ['my-slot-applications'],
+    queryFn: () => apiFetch('/api/slots/my-applications'),
+    staleTime: 30_000,
+    refetchOnMount: true,
+  });
+  const pendingApplications = myApplications.filter((a: any) => a.status === 'pending');
+
   async function handleRequestVerification(scheduleId: string, attendanceId: string) {
     setRequestingFor(scheduleId);
     try {
@@ -280,6 +289,41 @@ export function StudentDashboard() {
             </Button>
           </CardContent>
         </Card>
+
+        {/* Slot Applications Status */}
+        {myApplications.length > 0 && (
+          <Card className="col-span-full md:col-span-1 shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Clock className="w-5 h-5 text-amber-500" />
+                Slot Applications
+              </CardTitle>
+              <CardDescription>Status of your duty slot requests</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {myApplications.slice(0, 4).map((app: any) => (
+                <div key={app.id} className="flex items-center justify-between p-2.5 rounded-lg border bg-card text-sm">
+                  <div className="min-w-0">
+                    <p className="font-medium text-xs">{app.dutyDate ?? '—'}</p>
+                    <p className="text-xs text-muted-foreground">{app.startTime && app.endTime ? `${app.startTime} – ${app.endTime}` : '—'}</p>
+                  </div>
+                  {app.status === 'pending' && (
+                    <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-xs shrink-0">Pending</Badge>
+                  )}
+                  {app.status === 'approved' && (
+                    <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs shrink-0">Approved ✓</Badge>
+                  )}
+                  {app.status === 'rejected' && (
+                    <Badge variant="destructive" className="text-xs shrink-0">Rejected</Badge>
+                  )}
+                </div>
+              ))}
+              <Button variant="outline" size="sm" className="w-full mt-2" asChild>
+                <Link href="/slots/my-applications">View All Applications</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Attendance Stats */}
         <Card className="col-span-full md:col-span-1 shadow-sm">

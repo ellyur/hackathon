@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, dutySlotsTable, dutyApplicationsTable, notificationsTable } from "@workspace/db";
+import { db, dutySlotsTable, dutyApplicationsTable, notificationsTable, usersTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
@@ -121,11 +121,48 @@ router.post("/slots/:id/apply", requireRole("student"), async (req, res): Promis
   res.status(201).json(app);
 });
 
+// Student: view own applications (with slot details)
+router.get("/slots/my-applications", requireRole("student"), async (req, res): Promise<void> => {
+  const studentId = req.session.userId!;
+  const apps = await db
+    .select({
+      id: dutyApplicationsTable.id,
+      slotId: dutyApplicationsTable.slotId,
+      status: dutyApplicationsTable.status,
+      appliedAt: dutyApplicationsTable.appliedAt,
+      notes: dutyApplicationsTable.notes,
+      dutyDate: dutySlotsTable.dutyDate,
+      startTime: dutySlotsTable.startTime,
+      endTime: dutySlotsTable.endTime,
+      hospitalId: dutySlotsTable.hospitalId,
+      departmentId: dutySlotsTable.departmentId,
+    })
+    .from(dutyApplicationsTable)
+    .leftJoin(dutySlotsTable, eq(dutyApplicationsTable.slotId, dutySlotsTable.id))
+    .where(eq(dutyApplicationsTable.studentId, studentId))
+    .orderBy(desc(dutyApplicationsTable.appliedAt));
+  res.json(apps);
+});
+
 router.get("/slots/:id/applications", requireRole("scheduler", "admin"), async (req, res): Promise<void> => {
   const { id: slotId } = req.params;
   const apps = await db
-    .select()
+    .select({
+      id: dutyApplicationsTable.id,
+      slotId: dutyApplicationsTable.slotId,
+      studentId: dutyApplicationsTable.studentId,
+      status: dutyApplicationsTable.status,
+      appliedAt: dutyApplicationsTable.appliedAt,
+      notes: dutyApplicationsTable.notes,
+      reviewedBy: dutyApplicationsTable.reviewedBy,
+      reviewedAt: dutyApplicationsTable.reviewedAt,
+      student: {
+        firstName: usersTable.firstName,
+        lastName: usersTable.lastName,
+      },
+    })
     .from(dutyApplicationsTable)
+    .leftJoin(usersTable, eq(dutyApplicationsTable.studentId, usersTable.id))
     .where(eq(dutyApplicationsTable.slotId, slotId))
     .orderBy(dutyApplicationsTable.appliedAt);
   res.json(apps);

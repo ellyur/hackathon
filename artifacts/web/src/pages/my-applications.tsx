@@ -1,79 +1,33 @@
-import { useState } from 'react';
-import { Clock, CheckCircle, XCircle, CalendarDays, MapPin, AlertCircle } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, CalendarDays, MapPin, AlertCircle, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useToast } from '@/hooks/use-toast';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 type ApplicationStatus = 'pending' | 'approved' | 'rejected';
 
-interface SlotApplication {
+interface MyApplication {
   id: string;
-  hospital: string;
-  department: string;
-  date: string;
-  timeStart: string;
-  timeEnd: string;
-  appliedAt: string;
+  slotId: string;
   status: ApplicationStatus;
-  rejectionReason?: string;
+  appliedAt: string;
+  notes?: string | null;
+  dutyDate?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  hospitalId?: string | null;
+  departmentId?: string | null;
 }
 
-const mockApplications: SlotApplication[] = [
-  {
-    id: 'app-1',
-    hospital: 'St. Luke\'s Medical Center',
-    department: 'Cardiology',
-    date: '2024-06-28',
-    timeStart: '07:00 AM',
-    timeEnd: '03:00 PM',
-    appliedAt: new Date(Date.now() - 3600000).toISOString(),
-    status: 'pending',
-  },
-  {
-    id: 'app-2',
-    hospital: 'Makati Medical Center',
-    department: 'Internal Medicine',
-    date: '2024-06-30',
-    timeStart: '03:00 PM',
-    timeEnd: '11:00 PM',
-    appliedAt: new Date(Date.now() - 7200000).toISOString(),
-    status: 'pending',
-  },
-  {
-    id: 'app-3',
-    hospital: 'Philippine General Hospital',
-    department: 'Pediatrics',
-    date: '2024-06-22',
-    timeStart: '07:00 AM',
-    timeEnd: '03:00 PM',
-    appliedAt: new Date(Date.now() - 172800000).toISOString(),
-    status: 'approved',
-  },
-  {
-    id: 'app-4',
-    hospital: 'UST Hospital',
-    department: 'Surgery',
-    date: '2024-06-20',
-    timeStart: '11:00 PM',
-    timeEnd: '07:00 AM',
-    appliedAt: new Date(Date.now() - 259200000).toISOString(),
-    status: 'approved',
-  },
-  {
-    id: 'app-5',
-    hospital: 'Ospital ng Maynila',
-    department: 'Emergency',
-    date: '2024-06-18',
-    timeStart: '07:00 AM',
-    timeEnd: '03:00 PM',
-    appliedAt: new Date(Date.now() - 345600000).toISOString(),
-    status: 'rejected',
-    rejectionReason: 'Slot already filled by another student.',
-  },
-];
+function getAuthToken() { return localStorage.getItem('authToken'); }
+async function apiFetch<T>(path: string): Promise<T> {
+  const token = getAuthToken();
+  const res = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {}, credentials: 'include' });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText);
+  return res.json();
+}
 
 const statusConfig: Record<ApplicationStatus, { label: string; icon: React.ReactNode; badgeClass: string }> = {
   pending: {
@@ -111,43 +65,41 @@ function StatusBadge({ status }: { status: ApplicationStatus }) {
   );
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr?: string | null): string {
+  if (!dateStr) return '—';
   return new Date(dateStr).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
-
-function formatDateTime(dateStr: string): string {
+function formatDateTime(dateStr?: string | null): string {
+  if (!dateStr) return '—';
   return new Date(dateStr).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 type TabFilter = 'all' | ApplicationStatus;
 
 export function MyApplicationsPage() {
-  const { toast } = useToast();
-  const [cancelledIds, setCancelledIds] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<TabFilter>('all');
 
-  const handleCancel = (id: string, hospital: string) => {
-    setCancelledIds((prev) => new Set(prev).add(id));
-    toast({ title: 'Application cancelled.', description: `Your application for ${hospital} has been cancelled.` });
-  };
-
-  const displayApplications = mockApplications.filter((a) => {
-    if (cancelledIds.has(a.id)) return false;
-    if (activeTab === 'all') return true;
-    return a.status === activeTab;
+  const { data: applications = [], isLoading } = useQuery<MyApplication[]>({
+    queryKey: ['my-slot-applications'],
+    queryFn: () => apiFetch('/api/slots/my-applications'),
+    staleTime: 30_000,
+    refetchOnMount: true,
   });
 
-  const countFor = (filter: TabFilter) =>
-    mockApplications.filter((a) => {
-      if (cancelledIds.has(a.id)) return false;
-      return filter === 'all' ? true : a.status === filter;
-    }).length;
+  const displayed = applications.filter(a =>
+    activeTab === 'all' ? true : a.status === activeTab
+  );
+
+  const countFor = (f: TabFilter) =>
+    applications.filter(a => f === 'all' ? true : a.status === f).length;
 
   const EmptyState = ({ filter }: { filter: TabFilter }) => (
     <Card>
       <CardContent className="flex flex-col items-center justify-center py-16 text-center">
         <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-        <h3 className="text-lg font-semibold">No {filter === 'all' ? '' : filter} applications</h3>
+        <h3 className="text-lg font-semibold">
+          No {filter === 'all' ? '' : filter} applications
+        </h3>
         <p className="text-muted-foreground mt-1 text-sm">
           {filter === 'all'
             ? 'You have not applied for any slots yet.'
@@ -164,95 +116,85 @@ export function MyApplicationsPage() {
         <p className="text-muted-foreground mt-1">Track the status of your clinical duty slot applications.</p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabFilter)}>
-        <TabsList>
-          {(['all', 'pending', 'approved', 'rejected'] as TabFilter[]).map((tab) => (
-            <TabsTrigger key={tab} value={tab} className="capitalize">
-              {tab === 'all' ? 'All' : tab.charAt(0).toUpperCase() + tab.slice(1)}
-              {countFor(tab) > 0 && (
-                <span className="ml-2 bg-muted text-muted-foreground text-xs rounded-full px-1.5 py-0.5">
-                  {countFor(tab)}
-                </span>
-              )}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+      {isLoading ? (
+        <div className="flex justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabFilter)}>
+          <TabsList>
+            {(['all', 'pending', 'approved', 'rejected'] as TabFilter[]).map((tab) => (
+              <TabsTrigger key={tab} value={tab} className="capitalize">
+                {tab === 'all' ? 'All' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {countFor(tab) > 0 && (
+                  <span className="ml-2 bg-muted text-muted-foreground text-xs rounded-full px-1.5 py-0.5">
+                    {countFor(tab)}
+                  </span>
+                )}
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
-        {(['all', 'pending', 'approved', 'rejected'] as TabFilter[]).map((tab) => (
-          <TabsContent key={tab} value={tab} className="mt-4">
-            {displayApplications.length === 0 ? (
-              <EmptyState filter={tab} />
-            ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Applications</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0 overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Hospital / Department</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Time</TableHead>
-                        <TableHead>Applied At</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Action</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {displayApplications.map((app) => (
-                        <TableRow key={app.id}>
-                          <TableCell>
-                            <div>
-                              <p className="font-medium text-sm flex items-center gap-1">
-                                <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                                {app.hospital}
-                              </p>
-                              <p className="text-xs text-muted-foreground ml-5">{app.department}</p>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm whitespace-nowrap">
-                            <span className="flex items-center gap-1">
-                              <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
-                              {formatDate(app.date)}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-sm whitespace-nowrap text-muted-foreground">
-                            {app.timeStart} – {app.timeEnd}
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                            {formatDateTime(app.appliedAt)}
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <StatusBadge status={app.status} />
-                              {app.status === 'rejected' && app.rejectionReason && (
-                                <p className="text-xs text-muted-foreground mt-1 max-w-[180px]">{app.rejectionReason}</p>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {app.status === 'pending' && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
-                                onClick={() => handleCancel(app.id, app.hospital)}
-                              >
-                                Cancel
-                              </Button>
-                            )}
-                          </TableCell>
+          {(['all', 'pending', 'approved', 'rejected'] as TabFilter[]).map((tab) => (
+            <TabsContent key={tab} value={tab} className="mt-4">
+              {displayed.length === 0 ? (
+                <EmptyState filter={tab} />
+              ) : (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Applications</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0 overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Slot</TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Time</TableHead>
+                          <TableHead>Applied At</TableHead>
+                          <TableHead>Status</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-        ))}
-      </Tabs>
+                      </TableHeader>
+                      <TableBody>
+                        {displayed.map((app) => (
+                          <TableRow key={app.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-1 text-sm font-medium">
+                                <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                <span className="font-mono text-xs text-muted-foreground">{app.slotId.slice(0, 8)}…</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">
+                              <span className="flex items-center gap-1">
+                                <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+                                {formatDate(app.dutyDate)}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-sm whitespace-nowrap text-muted-foreground">
+                              {app.startTime && app.endTime ? `${app.startTime} – ${app.endTime}` : '—'}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                              {formatDateTime(app.appliedAt)}
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <StatusBadge status={app.status} />
+                                {app.status === 'rejected' && app.notes && (
+                                  <p className="text-xs text-muted-foreground mt-1 max-w-[180px]">{app.notes}</p>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+          ))}
+        </Tabs>
+      )}
     </div>
   );
 }
