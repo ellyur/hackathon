@@ -77,12 +77,16 @@ const router: IRouter = Router();
 // ── Enrich helper ─────────────────────────────────────────────────────────────
 
 async function enrichSchedule(schedule: typeof schedulesTable.$inferSelect) {
-  const [students, hospital, department, ci] = await Promise.all([
-    db.select({ studentId: scheduleStudentsTable.studentId })
+  const [studentLinks, hospital, department, ci] = await Promise.all([
+    db.select({
+        studentId: scheduleStudentsTable.studentId,
+        recommendationScore: scheduleStudentsTable.recommendationScore,
+        recommendationReasons: scheduleStudentsTable.recommendationReasons,
+      })
       .from(scheduleStudentsTable)
       .where(eq(scheduleStudentsTable.scheduleId, schedule.id)),
 
-    db.select({ id: hospitalsTable.id, name: hospitalsTable.name, latitude: hospitalsTable.latitude, longitude: hospitalsTable.longitude, attendanceRadius: hospitalsTable.attendanceRadius })
+    db.select({ id: hospitalsTable.id, name: hospitalsTable.name, address: hospitalsTable.address, latitude: hospitalsTable.latitude, longitude: hospitalsTable.longitude, attendanceRadius: hospitalsTable.attendanceRadius })
       .from(hospitalsTable)
       .where(eq(hospitalsTable.id, schedule.hospitalId))
       .then(r => r[0] ?? null),
@@ -98,9 +102,28 @@ async function enrichSchedule(schedule: typeof schedulesTable.$inferSelect) {
       .then(r => r[0] ?? null),
   ]);
 
+  const studentIds = studentLinks.map((s) => s.studentId);
+
+  // Fetch student names & profiles for classmate display
+  const studentDetails = studentIds.length > 0
+    ? await db.select({
+        id: usersTable.id,
+        firstName: usersTable.firstName,
+        lastName: usersTable.lastName,
+        avatarUrl: usersTable.avatarUrl,
+        section: studentProfilesTable.section,
+        yearLevel: studentProfilesTable.yearLevel,
+        studentNumber: studentProfilesTable.studentNumber,
+      })
+      .from(usersTable)
+      .leftJoin(studentProfilesTable, eq(studentProfilesTable.userId, usersTable.id))
+      .where(inArray(usersTable.id, studentIds))
+    : [];
+
   return {
     ...schedule,
-    studentIds: students.map((s) => s.studentId),
+    studentIds,
+    students: studentDetails,
     hospital,
     department,
     ci,
@@ -257,6 +280,7 @@ router.post("/schedules", requireRole("scheduler", "admin"), async (req, res): P
     eligibleSections?: string;
     caseTypeId?: string;
     studentIds?: string[];
+    studentRecommendations?: Array<{ studentId: string; score: number; reasons: string[] }>;
   };
 
   if (!body.hospitalId || !body.departmentId || !body.ciId || !body.dutyDate || !body.startTime || !body.endTime) {
@@ -286,7 +310,15 @@ router.post("/schedules", requireRole("scheduler", "admin"), async (req, res): P
   });
 
   if (body.studentIds?.length) {
-    await db.insert(scheduleStudentsTable).values(body.studentIds.map((sid) => ({ scheduleId: id, studentId: sid })));
+    const recMap = new Map((body.studentRecommendations ?? []).map((r: { studentId: string; score: number; reasons: string[] }) => [r.studentId, r]));
+    await db.insert(scheduleStudentsTable).values(
+      body.studentIds.map((sid) => ({
+        scheduleId: id,
+        studentId: sid,
+        recommendationScore: recMap.get(sid)?.score ?? null,
+        recommendationReasons: recMap.get(sid)?.reasons ?? null,
+      })),
+    );
   }
 
   const [schedule] = await db.select().from(schedulesTable).where(eq(schedulesTable.id, id));

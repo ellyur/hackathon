@@ -467,4 +467,186 @@ router.patch(
   },
 );
 
+// ── Buddy Attendance ──────────────────────────────────────────────────────────
+// Allows a verified student to clock in a classmate via live face scan.
+// Business rule: the verifying student must have already completed their own
+// GPS + face-verified attendance for the same schedule before they can help
+// a classmate.
+
+/**
+ * GET /api/attendance/buddy-eligible/:scheduleId
+ * Checks whether the current student may clock in a classmate for a given schedule.
+ */
+router.get("/attendance/buddy-eligible/:scheduleId", requireAuth, requireRole("student"), async (req, res): Promise<void> => {
+  const { scheduleId } = req.params;
+  const studentId = req.session.userId!;
+
+  const [myRecord] = await db
+    .select()
+    .from(attendanceTable)
+    .where(and(eq(attendanceTable.scheduleId, scheduleId), eq(attendanceTable.studentId, studentId)));
+
+  if (!myRecord || !myRecord.timeIn) {
+    res.json({ eligible: false, reason: "You have not checked in for this schedule yet." });
+    return;
+  }
+  if (!myRecord.gpsVerified) {
+    res.json({ eligible: false, reason: "Your attendance must be GPS-verified first." });
+    return;
+  }
+  if (!myRecord.faceVerified) {
+    res.json({ eligible: false, reason: "Your attendance must be face-verified first." });
+    return;
+  }
+
+  res.json({ eligible: true });
+});
+
+/**
+ * POST /api/attendance/buddy-time-in
+ * Body: { scheduleId, targetStudentId, descriptor: number[], latitude?, longitude? }
+ *
+ * Records attendance for the target student after verifying their face descriptor
+ * against their enrolled descriptor. The requesting student must have already
+ * completed their own verified attendance for this schedule.
+ */
+router.post("/attendance/buddy-time-in", requireAuth, requireRole("student"), async (req, res): Promise<void> => {
+  const verifyingStudentId = req.session.userId!;
+  const {
+    scheduleId,
+    targetStudentId,
+    descriptor,
+    latitude,
+    longitude,
+  } = req.body as {
+    scheduleId: string;
+    targetStudentId: string;
+    descriptor: unknown;
+    latitude?: number;
+    longitude?: number;
+  };
+
+  if (!scheduleId || !targetStudentId || !descriptor) {
+    res.status(400).json({ error: "scheduleId, targetStudentId, and descriptor are required" });
+    return;
+  }
+  if (targetStudentId === verifyingStudentId) {
+    res.status(400).json({ error: "You cannot verify attendance for yourself." });
+    return;
+  }
+
+  // 1. Ensure verifying student has their own verified attendance
+  const [myRecord] = await db
+    .select()
+    .from(attendanceTable)
+    .where(and(eq(attendanceTable.scheduleId, scheduleId), eq(attendanceTable.studentId, verifyingStudentId)));
+
+  if (!myRecord?.timeIn || !myRecord.gpsVerified || !myRecord.faceVerified) {
+    res.status(403).json({ error: "You must complete your own GPS and face-verified attendance first." });
+    return;
+  }
+
+  // 2. Target student must be assigned to this schedule
+  const [assignment] = await db
+    .select()
+    .from(scheduleStudentsTable)
+    .where(and(eq(scheduleStudentsTable.scheduleId, scheduleId), eq(scheduleStudentsTable.studentId, targetStudentId)));
+
+  if (!assignment) {
+    res.status(400).json({ error: "Target student is not assigned to this schedule." });
+    return;
+  }
+
+  // 3. Check for already clocked-in target
+  const [existing] = await db
+    .select()
+    .from(attendanceTable)
+    .where(and(eq(attendanceTable.scheduleId, scheduleId), eq(attendanceTable.studentId, targetStudentId)));
+
+  if (existing?.timeIn) {
+    res.status(409).json({ error: "Target student has already clocked in." });
+    return;
+  }
+
+  // 4. Verify the submitted descriptor against the target student's stored descriptor
+  if (!isValidDescriptor(descriptor)) {
+    res.status(400).json({ error: "descriptor must be an array of 128 finite numbers" });
+    return;
+  }
+
+  const [targetProfile] = await db
+    .select()
+    .from(studentProfilesTable)
+    .where(eq(studentProfilesTable.userId, targetStudentId));
+
+  const storedDescriptor = targetProfile?.faceDescriptor;
+  if (!Array.isArray(storedDescriptor) || storedDescriptor.length !== 128) {
+    res.status(400).json({ error: "Target student has not enrolled their face yet. They must enroll before buddy attendance is possible." });
+    return;
+  }
+
+  const matched = isFaceMatch(storedDescriptor as number[], descriptor);
+  if (!matched) {
+    res.status(401).json({ error: "Face verification failed — the face does not match the target student's enrolled photo." });
+    return;
+  }
+
+  // 5. Get schedule for timing info
+  const [schedule] = await db.select().from(schedulesTable).where(eq(schedulesTable.id, scheduleId));
+  if (!schedule) {
+    res.status(404).json({ error: "Schedule not found." });
+    return;
+  }
+
+  const now = new Date();
+  const [h, m] = schedule.startTime.split(":").map(Number);
+  const dutyStart = new Date(schedule.dutyDate);
+  dutyStart.setHours(h, m, 0, 0);
+  const lateThreshold = new Date(dutyStart.getTime() + schedule.gracePeriodMin * 60 * 1000);
+  const status = now > lateThreshold ? "late" : "present";
+
+  // 6. Record buddy attendance
+  if (existing) {
+    await db.update(attendanceTable).set({
+      timeIn: now,
+      status,
+      gpsVerified: false,
+      faceVerified: true,
+      livenessVerified: false,
+      method: "biometric",
+      studentLatitude: latitude ?? null,
+      studentLongitude: longitude ?? null,
+      verifiedByStudentId: verifyingStudentId,
+      isBuddyAttendance: true,
+    }).where(eq(attendanceTable.id, existing.id));
+  } else {
+    const id = randomUUID();
+    await db.insert(attendanceTable).values({
+      id,
+      scheduleId,
+      studentId: targetStudentId,
+      ciId: schedule.ciId,
+      timeIn: now,
+      status,
+      method: "biometric",
+      studentLatitude: latitude ?? null,
+      studentLongitude: longitude ?? null,
+      gpsVerified: false,
+      faceVerified: true,
+      livenessVerified: false,
+      verifiedByStudentId: verifyingStudentId,
+      isBuddyAttendance: true,
+      needsMakeup: false,
+      makeupCompleted: false,
+    });
+  }
+
+  const [result] = await db
+    .select()
+    .from(attendanceTable)
+    .where(and(eq(attendanceTable.scheduleId, scheduleId), eq(attendanceTable.studentId, targetStudentId)));
+
+  res.json(result);
+});
+
 export default router;

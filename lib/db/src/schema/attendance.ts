@@ -23,6 +23,10 @@ export const attendanceTable = pgTable("attendance", {
   remarks: text("remarks"),
   needsMakeup: boolean("needs_makeup").notNull().default(false),
   makeupCompleted: boolean("makeup_completed").notNull().default(false),
+  // Buddy attendance fields
+  verifiedByStudentId: text("verified_by_student_id").references(() => usersTable.id),
+  isBuddyAttendance: boolean("is_buddy_attendance").notNull().default(false),
+  deviceId: text("device_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

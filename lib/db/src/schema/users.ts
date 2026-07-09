@@ -28,6 +28,11 @@ export const studentProfilesTable = pgTable("student_profiles", {
   totalHoursRequired: integer("total_hours_required").notNull().default(500),
   faceDescriptor: json("face_descriptor").$type<number[]>(),
   luxandPersonUuid: text("luxand_person_uuid"),
+  // Location & transport (for AI recommendations)
+  landmark: text("landmark"),
+  city: text("city"),
+  transportationMethod: text("transportation_method"), // 'public_transport' | 'motorcycle' | 'private_car' | 'walking'
+  emergencyContact: text("emergency_contact"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

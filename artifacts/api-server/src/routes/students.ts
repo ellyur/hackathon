@@ -583,4 +583,39 @@ router.get("/students/:id/hours", requireAuth, async (req, res): Promise<void> =
   });
 });
 
+// ── PATCH /students/me/profile — update student-editable fields only ───────────
+// Students may only change: phone, emergencyContact, landmark, city, transportationMethod.
+// Academic fields (studentNumber, yearLevel, section, program, academicYear) are admin-only.
+
+router.patch("/students/me/profile", requireAuth, requireRole("student"), async (req, res): Promise<void> => {
+  const userId = req.session.userId!;
+  const { phone, emergencyContact, landmark, city, transportationMethod } = req.body as {
+    phone?: string;
+    emergencyContact?: string;
+    landmark?: string;
+    city?: string;
+    transportationMethod?: string;
+  };
+
+  // Update user phone (on the users table)
+  if (phone !== undefined) {
+    await db.update(usersTable).set({ phone }).where(eq(usersTable.id, userId));
+  }
+
+  // Update student-profile-specific fields
+  const profileUpdates: Partial<typeof studentProfilesTable.$inferInsert> = {};
+  if (emergencyContact !== undefined) profileUpdates.emergencyContact = emergencyContact;
+  if (landmark !== undefined) profileUpdates.landmark = landmark;
+  if (city !== undefined) profileUpdates.city = city;
+  if (transportationMethod !== undefined) profileUpdates.transportationMethod = transportationMethod;
+
+  if (Object.keys(profileUpdates).length > 0) {
+    await db.update(studentProfilesTable).set(profileUpdates).where(eq(studentProfilesTable.userId, userId));
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  const [profile] = await db.select().from(studentProfilesTable).where(eq(studentProfilesTable.userId, userId));
+  res.json({ ...user, studentProfile: profile ?? null });
+});
+
 export default router;

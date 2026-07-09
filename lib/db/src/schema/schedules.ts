@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, real, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, real, pgEnum, json } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { hospitalsTable, departmentsTable } from "./hospitals";
 
@@ -31,6 +31,9 @@ export const schedulesTable = pgTable("schedules", {
 export const scheduleStudentsTable = pgTable("schedule_students", {
   scheduleId: text("schedule_id").notNull().references(() => schedulesTable.id, { onDelete: "cascade" }),
   studentId: text("student_id").notNull().references(() => usersTable.id),
+  // AI recommendation data stored at assignment time
+  recommendationScore: integer("recommendation_score"),
+  recommendationReasons: json("recommendation_reasons").$type<string[]>(),
 });
 
 export type Schedule = typeof schedulesTable.$inferSelect;
