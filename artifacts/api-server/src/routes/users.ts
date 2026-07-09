@@ -1,11 +1,22 @@
 import { Router, type IRouter } from "express";
 import { db, usersTable, studentProfilesTable, ciProfilesTable } from "@workspace/db";
-import { eq, ilike, and, or } from "drizzle-orm";
+import { eq, ilike, and, or, count } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { randomUUID } from "crypto";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
+
+/** Generates a sequential student number scoped to an academic year, e.g. BSN-2026-0376 */
+async function generateStudentNumber(academicYear: string): Promise<string> {
+  const startYear = academicYear.split("-")[0] ?? academicYear;
+  const [{ total } = { total: 0 }] = await db
+    .select({ total: count() })
+    .from(studentProfilesTable)
+    .where(eq(studentProfilesTable.academicYear, academicYear));
+  const seq = Number(total) + 1;
+  return `BSN-${startYear}-${String(seq).padStart(4, "0")}`;
+}
 
 async function getUserProfile(userId: string) {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
@@ -97,14 +108,16 @@ router.post("/users", requireRole("admin"), async (req, res): Promise<void> => {
   });
 
   if (body.role === "student") {
+    const academicYear = body.academicYear ?? "2026-2027";
+    const studentNumber = body.studentNumber ?? (await generateStudentNumber(academicYear));
     await db.insert(studentProfilesTable).values({
       id: randomUUID(),
       userId: newId,
-      studentNumber: body.studentNumber ?? `BSN-${Date.now()}`,
+      studentNumber,
       yearLevel: body.yearLevel ?? 1,
       section: body.section ?? "A",
       program: body.program ?? "BSN",
-      academicYear: body.academicYear ?? "2024-2025",
+      academicYear,
       totalHoursRequired: 500,
     });
   }

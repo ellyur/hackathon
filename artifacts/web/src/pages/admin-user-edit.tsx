@@ -206,7 +206,16 @@ export function AdminUserEditPage() {
                   <FormField control={form.control} name="section" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Section</FormLabel>
-                      <FormControl><Input placeholder="A" {...field} /></FormControl>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger><SelectValue placeholder="Select section" /></SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {['A', 'B', 'C', 'D', 'E'].map((s) => (
+                            <SelectItem key={s} value={s}>Section {s}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )} />
