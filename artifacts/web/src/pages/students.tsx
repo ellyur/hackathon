@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Sheet,
@@ -230,13 +231,39 @@ function StudentCaseSheet({
 export function StudentRosterPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState('');
+  const [yearLevel, setYearLevel] = useState<string>('all');
+  const [section, setSection] = useState<string>('all');
   const [selectedStudent, setSelectedStudent] = useState<StudentRow | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  const { data: students = [], isLoading } = useListStudents(
+  const { data: allStudents = [], isLoading } = useListStudents(
     search ? { search } : undefined,
     { query: { staleTime: 30_000 } as never },
   );
+
+  const yearLevels = Array.from(
+    new Set((allStudents as StudentRow[]).map((s) => s.studentProfile?.yearLevel).filter((v): v is number => !!v)),
+  ).sort((a, b) => a - b);
+
+  const sectionsForYear = Array.from(
+    new Set(
+      (allStudents as StudentRow[])
+        .filter((s) => yearLevel === 'all' || s.studentProfile?.yearLevel === Number(yearLevel))
+        .map((s) => s.studentProfile?.section)
+        .filter((v): v is string => !!v),
+    ),
+  ).sort();
+
+  const students = (allStudents as StudentRow[]).filter((s) => {
+    if (yearLevel !== 'all' && s.studentProfile?.yearLevel !== Number(yearLevel)) return false;
+    if (section !== 'all' && s.studentProfile?.section !== section) return false;
+    return true;
+  });
+
+  function handleYearLevelChange(value: string) {
+    setYearLevel(value);
+    setSection('all');
+  }
 
   function openSheet(student: StudentRow) {
     setSelectedStudent(student);
@@ -245,7 +272,7 @@ export function StudentRosterPage() {
 
   function handleExport() {
     if (students.length === 0) return;
-    const rows = (students as StudentRow[]).map((s) => ({
+    const rows = students.map((s) => ({
       StudentNumber: s.studentProfile?.studentNumber ?? '',
       LastName: s.lastName,
       FirstName: s.firstName,
@@ -284,14 +311,54 @@ export function StudentRosterPage() {
 
       <Card>
         <CardHeader className="p-4 border-b">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by name or student no..."
-              className="pl-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+          <div className="flex flex-col md:flex-row md:items-center gap-3">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name or student no..."
+                className="pl-9"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <Select value={yearLevel} onValueChange={handleYearLevelChange}>
+              <SelectTrigger className="w-full md:w-40">
+                <SelectValue placeholder="Year Level" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Year Levels</SelectItem>
+                {yearLevels.map((y) => (
+                  <SelectItem key={y} value={String(y)}>
+                    Year {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={section} onValueChange={setSection}>
+              <SelectTrigger className="w-full md:w-40">
+                <SelectValue placeholder="Section" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sections</SelectItem>
+                {sectionsForYear.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    Section {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {(yearLevel !== 'all' || section !== 'all') && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setYearLevel('all');
+                  setSection('all');
+                }}
+              >
+                Clear filters
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
@@ -324,7 +391,7 @@ export function StudentRosterPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                (students as StudentRow[]).map((student) => {
+                students.map((student) => {
                   const rate = Math.round((student.caseCompletionRate ?? 0) * 100);
                   const hoursCompleted = Math.round(student.totalHoursCompleted ?? 0);
                   const hoursRequired = student.totalHoursRequired ?? student.studentProfile?.totalHoursRequired ?? 500;
