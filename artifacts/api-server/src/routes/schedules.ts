@@ -434,9 +434,49 @@ router.patch("/schedules/:id", requireRole("scheduler", "admin"), async (req, re
 
 router.delete("/schedules/:id", requireRole("scheduler", "admin"), async (req, res): Promise<void> => {
   const { id } = req.params;
+  const { reason } = req.body as { reason?: string };
+
+  if (!reason || !reason.trim()) {
+    res.status(400).json({ error: "A cancellation reason is required" });
+    return;
+  }
+
   const [schedule] = await db.select().from(schedulesTable).where(eq(schedulesTable.id, id));
   if (!schedule) { res.status(404).json({ error: "Schedule not found" }); return; }
-  await db.update(schedulesTable).set({ status: "cancelled", updatedAt: new Date() }).where(eq(schedulesTable.id, id));
+
+  await db.update(schedulesTable).set({
+    status: "cancelled",
+    cancellationReason: reason.trim(),
+    cancelledBy: req.session.userId,
+    cancelledAt: new Date(),
+    updatedAt: new Date(),
+  }).where(eq(schedulesTable.id, id));
+
+  // Notify assigned students + CI with the reason
+  const affectedStudents = await db.select({ studentId: scheduleStudentsTable.studentId })
+    .from(scheduleStudentsTable)
+    .where(eq(scheduleStudentsTable.scheduleId, id));
+
+  const recipientIds = [
+    ...affectedStudents.map(s => s.studentId),
+    ...(schedule.ciId ? [schedule.ciId] : []),
+  ];
+
+  if (recipientIds.length > 0) {
+    await db.insert(notificationsTable).values(
+      recipientIds.map(uid => ({
+        id: randomUUID(),
+        userId: uid,
+        type: "schedule_change",
+        title: "Duty Schedule Cancelled",
+        message: `Your duty on ${schedule.dutyDate} at ${schedule.startTime} has been cancelled. Reason: ${reason.trim()}`,
+        relatedEntity: "schedule",
+        relatedId: id,
+        isRead: false,
+      }))
+    );
+  }
+
   res.json({ message: "Schedule cancelled" });
 });
 

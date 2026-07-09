@@ -363,6 +363,12 @@ export interface Schedule {
   status: ScheduleStatus;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  cancellationReason?: string | null;
+  /** @nullable */
+  cancelledBy?: string | null;
+  /** @nullable */
+  cancelledAt?: string | null;
   createdBy?: string;
   createdAt: string;
   updatedAt?: string;
@@ -383,6 +389,11 @@ export interface ScheduleInput {
   gracePeriodMin?: number;
   notes?: string;
   studentIds: string[];
+}
+
+export interface ScheduleCancellation {
+  /** Why this duty schedule is being cancelled. */
+  reason: string;
 }
 
 export type ScheduleUpdateStatus = typeof ScheduleUpdateStatus[keyof typeof ScheduleUpdateStatus];

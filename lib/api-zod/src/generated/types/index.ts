@@ -79,6 +79,7 @@ export * from './recommendationExplanation';
 export * from './recommendationReason';
 export * from './resetPasswordRequest';
 export * from './schedule';
+export * from './scheduleCancellation';
 export * from './scheduleInput';
 export * from './scheduleStatus';
 export * from './scheduleUpdate';

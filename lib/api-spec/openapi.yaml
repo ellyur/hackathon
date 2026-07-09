@@ -722,6 +722,12 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleCancellation"
       responses:
         "200":
           description: Cancelled
@@ -1847,6 +1853,13 @@ components:
           enum: [upcoming, active, completed, cancelled]
         notes:
           type: ["string", "null"]
+        cancellationReason:
+          type: ["string", "null"]
+        cancelledBy:
+          type: ["string", "null"]
+        cancelledAt:
+          type: ["string", "null"]
+          format: date-time
         createdBy:
           type: string
         createdAt:
@@ -1892,6 +1905,14 @@ components:
           type: array
           items:
             type: string
+
+    ScheduleCancellation:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          description: Why this duty schedule is being cancelled.
 
     ScheduleUpdate:
       type: object

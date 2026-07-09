@@ -65,6 +65,7 @@ export function EditSchedulePage() {
 
   const updateSchedule = useUpdateSchedule();
   const cancelSchedule = useCancelSchedule();
+  const [cancellationReason, setCancellationReason] = useState('');
 
   const {
     register,
@@ -122,8 +123,12 @@ export function EditSchedulePage() {
   }
 
   async function handleCancelSchedule() {
+    if (!cancellationReason.trim()) {
+      toast({ title: 'Reason required', description: 'Please provide a reason for cancelling this schedule.', variant: 'destructive' });
+      return;
+    }
     try {
-      await cancelSchedule.mutateAsync({ id: scheduleId });
+      await cancelSchedule.mutateAsync({ id: scheduleId, data: { reason: cancellationReason.trim() } });
       toast({
         title: 'Schedule cancelled',
         description: 'The schedule has been cancelled and students notified.',
@@ -308,7 +313,7 @@ export function EditSchedulePage() {
           <CardDescription>Cancelling a schedule will notify all assigned students and the CI.</CardDescription>
         </CardHeader>
         <CardContent>
-          <AlertDialog>
+          <AlertDialog onOpenChange={(open) => { if (!open) setCancellationReason(''); }}>
             <AlertDialogTrigger asChild>
               <Button variant="destructive" disabled={cancelSchedule.isPending}>
                 {cancelSchedule.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Cancelling...</> : 'Cancel This Schedule'}
@@ -322,11 +327,23 @@ export function EditSchedulePage() {
                   This action cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
+              <div className="space-y-2 py-2">
+                <Label htmlFor="cancellationReason">
+                  Reason for cancellation <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="cancellationReason"
+                  placeholder="e.g. Hospital ward unavailable, CI on leave..."
+                  value={cancellationReason}
+                  onChange={(e) => setCancellationReason(e.target.value)}
+                />
+              </div>
               <AlertDialogFooter>
                 <AlertDialogCancel>Keep Schedule</AlertDialogCancel>
                 <AlertDialogAction
                   className="bg-destructive hover:bg-destructive/90"
-                  onClick={handleCancelSchedule}
+                  disabled={!cancellationReason.trim() || cancelSchedule.isPending}
+                  onClick={(e) => { e.preventDefault(); handleCancelSchedule(); }}
                 >
                   Yes, Cancel Schedule
                 </AlertDialogAction>

@@ -18,6 +18,10 @@ export const schedulesTable = pgTable("schedules", {
   dutyHours: real("duty_hours"),
   status: scheduleStatusEnum("status").notNull().default("upcoming"),
   notes: text("notes"),
+  /** Reason given by the Scheduler/Admin when cancelling this duty schedule. */
+  cancellationReason: text("cancellation_reason"),
+  cancelledBy: text("cancelled_by").references(() => usersTable.id),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
   // Student assignment controls
   maxStudents: integer("max_students").notNull().default(10),
   requiredYearLevel: integer("required_year_level"),

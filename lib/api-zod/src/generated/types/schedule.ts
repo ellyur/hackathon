@@ -24,6 +24,12 @@ export interface Schedule {
   status: ScheduleStatus;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  cancellationReason?: string | null;
+  /** @nullable */
+  cancelledBy?: string | null;
+  /** @nullable */
+  cancelledAt?: Date | null;
   createdBy?: string;
   createdAt: Date;
   updatedAt?: Date;

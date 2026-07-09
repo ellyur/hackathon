@@ -70,6 +70,7 @@ import type {
   RecommendationExplanation,
   ResetPasswordRequest,
   Schedule,
+  ScheduleCancellation,
   ScheduleInput,
   ScheduleUpdate,
   StudentDetail,
@@ -2566,14 +2567,15 @@ export const getCancelScheduleUrl = (id: string,) => {
 /**
  * @summary Cancel schedule
  */
-export const cancelSchedule = async (id: string, options?: RequestInit): Promise<void> => {
+export const cancelSchedule = async (id: string,
+    scheduleCancellation: ScheduleCancellation, options?: RequestInit): Promise<void> => {
 
   return customFetch<void>(getCancelScheduleUrl(id),
   {
     ...options,
-    method: 'DELETE'
-
-
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(scheduleCancellation)
   }
 );}
 
@@ -2581,8 +2583,8 @@ export const cancelSchedule = async (id: string, options?: RequestInit): Promise
 
 
 export const getCancelScheduleMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelSchedule>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof cancelSchedule>>, TError,{id: string}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelSchedule>>, TError,{id: string;data: BodyType<ScheduleCancellation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelSchedule>>, TError,{id: string;data: BodyType<ScheduleCancellation>}, TContext> => {
 
 const mutationKey = ['cancelSchedule'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -2594,10 +2596,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelSchedule>>, {id: string}> = (props) => {
-          const {id} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelSchedule>>, {id: string;data: BodyType<ScheduleCancellation>}> = (props) => {
+          const {id,data} = props ?? {};
 
-          return  cancelSchedule(id,requestOptions)
+          return  cancelSchedule(id,data,requestOptions)
         }
 
 
@@ -2608,18 +2610,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type CancelScheduleMutationResult = NonNullable<Awaited<ReturnType<typeof cancelSchedule>>>
-
+    export type CancelScheduleMutationBody = BodyType<ScheduleCancellation>
     export type CancelScheduleMutationError = ErrorType<unknown>
 
     /**
  * @summary Cancel schedule
  */
 export const useCancelSchedule = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelSchedule>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelSchedule>>, TError,{id: string;data: BodyType<ScheduleCancellation>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof cancelSchedule>>,
         TError,
-        {id: string},
+        {id: string;data: BodyType<ScheduleCancellation>},
         TContext
       > => {
       return useMutation(getCancelScheduleMutationOptions(options));
