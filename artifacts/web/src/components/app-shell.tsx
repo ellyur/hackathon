@@ -247,6 +247,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
+        {/* Logout button */}
+        <div className={cn('px-3 pb-2 shrink-0', sidebarCollapsed && !isMobile && 'px-2')}>
+          {sidebarCollapsed && !isMobile ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={logout}
+                  className="flex items-center justify-center w-full p-2.5 rounded-lg text-sidebar-foreground/60 hover:bg-red-500/15 hover:text-red-400 transition-colors"
+                >
+                  <LogOut className="w-5 h-5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Sign out</TooltipContent>
+            </Tooltip>
+          ) : (
+            <button
+              onClick={logout}
+              className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/60 hover:bg-red-500/15 hover:text-red-400 transition-colors"
+            >
+              <LogOut className="w-4.5 h-4.5 shrink-0" />
+              <span>Sign out</span>
+            </button>
+          )}
+        </div>
+
         {/* User Footer */}
         <div className="p-3 border-t border-sidebar-border/40 shrink-0">
           <DropdownMenu>
