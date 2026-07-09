@@ -16,6 +16,12 @@ import {
 import { eq, and, or, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
+import {
+  emailVerificationRequested,
+  emailCIVerified,
+  emailOfficiallyVerified,
+  emailVerificationReturned,
+} from "../lib/email.js";
 
 const router: IRouter = Router();
 
@@ -261,6 +267,18 @@ router.post(
         relatedEntity: "duty_verification",
         relatedId: id,
       });
+
+      // Email CI
+      const [hospitalRow] = await db.select({ name: hospitalsTable.name }).from(hospitalsTable).where(eq(hospitalsTable.id, schedule.hospitalId));
+      const [deptRow] = await db.select({ name: departmentsTable.name }).from(departmentsTable).where(eq(departmentsTable.id, schedule.departmentId));
+      emailVerificationRequested({
+        ciId: schedule.ciId,
+        studentName: `${student?.firstName ?? "A student"} ${student?.lastName ?? ""}`.trim(),
+        hospital: hospitalRow?.name ?? schedule.hospitalId,
+        department: deptRow?.name ?? schedule.departmentId,
+        dutyDate: schedule.dutyDate,
+        verificationId: id,
+      }).catch(() => {});
     } catch {
       // Notification failure is non-fatal
     }
@@ -390,6 +408,22 @@ router.post(
             relatedEntity: "duty_verification",
             relatedId: dv.id,
           });
+
+          // Email student for bulk verify (non-fatal)
+          const [ciUser] = await db.select({ firstName: usersTable.firstName, lastName: usersTable.lastName })
+            .from(usersTable).where(eq(usersTable.id, ciId));
+          const dvRecord = await db.select().from(dutyVerificationsTable).where(eq(dutyVerificationsTable.id, dv.id)).then(r => r[0]);
+          if (dvRecord) {
+            const [hospRow] = await db.select({ name: hospitalsTable.name }).from(hospitalsTable).where(eq(hospitalsTable.id, dvRecord.hospitalId));
+            emailCIVerified({
+              studentId: dv.studentId,
+              ciName: ciUser ? `${ciUser.firstName} ${ciUser.lastName}` : "Your CI",
+              hospital: hospRow?.name ?? dvRecord.hospitalId,
+              dutyDate: dv.dutyDate,
+              verificationId: dv.id,
+              remarks: null,
+            }).catch(() => {});
+          }
         } catch { /* non-fatal */ }
 
         try {
@@ -488,6 +522,19 @@ router.patch(
         relatedEntity: "duty_verification",
         relatedId: id,
       });
+
+      // Email student
+      const [ciUser] = await db.select({ firstName: usersTable.firstName, lastName: usersTable.lastName })
+        .from(usersTable).where(eq(usersTable.id, ciId));
+      const [hospRow] = await db.select({ name: hospitalsTable.name }).from(hospitalsTable).where(eq(hospitalsTable.id, dv.hospitalId));
+      emailCIVerified({
+        studentId: dv.studentId,
+        ciName: ciUser ? `${ciUser.firstName} ${ciUser.lastName}` : "Your CI",
+        hospital: hospRow?.name ?? dv.hospitalId,
+        dutyDate: dv.dutyDate,
+        verificationId: id,
+        remarks: remarks ?? null,
+      }).catch(() => {});
     } catch {
       // non-fatal
     }
@@ -582,6 +629,17 @@ router.patch(
         relatedEntity: "duty_verification",
         relatedId: id,
       });
+
+      // Email student
+      const [hospRow] = await db.select({ name: hospitalsTable.name }).from(hospitalsTable).where(eq(hospitalsTable.id, dv.hospitalId));
+      const [deptRow] = await db.select({ name: departmentsTable.name }).from(departmentsTable).where(eq(departmentsTable.id, dv.departmentId));
+      emailOfficiallyVerified({
+        studentId: dv.studentId,
+        hospital: hospRow?.name ?? dv.hospitalId,
+        department: deptRow?.name ?? dv.departmentId,
+        dutyDate: dv.dutyDate,
+        verificationId: id,
+      }).catch(() => {});
     } catch {
       // non-fatal
     }
@@ -653,6 +711,16 @@ router.patch(
         relatedEntity: "duty_verification",
         relatedId: id,
       });
+
+      // Email student
+      const [ciUser] = await db.select({ firstName: usersTable.firstName, lastName: usersTable.lastName })
+        .from(usersTable).where(eq(usersTable.id, ciId));
+      emailVerificationReturned({
+        studentId: dv.studentId,
+        ciName: ciUser ? `${ciUser.firstName} ${ciUser.lastName}` : "Your CI",
+        dutyDate: dv.dutyDate,
+        reason: reason ?? null,
+      }).catch(() => {});
     } catch {
       // non-fatal
     }

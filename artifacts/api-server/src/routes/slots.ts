@@ -3,6 +3,8 @@ import { db, dutySlotsTable, dutyApplicationsTable, notificationsTable, usersTab
 import { eq, and, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
+import { emailSlotApproved, emailSlotRejected } from "../lib/email.js";
+import { hospitalsTable, departmentsTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -209,6 +211,33 @@ router.patch(
       relatedId: slotId,
       isRead: false,
     });
+
+    // Email student — fetch slot details for context (non-fatal)
+    try {
+      const [slot] = await db.select().from(dutySlotsTable).where(eq(dutySlotsTable.id, slotId));
+      if (slot) {
+        const [hospRow] = await db.select({ name: hospitalsTable.name }).from(hospitalsTable).where(eq(hospitalsTable.id, slot.hospitalId));
+        const [deptRow] = await db.select({ name: departmentsTable.name }).from(departmentsTable).where(eq(departmentsTable.id, slot.departmentId));
+        if (status === "approved") {
+          emailSlotApproved({
+            studentId: updated.studentId,
+            hospital: hospRow?.name ?? slot.hospitalId,
+            department: deptRow?.name ?? slot.departmentId,
+            dutyDate: slot.dutyDate,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+          }).catch(() => {});
+        } else {
+          emailSlotRejected({
+            studentId: updated.studentId,
+            hospital: hospRow?.name ?? slot.hospitalId,
+            department: deptRow?.name ?? slot.departmentId,
+            dutyDate: slot.dutyDate,
+            notes: notes ?? null,
+          }).catch(() => {});
+        }
+      }
+    } catch { /* non-fatal */ }
 
     res.json(updated);
   },

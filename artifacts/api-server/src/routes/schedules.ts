@@ -13,6 +13,12 @@ import {
 import { eq, and, desc, inArray, count, lt, or } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
+import {
+  emailDutyAssigned,
+  emailDutyCancelled,
+  emailScheduleUpdated,
+  emailCIDutyNote,
+} from "../lib/email.js";
 
 // ── Auto-advance schedule statuses ─────────────────────────────────────────────
 // Runs on startup and every minute so statuses reflect real wall-clock time.
@@ -354,7 +360,28 @@ router.post("/schedules", requireRole("scheduler", "admin"), async (req, res): P
   }
 
   const [schedule] = await db.select().from(schedulesTable).where(eq(schedulesTable.id, id));
-  res.status(201).json(await enrichSchedule(schedule));
+  const enriched = await enrichSchedule(schedule);
+
+  // Send duty-assigned emails to all assigned students (non-fatal)
+  if (body.studentIds?.length) {
+    const ciName = enriched.ci
+      ? `${enriched.ci.firstName} ${enriched.ci.lastName}`
+      : "Your Clinical Instructor";
+    for (const sid of body.studentIds) {
+      emailDutyAssigned({
+        studentId: sid,
+        hospital: enriched.hospital?.name ?? body.hospitalId,
+        department: enriched.department?.name ?? body.departmentId,
+        dutyDate: body.dutyDate,
+        startTime: body.startTime,
+        endTime: body.endTime,
+        ciName,
+        scheduleId: id,
+      }).catch(() => {});
+    }
+  }
+
+  res.status(201).json(enriched);
 });
 
 // ── GET /schedules/:id ────────────────────────────────────────────────────────
@@ -412,9 +439,41 @@ router.patch("/schedules/:id", requireRole("scheduler", "admin"), async (req, re
   await db.update(schedulesTable).set(updates).where(eq(schedulesTable.id, id));
 
   if (body.studentIds !== undefined) {
+    // Track previously assigned students so we can email only newly added ones
+    const previousLinks = await db.select({ studentId: scheduleStudentsTable.studentId })
+      .from(scheduleStudentsTable).where(eq(scheduleStudentsTable.scheduleId, id));
+    const previousIds = new Set(previousLinks.map(l => l.studentId));
+
     await db.delete(scheduleStudentsTable).where(eq(scheduleStudentsTable.scheduleId, id));
     if (body.studentIds.length > 0) {
       await db.insert(scheduleStudentsTable).values(body.studentIds.map((sid) => ({ scheduleId: id, studentId: sid })));
+    }
+
+    // Email newly added students a duty-assigned notice (non-fatal)
+    const newlyAdded = body.studentIds.filter(sid => !previousIds.has(sid));
+    if (newlyAdded.length > 0) {
+      try {
+        const [currentSched] = await db.select().from(schedulesTable).where(eq(schedulesTable.id, id));
+        if (currentSched) {
+          const [[hospRow], [deptRow], [ciUser]] = await Promise.all([
+            db.select({ name: hospitalsTable.name }).from(hospitalsTable).where(eq(hospitalsTable.id, currentSched.hospitalId)),
+            db.select({ name: departmentsTable.name }).from(departmentsTable).where(eq(departmentsTable.id, currentSched.departmentId)),
+            db.select({ firstName: usersTable.firstName, lastName: usersTable.lastName }).from(usersTable).where(eq(usersTable.id, currentSched.ciId)),
+          ]);
+          for (const sid of newlyAdded) {
+            emailDutyAssigned({
+              studentId: sid,
+              hospital: hospRow?.name ?? currentSched.hospitalId,
+              department: deptRow?.name ?? currentSched.departmentId,
+              dutyDate: currentSched.dutyDate,
+              startTime: currentSched.startTime,
+              endTime: currentSched.endTime,
+              ciName: ciUser ? `${ciUser.firstName} ${ciUser.lastName}` : "Your Clinical Instructor",
+              scheduleId: id,
+            }).catch(() => {});
+          }
+        }
+      } catch { /* non-fatal */ }
     }
   }
 
@@ -455,6 +514,22 @@ router.patch("/schedules/:id", requireRole("scheduler", "admin"), async (req, re
           isRead: false,
         }))
       );
+
+      // Email each recipient with resolved names (non-fatal)
+      try {
+        const [[hospRow]] = await Promise.all([
+          db.select({ name: hospitalsTable.name }).from(hospitalsTable).where(eq(hospitalsTable.id, afterUpdate.hospitalId)),
+        ]);
+        for (const uid of recipientIds) {
+          emailScheduleUpdated({
+            recipientId: uid,
+            hospital: hospRow?.name ?? afterUpdate.hospitalId,
+            dutyDate: afterUpdate.dutyDate,
+            changeDetail,
+            scheduleId: id,
+          }).catch(() => {});
+        }
+      } catch { /* non-fatal */ }
     }
   }
 
@@ -495,6 +570,25 @@ router.patch("/schedules/:id/notes", requireRole("ci"), async (req, res): Promis
           isRead: false,
         }))
       );
+
+      // Get hospital/dept/CI names for email, then send — all non-fatal
+      try {
+        const [[hosp], [dept], [ciUser]] = await Promise.all([
+          db.select({ name: hospitalsTable.name }).from(hospitalsTable).where(eq(hospitalsTable.id, schedule.hospitalId)),
+          db.select({ name: departmentsTable.name }).from(departmentsTable).where(eq(departmentsTable.id, schedule.departmentId)),
+          db.select({ firstName: usersTable.firstName, lastName: usersTable.lastName }).from(usersTable).where(eq(usersTable.id, req.session.userId!)),
+        ]);
+        for (const link of studentLinks) {
+          emailCIDutyNote({
+            studentId: link.studentId,
+            ciName: ciUser ? `${ciUser.firstName} ${ciUser.lastName}` : "Your CI",
+            hospital: hosp?.name ?? schedule.hospitalId,
+            department: dept?.name ?? schedule.departmentId,
+            dutyDate: schedule.dutyDate,
+            note: notes.trim(),
+          }).catch(() => {});
+        }
+      } catch { /* non-fatal */ }
     }
   }
 
@@ -547,6 +641,24 @@ router.delete("/schedules/:id", requireRole("scheduler", "admin"), async (req, r
         isRead: false,
       }))
     );
+
+    // Email each recipient with resolved names (non-fatal)
+    try {
+      const [[hospRow], [deptRow]] = await Promise.all([
+        db.select({ name: hospitalsTable.name }).from(hospitalsTable).where(eq(hospitalsTable.id, schedule.hospitalId)),
+        db.select({ name: departmentsTable.name }).from(departmentsTable).where(eq(departmentsTable.id, schedule.departmentId)),
+      ]);
+      for (const uid of recipientIds) {
+        emailDutyCancelled({
+          recipientId: uid,
+          hospital: hospRow?.name ?? schedule.hospitalId,
+          department: deptRow?.name ?? schedule.departmentId,
+          dutyDate: schedule.dutyDate,
+          startTime: schedule.startTime,
+          reason: reason.trim(),
+        }).catch(() => {});
+      }
+    } catch { /* non-fatal */ }
   }
 
   res.json({ message: "Schedule cancelled" });
