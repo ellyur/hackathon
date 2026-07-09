@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Clock, MapPin, CheckCircle2, AlertCircle, ArrowRight, Loader2, ScanFace, Calendar, CalendarDays, ClipboardCheck, FileCheck } from 'lucide-react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Cell, Legend, PieChart, Pie, RadialBarChart, RadialBar, PolarAngleAxis,
-} from 'recharts';
+  Clock, MapPin, CheckCircle2, AlertCircle, ArrowRight, Loader2,
+  ScanFace, Calendar, CalendarDays, ClipboardCheck, FileCheck,
+  Award, Medal, Trophy, ChevronRight, History,
+} from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { useListSchedules, useGetMyFaceDescriptor, useListAttendance } from '@workspace/api-client-react';
 import { useAuth } from '@/hooks/use-auth';
@@ -16,6 +16,10 @@ import type { Schedule, AttendanceRecord } from '@workspace/api-client-react';
 import { useQuery } from '@tanstack/react-query';
 import { useListDutyVerifications, useRequestDutyVerification } from '@/hooks/use-duty-verifications';
 import { useToast } from '@/hooks/use-toast';
+import { useCertificates, nextMilestone } from '@/hooks/use-certificates';
+import type { PassportData } from '@/hooks/use-certificates';
+import { CertificateViewerModal, CertIcon } from '@/components/certificate-viewer';
+import type { Certificate } from '@/hooks/use-certificates';
 
 function getAuthToken() { return localStorage.getItem('authToken'); }
 async function apiFetch<T>(path: string): Promise<T> {
@@ -23,18 +27,6 @@ async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {}, credentials: 'include' });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText);
   return res.json();
-}
-
-interface WardCase { status: 'complete' | 'in_progress' | 'deficient'; required: number; verified: number; }
-interface WardProgress { requiredCases: WardCase[]; }
-interface StudentPassport {
-  totalDutyDaysRequired: number;
-  totalDutyDaysCompleted: number;
-  overallCompletion: number;
-  wards: WardProgress[];
-  earnedDutyHours: number;
-  requiredDutyHours: number;
-  dutyHoursCompletion: number;
 }
 
 function formatTime(t: string): string {
@@ -47,11 +39,18 @@ function formatTime(t: string): string {
 
 function verificationStatusBadge(status: string) {
   switch (status) {
-    case 'waiting_ci': return <Badge variant="secondary" className="text-xs">Waiting for CI</Badge>;
-    case 'pending_scheduler': return <Badge variant="warning" className="text-xs">Pending Scheduler</Badge>;
+    case 'waiting_ci':          return <Badge variant="secondary" className="text-xs">Waiting for CI</Badge>;
+    case 'pending_scheduler':   return <Badge variant="warning" className="text-xs">Pending Scheduler</Badge>;
     case 'officially_verified': return <Badge variant="success" className="text-xs">Verified ✓</Badge>;
-    default: return <Badge variant="outline" className="text-xs">{status}</Badge>;
+    default:                    return <Badge variant="outline" className="text-xs">{status}</Badge>;
   }
+}
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === 'present') return <Badge variant="success" className="text-xs">Present</Badge>;
+  if (status === 'late')    return <Badge variant="warning" className="text-xs">Late</Badge>;
+  if (status === 'absent')  return <Badge variant="destructive" className="text-xs">Absent</Badge>;
+  return <Badge variant="outline" className="text-xs capitalize">{status}</Badge>;
 }
 
 export function StudentDashboard() {
@@ -60,6 +59,7 @@ export function StudentDashboard() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [requestingFor, setRequestingFor] = useState<string | null>(null);
+  const [viewingCert, setViewingCert]     = useState<Certificate | null>(null);
 
   const { data: schedules, isLoading: schedulesLoading } = useListSchedules(undefined, {
     query: { staleTime: 60_000, refetchOnMount: true } as never,
@@ -75,7 +75,7 @@ export function StudentDashboard() {
 
   const userId = user?.id ?? '';
 
-  const { data: passport } = useQuery<StudentPassport>({
+  const { data: passport } = useQuery<PassportData>({
     queryKey: ['student-passport', userId],
     queryFn: () => apiFetch(`/api/students/${userId}/passport`),
     enabled: !!userId,
@@ -85,7 +85,6 @@ export function StudentDashboard() {
   const { data: myVerifications = [] } = useListDutyVerifications();
   const requestVerification = useRequestDutyVerification();
 
-  // Slot applications
   const { data: myApplications = [] } = useQuery<any[]>({
     queryKey: ['my-slot-applications'],
     queryFn: () => apiFetch('/api/slots/my-applications'),
@@ -109,10 +108,7 @@ export function StudentDashboard() {
   }
 
   const isEnrolled = faceData?.enrolled === true;
-
-  const attendedScheduleIds = new Set(
-    attendance.map((r: { scheduleId: string }) => r.scheduleId),
-  );
+  const attendedScheduleIds = new Set(attendance.map((r: { scheduleId: string }) => r.scheduleId));
 
   const all = schedules ?? [];
   const upcoming = all.filter(
@@ -121,7 +117,6 @@ export function StudentDashboard() {
   );
   const nextDuty: Schedule | undefined = upcoming[0];
 
-  // Attended/completed duties where student can request verification
   const attendanceMap = new Map<string, AttendanceRecord>();
   for (const r of attendance as AttendanceRecord[]) attendanceMap.set(r.scheduleId, r);
 
@@ -129,67 +124,61 @@ export function StudentDashboard() {
 
   const attendedDuties = all
     .filter((s: Schedule) => attendedScheduleIds.has(s.id))
-    .slice(0, 3); // show most recent 3
+    .slice(0, 3);
 
-  const presentCount  = attendance.filter((r: { status: string }) => r.status === 'present').length;
-  const lateCount     = attendance.filter((r: { status: string }) => r.status === 'late').length;
+  const presentCount = attendance.filter((r: { status: string }) => r.status === 'present').length;
+  const lateCount    = attendance.filter((r: { status: string }) => r.status === 'late').length;
 
-  const totalDays = passport?.totalDutyDaysRequired ?? 0;
-  const completedDays = passport?.totalDutyDaysCompleted ?? 0;
-  const earnedHours = passport?.earnedDutyHours ?? 0;
+  const earnedHours   = passport?.earnedDutyHours ?? 0;
   const requiredHours = passport?.requiredDutyHours ?? 0;
-  const hoursPct = passport?.dutyHoursCompletion ?? 0;
+  const hoursPct      = passport?.dutyHoursCompletion ?? 0;
 
-  // Case-type stats from wards (matches what the full passport page shows)
-  const allWardCases = (passport?.wards ?? []).flatMap(w => w.requiredCases);
-  const totalCaseTypes = allWardCases.length;
-  const completedCaseTypes = allWardCases.filter(c => c.status === 'complete').length;
-  const totalCaseInstances = allWardCases.reduce((s, c) => s + c.required, 0);
-  const verifiedCaseInstances = allWardCases.reduce((s, c) => s + c.verified, 0);
-  const casesPct = totalCaseInstances > 0 ? Math.round(verifiedCaseInstances / totalCaseInstances * 100) : 0;
+  const allWardCases       = (passport?.wards ?? []).flatMap((w: any) => w.requiredCases ?? []);
+  const totalCaseTypes     = allWardCases.length;
+  const completedCaseTypes = allWardCases.filter((c: any) => c.status === 'complete').length;
+  const totalCaseInstances = allWardCases.reduce((s: number, c: any) => s + c.required, 0);
+  const verifiedCaseInstances = allWardCases.reduce((s: number, c: any) => s + c.verified, 0);
+  const casesPct   = totalCaseInstances > 0 ? Math.round(verifiedCaseInstances / totalCaseInstances * 100) : 0;
   const overallPct = totalCaseTypes > 0 ? casesPct : Math.round((passport?.overallCompletion ?? 0) * 100);
 
-  // ── Analytics card data ────────────────────────────────────
-  const caseStatusData = [
-    { name: 'Complete',    value: allWardCases.filter(c => c.status === 'complete').length,    fill: 'hsl(var(--primary))' },
-    { name: 'In Progress', value: allWardCases.filter(c => c.status === 'in_progress').length, fill: '#f59e0b' },
-    { name: 'Deficient',  value: allWardCases.filter(c => c.status === 'deficient').length,   fill: '#ef4444' },
-  ].filter(d => d.value > 0);
+  // ── Certificates ────────────────────────────────────────────────────────────
+  const certs       = useCertificates(passport, user);
+  const latestCert  = certs[certs.length - 1] ?? null;
+  const nextMilest  = nextMilestone(passport);
 
-  const dutyDaysPct = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0;
+  // ── Duty History (last 5 attended duties) ───────────────────────────────────
+  const scheduleMap = useMemo(() => {
+    const m = new Map<string, Schedule>();
+    (schedules ?? []).forEach((s: Schedule) => m.set(s.id, s));
+    return m;
+  }, [schedules]);
 
-  // ── Chart data ─────────────────────────────────────────────
-  // Monthly attendance (last 6 months)
-  const monthlyAttendance = (() => {
-    const buckets: Record<string, { month: string; Present: number; Late: number; Absent: number }> = {};
-    const now = new Date();
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const label = d.toLocaleString('default', { month: 'short', year: '2-digit' });
-      buckets[key] = { month: label, Present: 0, Late: 0, Absent: 0 };
-    }
-    for (const r of attendance as any[]) {
-      const key = r.dutyDate?.slice(0, 7);
-      if (key && buckets[key]) {
-        const s = r.status as string;
-        if (s === 'present') buckets[key].Present++;
-        else if (s === 'late') buckets[key].Late++;
-        else if (s === 'absent') buckets[key].Absent++;
-      }
-    }
-    return Object.values(buckets);
-  })();
+  const dutyHistory = useMemo(() => {
+    const attended = (attendance as AttendanceRecord[])
+      .filter(r => r.status === 'present' || r.status === 'late' || r.status === 'absent')
+      .slice()
+      .sort((a, b) => {
+        const da = (a as any).dutyDate ?? a.timeIn ?? '';
+        const db = (b as any).dutyDate ?? b.timeIn ?? '';
+        return db.localeCompare(da);
+      })
+      .slice(0, 5);
 
-  // Case completion per ward from passport
-  const wardChartData = (passport?.wards ?? []).map((w: any, i: number) => {
-    const total = w.requiredCases?.reduce((s: number, c: any) => s + (c.required ?? 0), 0) ?? 0;
-    const done  = w.requiredCases?.reduce((s: number, c: any) => s + (c.verified ?? 0), 0) ?? 0;
-    return { ward: w.name ?? `Ward ${i + 1}`, Verified: done, Remaining: Math.max(0, total - done) };
-  }).filter((w: any) => w.Verified + w.Remaining > 0).slice(0, 6);
+    return attended.map(r => {
+      const sched        = scheduleMap.get(r.scheduleId);
+      const verification = verificationByAttendanceId.get(r.id) as any;
+      return {
+        attendance: r,
+        schedule:      sched,
+        verification,
+        casesCount: verification?.selectedCases?.length ?? 0,
+      };
+    });
+  }, [attendance, scheduleMap, verificationByAttendanceId]);
 
   return (
     <div className="space-y-8">
+      {/* ── Page Header ───────────────────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
@@ -202,7 +191,7 @@ export function StudentDashboard() {
         </Button>
       </div>
 
-      {/* Face enrollment banner */}
+      {/* ── Face enrollment banner ────────────────────────────────────────── */}
       {!isEnrolled && (
         <div className="flex items-center justify-between gap-4 p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-900">
           <div className="flex items-center gap-3">
@@ -218,8 +207,10 @@ export function StudentDashboard() {
         </div>
       )}
 
+      {/* ── Row 1: Next Duty · Clinical Passport · Rewards ────────────────── */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* Next Duty Card */}
+
+        {/* Next Duty */}
         <Card className="col-span-full lg:col-span-1 border-primary/20 shadow-sm relative overflow-hidden bg-primary/5">
           <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-bl-full -mr-8 -mt-8" />
           <CardHeader>
@@ -301,7 +292,6 @@ export function StudentDashboard() {
                 </div>
               </div>
             </div>
-            {/* Clinical Hours Progress Bar */}
             <div className="mt-4 space-y-1.5">
               <div className="flex items-center justify-between text-sm">
                 <span className="font-medium">Clinical Hours</span>
@@ -315,9 +305,7 @@ export function StudentDashboard() {
                 {hoursPct}% complete · {Math.max(0, requiredHours - earnedHours)}h remaining
               </p>
             </div>
-
-            <div className="mt-4 space-y-2">
-              {/* Case types row */}
+            <div className="mt-4">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Case Types</span>
                 <span className="font-semibold">
@@ -333,89 +321,73 @@ export function StudentDashboard() {
           </CardContent>
         </Card>
 
-        {/* Case Status Donut Chart */}
-        <Card className="col-span-full md:col-span-1 shadow-sm">
+        {/* Rewards & Achievements */}
+        <Card className="col-span-full md:col-span-1 shadow-sm border-yellow-200 bg-gradient-to-br from-yellow-50/60 to-amber-50/40">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Case Status</CardTitle>
-            <CardDescription>Breakdown by completion status</CardDescription>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Award className="w-5 h-5 text-yellow-500" />
+              Rewards & Achievements
+            </CardTitle>
+            <CardDescription>Your clinical certificates and milestones</CardDescription>
           </CardHeader>
-          <CardContent>
-            {caseStatusData.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-[164px] text-muted-foreground text-sm gap-2">
-                <ClipboardCheck className="w-8 h-8 opacity-30" />
-                No case data yet
-              </div>
-            ) : (
-              <div className="flex flex-col items-center">
-                <ResponsiveContainer width="100%" height={164}>
-                  <PieChart>
-                    <Pie
-                      data={caseStatusData}
-                      cx="50%" cy="50%"
-                      innerRadius={48} outerRadius={70}
-                      dataKey="value"
-                      paddingAngle={3}
-                    >
-                      {caseStatusData.map((entry, i) => (
-                        <Cell key={i} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }}
-                      itemStyle={{ fontSize: 12 }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="flex items-center gap-4 text-xs text-muted-foreground -mt-2">
-                  {caseStatusData.map((d, i) => (
-                    <span key={i} className="flex items-center gap-1">
-                      <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: d.fill }} />
-                      {d.name}
-                    </span>
-                  ))}
+          <CardContent className="space-y-4">
+            {/* Total certs */}
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Certificates Earned</span>
+              <span className="text-2xl font-bold text-yellow-600">{certs.length}</span>
+            </div>
+
+            {/* Latest certificate */}
+            {latestCert ? (
+              <button
+                onClick={() => setViewingCert(latestCert)}
+                className="w-full flex items-center gap-3 p-3 rounded-lg border bg-white/70 hover:bg-white transition-colors text-left"
+              >
+                <div className="w-9 h-9 rounded-full bg-yellow-100 flex items-center justify-center shrink-0">
+                  <CertIcon cert={latestCert} />
                 </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium truncate">{latestCert.title}</p>
+                  <p className="text-xs text-muted-foreground">Latest certificate</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+              </button>
+            ) : (
+              <div className="p-3 rounded-lg border border-dashed text-center text-xs text-muted-foreground">
+                Complete clinical milestones to earn your first certificate
               </div>
             )}
+
+            {/* Next milestone progress */}
+            {nextMilest && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <Medal className="w-3.5 h-3.5" /> Next: {nextMilest.title}
+                  </span>
+                  <span className="font-semibold">{nextMilest.pct}%</span>
+                </div>
+                <Progress
+                  value={requiredHours > 0 ? Math.min(100, (earnedHours / requiredHours) * 100 / (nextMilest.pct / 100)) : 0}
+                  className="h-2"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {earnedHours.toFixed(1)}h / {(requiredHours * nextMilest.pct / 100).toFixed(1)}h needed
+                </p>
+              </div>
+            )}
+
+            <Button variant="outline" className="w-full" asChild>
+              <Link href="/certificates">View All Certificates</Link>
+            </Button>
           </CardContent>
         </Card>
+      </div>
 
-        {/* Slot Applications Status */}
-        {myApplications.length > 0 && (
-          <Card className="col-span-full md:col-span-1 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Clock className="w-5 h-5 text-amber-500" />
-                Slot Applications
-              </CardTitle>
-              <CardDescription>Status of your duty slot requests</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {myApplications.slice(0, 4).map((app: any) => (
-                <div key={app.id} className="flex items-center justify-between p-2.5 rounded-lg border bg-card text-sm">
-                  <div className="min-w-0">
-                    <p className="font-medium text-xs">{app.dutyDate ?? '—'}</p>
-                    <p className="text-xs text-muted-foreground">{app.startTime && app.endTime ? `${app.startTime} – ${app.endTime}` : '—'}</p>
-                  </div>
-                  {app.status === 'pending' && (
-                    <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-xs shrink-0">Pending</Badge>
-                  )}
-                  {app.status === 'approved' && (
-                    <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs shrink-0">Approved ✓</Badge>
-                  )}
-                  {app.status === 'rejected' && (
-                    <Badge variant="destructive" className="text-xs shrink-0">Rejected</Badge>
-                  )}
-                </div>
-              ))}
-              <Button variant="outline" size="sm" className="w-full mt-2" asChild>
-                <Link href="/slots/my-applications">View All Applications</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
+      {/* ── Row 2: Attendance · Slot Applications ─────────────────────────── */}
+      <div className="grid gap-6 md:grid-cols-2">
         {/* Attendance Stats */}
-        <Card className="col-span-full md:col-span-1 shadow-sm">
+        <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">Attendance</CardTitle>
             <CardDescription>Your duty attendance record</CardDescription>
@@ -433,138 +405,70 @@ export function StudentDashboard() {
                 className="h-3"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4 pt-2">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1 p-3 rounded-lg bg-muted/50">
-                <div className="text-sm text-muted-foreground flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  Present
+                <div className="text-xs text-muted-foreground flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Present
                 </div>
                 <div className="text-2xl font-bold">{presentCount}</div>
               </div>
               <div className="space-y-1 p-3 rounded-lg bg-muted/50">
-                <div className="text-sm text-muted-foreground flex items-center gap-1.5">
-                  <AlertCircle className="w-4 h-4 text-amber-500" />
-                  Late
+                <div className="text-xs text-muted-foreground flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-500" /> Late
                 </div>
                 <div className="text-2xl font-bold">{lateCount}</div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Duty Days Progress */}
-        <Card className="col-span-full md:col-span-1 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Duty Days</CardTitle>
-            <CardDescription>Completed vs required rotation days</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between gap-4">
-              {/* Radial gauge */}
-              <div className="relative shrink-0">
-                <RadialBarChart
-                  width={120} height={120}
-                  cx={60} cy={60}
-                  innerRadius={36} outerRadius={54}
-                  startAngle={210} endAngle={-30}
-                  data={[{ value: dutyDaysPct, fill: 'hsl(var(--primary))' }]}
-                >
-                  <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
-                  <RadialBar dataKey="value" angleAxisId={0} cornerRadius={6} background={{ fill: 'hsl(var(--muted))' }} />
-                </RadialBarChart>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-xl font-bold leading-none">{dutyDaysPct}%</span>
-                  <span className="text-[10px] text-muted-foreground mt-0.5">done</span>
+              <div className="space-y-1 p-3 rounded-lg bg-muted/50">
+                <div className="text-xs text-muted-foreground flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 text-red-500" /> Absent
                 </div>
-              </div>
-              {/* Stats */}
-              <div className="flex-1 space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-1.5 text-muted-foreground">
-                    <span className="w-2.5 h-2.5 rounded-full bg-primary inline-block" />
-                    Completed
-                  </span>
-                  <span className="font-bold">{completedDays}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-1.5 text-muted-foreground">
-                    <span className="w-2.5 h-2.5 rounded-full bg-muted-foreground/30 inline-block" />
-                    Remaining
-                  </span>
-                  <span className="font-bold">{Math.max(0, totalDays - completedDays)}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm border-t pt-2">
-                  <span className="text-muted-foreground">Total Required</span>
-                  <span className="font-semibold">{totalDays} days</span>
+                <div className="text-2xl font-bold">
+                  {attendance.filter((r: { status: string }) => r.status === 'absent').length}
                 </div>
               </div>
             </div>
+            <Button variant="outline" className="w-full" asChild>
+              <Link href="/attendance">View Attendance History</Link>
+            </Button>
           </CardContent>
         </Card>
+
+        {/* Slot Applications — only shown when the student has applications */}
+        {myApplications.length > 0 && (
+          <Card className="shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Clock className="w-5 h-5 text-amber-500" />
+                Slot Applications
+                {pendingApplications.length > 0 && (
+                  <Badge variant="warning" className="ml-1 text-xs">{pendingApplications.length} pending</Badge>
+                )}
+              </CardTitle>
+              <CardDescription>Status of your duty slot requests</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {myApplications.slice(0, 4).map((app: any) => (
+                <div key={app.id} className="flex items-center justify-between p-2.5 rounded-lg border bg-card text-sm">
+                  <div className="min-w-0">
+                    <p className="font-medium text-xs">{app.dutyDate ?? '—'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {app.startTime && app.endTime ? `${app.startTime} – ${app.endTime}` : '—'}
+                    </p>
+                  </div>
+                  {app.status === 'pending'  && <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-xs shrink-0">Pending</Badge>}
+                  {app.status === 'approved' && <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs shrink-0">Approved ✓</Badge>}
+                  {app.status === 'rejected' && <Badge variant="destructive" className="text-xs shrink-0">Rejected</Badge>}
+                </div>
+              ))}
+              <Button variant="outline" size="sm" className="w-full mt-2" asChild>
+                <Link href="/slots/my-applications">View All Applications</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
-      {/* ── Analytics Charts ─────────────────────────────────── */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Monthly Attendance Bar Chart */}
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Attendance Trend</CardTitle>
-            <CardDescription>Monthly duty attendance over the last 6 months</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={monthlyAttendance} barSize={14} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }}
-                  labelStyle={{ fontWeight: 600, fontSize: 12 }}
-                  itemStyle={{ fontSize: 12 }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-                <Bar dataKey="Present" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Late" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Absent" fill="#ef4444" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* Case Completion by Ward */}
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Case Completion by Ward</CardTitle>
-            <CardDescription>Verified vs remaining cases per ward</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {wardChartData.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-[200px] text-muted-foreground text-sm gap-2">
-                <ClipboardCheck className="w-8 h-8 opacity-30" />
-                No ward data yet
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={wardChartData} layout="vertical" barSize={14} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
-                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="ward" width={72} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }}
-                    labelStyle={{ fontWeight: 600, fontSize: 12 }}
-                    itemStyle={{ fontSize: 12 }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-                  <Bar dataKey="Verified" stackId="a" fill="hsl(var(--primary))" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="Remaining" stackId="a" fill="hsl(var(--muted))" radius={[4, 4, 4, 4]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Bottom Grid */}
+      {/* ── Row 3: Duty Verifications · My Schedule ───────────────────────── */}
       <div className="grid gap-6 md:grid-cols-2">
         {/* Attended Duties — Request Verification */}
         <Card className="shadow-sm">
@@ -595,7 +499,7 @@ export function StudentDashboard() {
                             {s.department?.name ?? s.title ?? 'Clinical Rotation'}
                           </div>
                           <div className="text-xs text-muted-foreground truncate">
-                            {s.hospital?.name ?? ''} • {s.dutyDate}
+                            {s.hospital?.name ?? ''} · {s.dutyDate}
                           </div>
                         </div>
                       </div>
@@ -608,20 +512,11 @@ export function StudentDashboard() {
                           </Link>
                         ) : (
                           <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-xs gap-1"
+                            size="sm" variant="outline" className="text-xs gap-1"
                             disabled={requestingFor === s.id}
-                            onClick={() => {
-                              const rec = attendanceMap.get(s.id);
-                              if (rec) handleRequestVerification(s.id, rec.id);
-                            }}
+                            onClick={() => { const r = attendanceMap.get(s.id); if (r) handleRequestVerification(s.id, r.id); }}
                           >
-                            {requestingFor === s.id ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <>Request <ArrowRight className="w-3 h-3" /></>
-                            )}
+                            {requestingFor === s.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <>Request <ArrowRight className="w-3 h-3" /></>}
                           </Button>
                         )}
                       </div>
@@ -631,7 +526,7 @@ export function StudentDashboard() {
               )}
             </div>
             <Button variant="outline" className="w-full mt-4" asChild>
-              <Link href="/schedule">View All Schedules</Link>
+              <Link href="/duty-verifications">View All Verifications</Link>
             </Button>
           </CardContent>
         </Card>
@@ -653,7 +548,7 @@ export function StudentDashboard() {
                 <div key={s.id} className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
                   <div>
                     <div className="font-medium text-sm">{s.department?.name ?? s.title ?? 'Rotation'}</div>
-                    <div className="text-xs text-muted-foreground">{s.hospital?.name ?? 'Hospital'} • {s.dutyDate}</div>
+                    <div className="text-xs text-muted-foreground">{s.hospital?.name ?? 'Hospital'} · {s.dutyDate}</div>
                   </div>
                   <Button size="sm" asChild>
                     <Link href={`/schedule/${s.id}`}>Time In</Link>
@@ -670,6 +565,106 @@ export function StudentDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Duty History ──────────────────────────────────────────────────── */}
+      <Card className="shadow-sm">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <History className="w-5 h-5 text-primary" />
+                Duty History
+              </CardTitle>
+              <CardDescription>Your 5 most recent completed duties</CardDescription>
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/attendance">View All History</Link>
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {dutyHistory.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-muted-foreground text-sm gap-2">
+              <History className="w-8 h-8 opacity-30" />
+              No completed duties yet.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {dutyHistory.map(({ attendance: rec, schedule: sched, verification, casesCount }) => {
+                const dutyDate = (rec as any).dutyDate ?? sched?.dutyDate ?? '—';
+                const hospital = sched?.hospital?.name ?? '—';
+                const ward     = sched?.department?.name ?? '—';
+                const ci       = sched?.ci ? `${sched.ci.firstName} ${sched.ci.lastName}` : '—';
+                const hours    = (rec as any).dutyHours ?? 0;
+
+                return (
+                  <div
+                    key={rec.id}
+                    className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-xl border bg-card hover:bg-muted/30 transition-colors"
+                  >
+                    {/* Date + Status */}
+                    <div className="flex items-center gap-3 sm:w-40 shrink-0">
+                      <div className="w-10 h-10 rounded-lg bg-primary/8 flex items-center justify-center shrink-0">
+                        <CalendarDays className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">{dutyDate}</p>
+                        <StatusBadge status={rec.status} />
+                      </div>
+                    </div>
+
+                    {/* Details */}
+                    <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Hospital</p>
+                        <p className="font-medium truncate text-xs">{hospital}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Ward</p>
+                        <p className="font-medium truncate text-xs">{ward}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Clinical Instructor</p>
+                        <p className="font-medium truncate text-xs">{ci}</p>
+                      </div>
+                      <div className="flex gap-4">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Hours</p>
+                          <p className="font-semibold text-primary text-xs">{hours ? `${Number(hours).toFixed(1)}h` : '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Cases</p>
+                          <p className="font-semibold text-xs">{casesCount > 0 ? casesCount : '—'}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* View Details */}
+                    <div className="shrink-0">
+                      {verification ? (
+                        <Button size="sm" variant="outline" className="text-xs gap-1" asChild>
+                          <Link href={`/duty-verifications/${verification.id}`}>
+                            View Details <ChevronRight className="w-3 h-3" />
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="outline" className="text-xs gap-1" asChild>
+                          <Link href={`/schedule/${rec.scheduleId}`}>
+                            View <ChevronRight className="w-3 h-3" />
+                          </Link>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Certificate viewer modal */}
+      <CertificateViewerModal cert={viewingCert} onClose={() => setViewingCert(null)} />
     </div>
   );
 }

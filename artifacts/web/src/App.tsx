@@ -82,6 +82,7 @@ import { CIBulkVerifyPage } from '@/pages/ci-bulk-verify';
 import { StudentAcademicSchedulePage } from '@/pages/student-academic-schedule';
 import { DutyVerificationDetailPage } from '@/pages/duty-verification-detail';
 import { SchedulerDutyVerificationsPage } from '@/pages/scheduler-duty-verifications';
+import { CertificatesPage } from '@/pages/certificates';
 
 const queryClient = new QueryClient();
 
@@ -134,6 +135,7 @@ function Router() {
           <Route path="/attendance" component={AttendanceHistoryPage} />
           <Route path="/slots" component={SlotsPage} />
           <Route path="/slots/my-applications" component={MyApplicationsPage} />
+          <Route path="/certificates" component={CertificatesPage} />
 
           {/* CI */}
           <Route path="/duties" component={MyDutiesPage} />

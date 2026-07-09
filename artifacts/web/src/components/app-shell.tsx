@@ -27,6 +27,7 @@ import {
   ChevronRight,
   PanelLeftClose,
   PanelLeftOpen,
+  Award,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -108,6 +109,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         items: [
           { name: 'Clinical Passport', href: '/passport', icon: ClipboardList },
           { name: 'Attendance', href: '/attendance', icon: CheckCircle },
+          { name: 'Certificates', href: '/certificates', icon: Award },
         ],
       },
       {
