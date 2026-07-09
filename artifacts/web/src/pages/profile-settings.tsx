@@ -296,13 +296,11 @@ export function ProfileSettingsPage() {
                       </FormItem>
                     )} />
                   </div>
-                  <FormItem>
-                    <FormLabel>Email Address</FormLabel>
-                    <FormControl>
-                      <Input value={user?.email ?? ''} disabled className="bg-muted" />
-                    </FormControl>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium leading-none">Email Address</label>
+                    <Input value={user?.email ?? ''} disabled className="bg-muted" />
                     <p className="text-xs text-muted-foreground">Email cannot be changed here.</p>
-                  </FormItem>
+                  </div>
                   <FormField control={profileForm.control} name="phone" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Phone Number</FormLabel>
