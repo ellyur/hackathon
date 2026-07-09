@@ -67,8 +67,8 @@ function DutyCard({ duty }: { duty: Schedule }) {
 }
 
 export function MyDutiesPage() {
-  const { data: todayDuties = [], isLoading: loadingToday } = useGetTodayDuties();
-  const { data: allDuties = [], isLoading: loadingAll } = useListSchedules();
+  const { data: todayDuties = [], isLoading: loadingToday } = useGetTodayDuties({ query: { staleTime: 60_000, refetchOnMount: true } as never });
+  const { data: allDuties = [], isLoading: loadingAll } = useListSchedules(undefined, { query: { staleTime: 60_000, refetchOnMount: true } as never });
 
   const today = new Date().toISOString().split('T')[0];
   const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Calendar, Clock, MapPin, User, LogIn, Loader2, CheckCircle2, AlertCircle, ClipboardCheck, ArrowRight } from 'lucide-react';
+import { Calendar, Clock, MapPin, User, LogIn, Loader2, CheckCircle2, AlertCircle, ClipboardCheck, ArrowRight, Users, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useListSchedules, useListAttendance } from '@workspace/api-client-react';
 import type { Schedule, AttendanceRecord } from '@workspace/api-client-react';
 import { useListDutyVerifications, useRequestDutyVerification } from '@/hooks/use-duty-verifications';
+import { useAuth } from '@/hooks/use-auth';
+import type { AuthUser } from '@workspace/api-client-react';
 
 type ScheduleStatus = 'upcoming' | 'active' | 'completed' | 'cancelled';
 
@@ -83,13 +85,16 @@ function ScheduleCard({
   existingVerification,
   onRequestVerification,
   isRequesting,
+  currentUserId,
 }: {
   schedule: Schedule;
   attendanceRecord?: AttendanceRecord;
   existingVerification?: any;
   onRequestVerification?: () => void;
   isRequesting?: boolean;
+  currentUserId?: string;
 }) {
+  const [classmatesOpen, setClassmatesOpen] = useState(false);
   const status = (schedule.status as ScheduleStatus) ?? 'upcoming';
   const config = statusConfig[status] ?? statusConfig.upcoming;
   const canTimeIn = status === 'active' || status === 'upcoming';
@@ -100,6 +105,9 @@ function ScheduleCard({
   const hospitalName = schedule.hospital?.name ?? 'Hospital';
   const deptName = schedule.department?.name ?? '';
   const ciName = schedule.ci ? `${schedule.ci.firstName} ${schedule.ci.lastName}` : 'Clinical Instructor';
+
+  const classmates = (schedule.students as any[] | undefined) ?? [];
+  const totalClassmates = classmates.length;
 
   return (
     <Card className="hover:shadow-md transition-shadow">
@@ -143,6 +151,41 @@ function ScheduleCard({
           </div>
         </div>
 
+        {/* Classmates section — always visible */}
+        {totalClassmates > 0 && (
+          <div className="border rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setClassmatesOpen(o => !o)}
+              className="w-full flex items-center justify-between px-3 py-2 text-sm bg-muted/40 hover:bg-muted/70 transition-colors"
+            >
+              <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
+                <Users className="h-3.5 w-3.5" />
+                Classmates ({totalClassmates})
+              </span>
+              {classmatesOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+            </button>
+            {classmatesOpen && (
+              <div className="px-3 py-2 flex flex-wrap gap-1.5 bg-background">
+                {classmates.map((s: any) => (
+                  <span
+                    key={s.id}
+                    className={`inline-flex items-center text-xs px-2.5 py-1 rounded-full border ${
+                      s.id === currentUserId
+                        ? 'bg-primary/10 border-primary/30 text-primary font-semibold'
+                        : 'bg-muted/50 border-border text-muted-foreground'
+                    }`}
+                  >
+                    {s.firstName} {s.lastName}
+                    {s.id === currentUserId && ' (You)'}
+                    {s.section && <span className="ml-1 opacity-60">· {s.section}</span>}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
           {canTimeIn && (
@@ -154,7 +197,7 @@ function ScheduleCard({
             </Link>
           )}
 
-          {/* Request Duty Verification — shown on past duties where student attended */}
+          {/* Request Duty Verification — shown on past attended duties */}
           {isPast && hasAttendance && (
             <div className="flex items-center gap-2">
               {existingVerification ? (
@@ -183,6 +226,15 @@ function ScheduleCard({
               )}
             </div>
           )}
+
+          {/* For past duties without attendance — show view link */}
+          {isPast && !hasAttendance && (
+            <Link href={`/schedule/${schedule.id}`}>
+              <Button size="sm" variant="ghost" className="gap-2 text-muted-foreground">
+                View Duty
+              </Button>
+            </Link>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -190,12 +242,16 @@ function ScheduleCard({
 }
 
 export function MySchedulePage() {
+  const { user: rawUser } = useAuth();
+  const user = rawUser as AuthUser | undefined;
+  const currentUserId = user?.id;
+
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [requestingFor, setRequestingFor] = useState<string | null>(null);
 
   const { data: schedules, isLoading, isError } = useListSchedules(undefined, {
-    query: { staleTime: 60_000 } as never,
+    query: { staleTime: 60_000, refetchOnMount: true } as never,
   });
 
   const { data: attendanceRecords = [] } = useListAttendance(undefined, {
@@ -303,6 +359,7 @@ export function MySchedulePage() {
                 key={s.id}
                 schedule={s}
                 attendanceRecord={attendanceMap.get(s.id)}
+                currentUserId={currentUserId}
               />
             ))
           )}
@@ -329,6 +386,7 @@ export function MySchedulePage() {
                   existingVerification={verif}
                   onRequestVerification={() => handleRequestVerification(s)}
                   isRequesting={requestingFor === s.id}
+                  currentUserId={currentUserId}
                 />
               );
             })

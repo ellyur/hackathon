@@ -19,8 +19,8 @@ export function CIDashboard() {
   const user = rawUser as AuthUser | undefined;
   const firstName = user?.firstName ?? 'Instructor';
 
-  const { data: todayDuties = [], isLoading: loadingToday } = useGetTodayDuties();
-  const { data: allDuties = [], isLoading: loadingAll } = useListSchedules();
+  const { data: todayDuties = [], isLoading: loadingToday } = useGetTodayDuties({ query: { staleTime: 60_000, refetchOnMount: true } as never });
+  const { data: allDuties = [], isLoading: loadingAll } = useListSchedules(undefined, { query: { staleTime: 60_000, refetchOnMount: true } as never });
   const { data: pendingVerifications = [], isLoading: loadingDV } = useListDutyVerifications('waiting_ci');
 
   const today = new Date().toISOString().split('T')[0];

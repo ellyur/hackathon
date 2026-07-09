@@ -1,15 +1,17 @@
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Clock, MapPin, CheckCircle2, AlertCircle, ArrowRight, Loader2, ScanFace, Calendar, CalendarDays, ClipboardCheck, FileCheck } from 'lucide-react';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { useListSchedules, useGetMyFaceDescriptor, useListAttendance } from '@workspace/api-client-react';
 import { useAuth } from '@/hooks/use-auth';
 import type { AuthUser } from '@workspace/api-client-react';
 import type { Schedule, AttendanceRecord } from '@workspace/api-client-react';
 import { useQuery } from '@tanstack/react-query';
-import { useListDutyVerifications } from '@/hooks/use-duty-verifications';
+import { useListDutyVerifications, useRequestDutyVerification } from '@/hooks/use-duty-verifications';
+import { useToast } from '@/hooks/use-toast';
 
 function getAuthToken() { return localStorage.getItem('authToken'); }
 async function apiFetch<T>(path: string): Promise<T> {
@@ -45,9 +47,12 @@ function verificationStatusBadge(status: string) {
 export function StudentDashboard() {
   const { user: rawUser } = useAuth();
   const user = rawUser as AuthUser | undefined;
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [requestingFor, setRequestingFor] = useState<string | null>(null);
 
   const { data: schedules, isLoading: schedulesLoading } = useListSchedules(undefined, {
-    query: { staleTime: 60_000 } as never,
+    query: { staleTime: 60_000, refetchOnMount: true } as never,
   });
 
   const { data: faceData } = useGetMyFaceDescriptor({
@@ -68,6 +73,21 @@ export function StudentDashboard() {
   });
 
   const { data: myVerifications = [] } = useListDutyVerifications();
+  const requestVerification = useRequestDutyVerification();
+
+  async function handleRequestVerification(scheduleId: string, attendanceId: string) {
+    setRequestingFor(scheduleId);
+    try {
+      const created = await requestVerification.mutateAsync({ scheduleId, attendanceId });
+      toast({ title: 'Verification Requested ✓', description: 'Your Clinical Instructor has been notified.' });
+      setLocation(`/duty-verifications/${created.id}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to request verification';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    } finally {
+      setRequestingFor(null);
+    }
+  }
 
   const isEnrolled = faceData?.enrolled === true;
 
@@ -310,12 +330,22 @@ export function StudentDashboard() {
                             </Button>
                           </Link>
                         ) : (
-                          <Link href={`/schedule/${s.id}?requestVerification=1`}>
-                            <Button size="sm" variant="outline" className="text-xs gap-1">
-                              Request
-                              <ArrowRight className="w-3 h-3" />
-                            </Button>
-                          </Link>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs gap-1"
+                            disabled={requestingFor === s.id}
+                            onClick={() => {
+                              const rec = attendanceMap.get(s.id);
+                              if (rec) handleRequestVerification(s.id, rec.id);
+                            }}
+                          >
+                            {requestingFor === s.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <>Request <ArrowRight className="w-3 h-3" /></>
+                            )}
+                          </Button>
                         )}
                       </div>
                     </div>

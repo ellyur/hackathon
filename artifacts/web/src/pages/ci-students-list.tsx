@@ -25,7 +25,7 @@ function extractStudents(schedules: any[]) {
 }
 
 export function CIStudentsListPage() {
-  const { data: allDuties = [], isLoading } = useListSchedules();
+  const { data: allDuties = [], isLoading } = useListSchedules(undefined, { query: { staleTime: 60_000, refetchOnMount: true } as never });
   const [search, setSearch] = useState('');
 
   const students = useMemo(() => extractStudents(allDuties), [allDuties]);
