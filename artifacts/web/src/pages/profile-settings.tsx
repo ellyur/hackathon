@@ -1,7 +1,8 @@
+import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Camera, Loader2 } from 'lucide-react';
+import { Camera, Loader2, User } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,8 +10,9 @@ import { Separator } from '@/components/ui/separator';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { useUpdateUser } from '@workspace/api-client-react';
+import { useUpdateUser, getGetMeQueryKey } from '@workspace/api-client-react';
 import type { AuthUser } from '@workspace/api-client-react';
+import { useQueryClient } from '@tanstack/react-query';
 
 const profileSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -31,11 +33,39 @@ const passwordSchema = z
 type ProfileFormValues = z.infer<typeof profileSchema>;
 type PasswordFormValues = z.infer<typeof passwordSchema>;
 
+/** Resize an image File to max 400×400 and return a JPEG base64 data URL. */
+function resizeImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 400;
+      let { width, height } = img;
+      if (width > MAX || height > MAX) {
+        if (width > height) { height = Math.round((height / width) * MAX); width = MAX; }
+        else { width = Math.round((width / height) * MAX); height = MAX; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image')); };
+    img.src = url;
+  });
+}
+
 export function ProfileSettingsPage() {
   const { user: rawUser } = useAuth();
   const user = rawUser as AuthUser | undefined;
   const { toast } = useToast();
   const updateUser = useUpdateUser();
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   const profileForm = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
@@ -51,6 +81,49 @@ export function ProfileSettingsPage() {
     defaultValues: { newPassword: '', confirmPassword: '' },
   });
 
+  const currentAvatar = avatarPreview ?? user?.avatarUrl ?? null;
+  const initials = `${user?.firstName?.[0] ?? '?'}${user?.lastName?.[0] ?? '?'}`.toUpperCase();
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Please select an image file', variant: 'destructive' });
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'Image must be under 5 MB', variant: 'destructive' });
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setAvatarUploading(true);
+    try {
+      const dataUrl = await resizeImage(file);
+      setAvatarPreview(dataUrl);
+      await updateUser.mutateAsync({ id: user.id, data: { avatarUrl: dataUrl } });
+      // Update localStorage + React Query cache so sidebar avatar refreshes immediately
+      const stored = localStorage.getItem('authUser');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        parsed.avatarUrl = dataUrl;
+        localStorage.setItem('authUser', JSON.stringify(parsed));
+      }
+      queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+      toast({ title: 'Profile photo updated!' });
+    } catch (err: unknown) {
+      setAvatarPreview(null);
+      const msg = err instanceof Error ? err.message : 'Failed to upload photo';
+      toast({ title: 'Upload failed', description: msg, variant: 'destructive' });
+    } finally {
+      setAvatarUploading(false);
+      // Reset input so same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const onSaveProfile = async (values: ProfileFormValues) => {
     if (!user) return;
     try {
@@ -62,6 +135,7 @@ export function ProfileSettingsPage() {
           phone: values.phone || undefined,
         },
       });
+      queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
       toast({ title: 'Profile updated successfully.' });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to update profile';
@@ -84,7 +158,6 @@ export function ProfileSettingsPage() {
     }
   };
 
-  const initials = `${user?.firstName?.[0] ?? '?'}${user?.lastName?.[0] ?? '?'}`.toUpperCase();
   const isStudent = user?.role === 'student';
   const studentProfile = user?.studentProfile;
 
@@ -104,14 +177,65 @@ export function ProfileSettingsPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Avatar column */}
             <div className="flex flex-col items-center gap-3">
-              <div className="w-24 h-24 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-2xl font-bold select-none">
-                {initials}
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarChange}
+              />
+
+              {/* Avatar circle */}
+              <div className="relative group">
+                <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-border shadow-sm">
+                  {currentAvatar ? (
+                    <img
+                      src={currentAvatar}
+                      alt="Profile"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-primary flex items-center justify-center text-primary-foreground text-2xl font-bold select-none">
+                      {initials}
+                    </div>
+                  )}
+                </div>
+                {/* Hover overlay */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={avatarUploading}
+                  className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                  aria-label="Change profile photo"
+                  title="Change profile photo"
+                >
+                  {avatarUploading ? (
+                    <Loader2 className="w-6 h-6 text-white animate-spin" />
+                  ) : (
+                    <Camera className="w-6 h-6 text-white" />
+                  )}
+                </button>
               </div>
-              <Button variant="outline" size="sm" disabled className="gap-2 text-xs">
-                <Camera className="h-3.5 w-3.5" />
-                Change Photo
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 text-xs"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={avatarUploading}
+                type="button"
+              >
+                {avatarUploading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Camera className="h-3.5 w-3.5" />
+                )}
+                {avatarUploading ? 'Uploading…' : 'Change Photo'}
               </Button>
-              <p className="text-xs text-muted-foreground text-center">Photo upload coming soon</p>
+              <p className="text-xs text-muted-foreground text-center">
+                JPG, PNG or GIF · Max 5 MB
+              </p>
             </div>
 
             {/* Form column */}
