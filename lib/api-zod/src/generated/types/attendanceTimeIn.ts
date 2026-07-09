@@ -14,4 +14,5 @@ export interface AttendanceTimeIn {
   faceVerified: boolean;
   livenessVerified: boolean;
   deviceInfo?: string;
+  faceVerificationToken?: string;
 }

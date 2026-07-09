@@ -238,8 +238,17 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
     // admin-only fields:
     isActive?: boolean;
     password?: string;
+    // admin-only academic fields:
     section?: string;
     yearLevel?: number;
+    program?: string;
+    academicYear?: string;
+    studentNumber?: string;
+    // self-updatable student profile fields:
+    landmark?: string;
+    city?: string;
+    transportationMethod?: string;
+    emergencyContact?: string;
   };
 
   const userUpdates: Partial<typeof usersTable.$inferInsert> = {};
@@ -257,11 +266,25 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
     await db.update(usersTable).set(userUpdates).where(eq(usersTable.id, id));
   }
 
-  // Student profile fields — self or admin
-  if (body.section !== undefined || body.yearLevel !== undefined) {
-    const profileUpdates: Partial<typeof studentProfilesTable.$inferInsert> = {};
+  // Student profile updates
+  const profileUpdates: Partial<typeof studentProfilesTable.$inferInsert> = {};
+
+  // Admin-only academic fields — students cannot change these
+  if (isAdmin) {
     if (body.section !== undefined) profileUpdates.section = body.section;
     if (body.yearLevel !== undefined) profileUpdates.yearLevel = body.yearLevel;
+    if (body.program !== undefined) profileUpdates.program = body.program;
+    if (body.academicYear !== undefined) profileUpdates.academicYear = body.academicYear;
+    if (body.studentNumber !== undefined) profileUpdates.studentNumber = body.studentNumber;
+  }
+
+  // Self-updatable personal/location fields
+  if (body.landmark !== undefined) profileUpdates.landmark = body.landmark;
+  if (body.city !== undefined) profileUpdates.city = body.city;
+  if (body.transportationMethod !== undefined) profileUpdates.transportationMethod = body.transportationMethod;
+  if (body.emergencyContact !== undefined) profileUpdates.emergencyContact = body.emergencyContact;
+
+  if (Object.keys(profileUpdates).length > 0) {
     await db
       .update(studentProfilesTable)
       .set(profileUpdates)

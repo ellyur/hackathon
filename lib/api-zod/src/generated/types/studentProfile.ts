@@ -19,5 +19,13 @@ export interface StudentProfile {
   /** @nullable */
   academicYear?: string | null;
   totalHoursRequired?: number;
+  /** @nullable */
+  landmark?: string | null;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  transportationMethod?: string | null;
+  /** @nullable */
+  emergencyContact?: string | null;
   createdAt?: Date;
 }

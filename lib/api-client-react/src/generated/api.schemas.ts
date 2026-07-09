@@ -59,6 +59,14 @@ export interface StudentProfile {
   /** @nullable */
   academicYear?: string | null;
   totalHoursRequired?: number;
+  /** @nullable */
+  landmark?: string | null;
+  /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  transportationMethod?: string | null;
+  /** @nullable */
+  emergencyContact?: string | null;
   createdAt?: string;
 }
 
@@ -149,6 +157,14 @@ export interface UserUpdate {
   isActive?: boolean;
   section?: string;
   yearLevel?: number;
+  program?: string;
+  academicYear?: string;
+  studentNumber?: string;
+  password?: string;
+  landmark?: string;
+  city?: string;
+  transportationMethod?: string;
+  emergencyContact?: string;
 }
 
 export interface StudentDetail {
@@ -437,6 +453,11 @@ export interface AttendanceRecord {
   remarks?: string | null;
   needsMakeup?: boolean;
   makeupCompleted?: boolean;
+  isBuddyAttendance?: boolean;
+  /** @nullable */
+  verifiedByStudentId?: string | null;
+  /** @nullable */
+  deviceId?: string | null;
   createdAt: string;
   student?: User;
   schedule?: Schedule;
@@ -450,6 +471,7 @@ export interface AttendanceTimeIn {
   faceVerified: boolean;
   livenessVerified: boolean;
   deviceInfo?: string;
+  faceVerificationToken?: string;
 }
 
 export interface AttendanceTimeOut {

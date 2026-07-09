@@ -2,22 +2,37 @@ import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Camera, Loader2, User } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Camera, Loader2, User, MapPin, Car } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { useUpdateUser, getGetMeQueryKey } from '@workspace/api-client-react';
 import type { AuthUser } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 
+const TRANSPORTATION_OPTIONS = [
+  { value: 'Public Transportation', label: 'Public Transportation' },
+  { value: 'Motorcycle', label: 'Motorcycle' },
+  { value: 'Private Car', label: 'Private Car' },
+  { value: 'Walking', label: 'Walking' },
+];
+
 const profileSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   phone: z.string().optional(),
+  emergencyContact: z.string().optional(),
+});
+
+const locationSchema = z.object({
+  landmark: z.string().optional(),
+  city: z.string().optional(),
+  transportationMethod: z.string().optional(),
 });
 
 const passwordSchema = z
@@ -31,6 +46,7 @@ const passwordSchema = z
   });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
+type LocationFormValues = z.infer<typeof locationSchema>;
 type PasswordFormValues = z.infer<typeof passwordSchema>;
 
 /** Resize an image File to max 400×400 and return a JPEG base64 data URL. */
@@ -67,12 +83,35 @@ export function ProfileSettingsPage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
 
+  const isStudent = user?.role === 'student';
+  const studentProfile = user?.studentProfile as ({
+    studentNumber?: string | null;
+    yearLevel?: number | null;
+    section?: string | null;
+    program?: string | null;
+    academicYear?: string | null;
+    landmark?: string | null;
+    city?: string | null;
+    transportationMethod?: string | null;
+    emergencyContact?: string | null;
+  }) | undefined;
+
   const profileForm = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
       firstName: user?.firstName ?? '',
       lastName: user?.lastName ?? '',
       phone: user?.phone ?? '',
+      emergencyContact: studentProfile?.emergencyContact ?? '',
+    },
+  });
+
+  const locationForm = useForm<LocationFormValues>({
+    resolver: zodResolver(locationSchema),
+    defaultValues: {
+      landmark: studentProfile?.landmark ?? '',
+      city: studentProfile?.city ?? '',
+      transportationMethod: studentProfile?.transportationMethod ?? '',
     },
   });
 
@@ -104,7 +143,6 @@ export function ProfileSettingsPage() {
       const dataUrl = await resizeImage(file);
       setAvatarPreview(dataUrl);
       await updateUser.mutateAsync({ id: user.id, data: { avatarUrl: dataUrl } });
-      // Update localStorage + React Query cache so sidebar avatar refreshes immediately
       const stored = localStorage.getItem('authUser');
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -119,7 +157,6 @@ export function ProfileSettingsPage() {
       toast({ title: 'Upload failed', description: msg, variant: 'destructive' });
     } finally {
       setAvatarUploading(false);
-      // Reset input so same file can be re-selected
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -133,12 +170,32 @@ export function ProfileSettingsPage() {
           firstName: values.firstName,
           lastName: values.lastName,
           phone: values.phone || undefined,
-        },
+          emergencyContact: values.emergencyContact || undefined,
+        } as Parameters<typeof updateUser.mutateAsync>[0]['data'],
       });
       queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
       toast({ title: 'Profile updated successfully.' });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to update profile';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    }
+  };
+
+  const onSaveLocation = async (values: LocationFormValues) => {
+    if (!user) return;
+    try {
+      await updateUser.mutateAsync({
+        id: user.id,
+        data: {
+          landmark: values.landmark || undefined,
+          city: values.city || undefined,
+          transportationMethod: values.transportationMethod || undefined,
+        } as Parameters<typeof updateUser.mutateAsync>[0]['data'],
+      });
+      queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+      toast({ title: 'Location details saved.' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update location';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
     }
   };
@@ -158,9 +215,6 @@ export function ProfileSettingsPage() {
     }
   };
 
-  const isStudent = user?.role === 'student';
-  const studentProfile = user?.studentProfile;
-
   return (
     <div className="space-y-6">
       <div>
@@ -177,7 +231,6 @@ export function ProfileSettingsPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Avatar column */}
             <div className="flex flex-col items-center gap-3">
-              {/* Hidden file input */}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -185,30 +238,22 @@ export function ProfileSettingsPage() {
                 className="hidden"
                 onChange={handleAvatarChange}
               />
-
-              {/* Avatar circle */}
               <div className="relative group">
                 <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-border shadow-sm">
                   {currentAvatar ? (
-                    <img
-                      src={currentAvatar}
-                      alt="Profile"
-                      className="w-full h-full object-cover"
-                    />
+                    <img src={currentAvatar} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full bg-primary flex items-center justify-center text-primary-foreground text-2xl font-bold select-none">
                       {initials}
                     </div>
                   )}
                 </div>
-                {/* Hover overlay */}
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={avatarUploading}
                   className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                   aria-label="Change profile photo"
-                  title="Change profile photo"
                 >
                   {avatarUploading ? (
                     <Loader2 className="w-6 h-6 text-white animate-spin" />
@@ -217,7 +262,6 @@ export function ProfileSettingsPage() {
                   )}
                 </button>
               </div>
-
               <Button
                 variant="outline"
                 size="sm"
@@ -226,16 +270,10 @@ export function ProfileSettingsPage() {
                 disabled={avatarUploading}
                 type="button"
               >
-                {avatarUploading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Camera className="h-3.5 w-3.5" />
-                )}
+                {avatarUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
                 {avatarUploading ? 'Uploading…' : 'Change Photo'}
               </Button>
-              <p className="text-xs text-muted-foreground text-center">
-                JPG, PNG or GIF · Max 5 MB
-              </p>
+              <p className="text-xs text-muted-foreground text-center">JPG, PNG or GIF · Max 5 MB</p>
             </div>
 
             {/* Form column */}
@@ -272,6 +310,15 @@ export function ProfileSettingsPage() {
                       <FormMessage />
                     </FormItem>
                   )} />
+                  {isStudent && (
+                    <FormField control={profileForm.control} name="emergencyContact" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Emergency Contact</FormLabel>
+                        <FormControl><Input placeholder="Name and phone number" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  )}
                   <div className="flex justify-end">
                     <Button type="submit" disabled={updateUser.isPending}>
                       {updateUser.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -285,11 +332,12 @@ export function ProfileSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Student Info (read-only) */}
+      {/* Student Academic Profile (read-only) */}
       {isStudent && studentProfile && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Academic Profile</CardTitle>
+            <CardDescription className="text-xs">Managed by Admin only. Contact your administrator to update these.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -310,6 +358,77 @@ export function ProfileSettingsPage() {
                 <p className="font-medium">{studentProfile.program ?? '—'}</p>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Location & Transportation (Students only, used for AI recommendations) */}
+      {isStudent && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-primary" />
+              Location & Transportation
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Used by the AI recommendation engine to suggest fair and convenient duty assignments. Your exact address is never stored.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Form {...locationForm}>
+              <form onSubmit={locationForm.handleSubmit(onSaveLocation)} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField control={locationForm.control} name="landmark" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nearest Landmark</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. SM North EDSA, Robinsons Novaliches" {...field} />
+                      </FormControl>
+                      <FormDescription className="text-xs">Your nearest major landmark or mall.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={locationForm.control} name="city" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>City</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. Quezon City, Caloocan" {...field} />
+                      </FormControl>
+                      <FormDescription className="text-xs">The city where you live.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
+                <FormField control={locationForm.control} name="transportationMethod" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-1.5">
+                      <Car className="w-3.5 h-3.5" />
+                      Transportation Method
+                    </FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="How do you usually travel?" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {TRANSPORTATION_OPTIONS.map(opt => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription className="text-xs">Used to estimate travel time to hospitals.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <div className="flex justify-end">
+                  <Button type="submit" disabled={updateUser.isPending}>
+                    {updateUser.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Save Location Details
+                  </Button>
+                </div>
+              </form>
+            </Form>
           </CardContent>
         </Card>
       )}

@@ -35,6 +35,11 @@ export interface AttendanceRecord {
   remarks?: string | null;
   needsMakeup?: boolean;
   makeupCompleted?: boolean;
+  isBuddyAttendance?: boolean;
+  /** @nullable */
+  verifiedByStudentId?: string | null;
+  /** @nullable */
+  deviceId?: string | null;
   createdAt: Date;
   student?: User;
   schedule?: Schedule;

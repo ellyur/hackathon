@@ -46,6 +46,10 @@ export const LoginResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -85,6 +89,10 @@ export const GetMeResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -155,6 +163,10 @@ export const ListUsersResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -209,6 +221,10 @@ export const CreateUserResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -246,6 +262,10 @@ export const GetUserResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -271,7 +291,15 @@ export const UpdateUserBody = zod.object({
   "avatarUrl": zod.string().optional(),
   "isActive": zod.boolean().optional(),
   "section": zod.string().optional(),
-  "yearLevel": zod.number().optional()
+  "yearLevel": zod.number().optional(),
+  "program": zod.string().optional(),
+  "academicYear": zod.string().optional(),
+  "studentNumber": zod.string().optional(),
+  "password": zod.string().optional(),
+  "landmark": zod.string().optional(),
+  "city": zod.string().optional(),
+  "transportationMethod": zod.string().optional(),
+  "emergencyContact": zod.string().optional()
 })
 
 export const UpdateUserResponse = zod.object({
@@ -293,6 +321,10 @@ export const UpdateUserResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -342,6 +374,10 @@ export const ListStudentsResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "totalHoursCompleted": zod.number().optional(),
@@ -410,6 +446,9 @@ export const GetStudentAttendanceResponseItem = zod.object({
   "remarks": zod.string().nullish(),
   "needsMakeup": zod.boolean().optional(),
   "makeupCompleted": zod.boolean().optional(),
+  "isBuddyAttendance": zod.boolean().optional(),
+  "verifiedByStudentId": zod.string().nullish(),
+  "deviceId": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "student": zod.object({
   "id": zod.string(),
@@ -430,6 +469,10 @@ export const GetStudentAttendanceResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -498,6 +541,10 @@ export const GetStudentAttendanceResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -526,6 +573,10 @@ export const GetStudentAttendanceResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -825,6 +876,10 @@ export const ListCaseCompletionsResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -917,6 +972,10 @@ export const SubmitCaseCompletionResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -1003,6 +1062,10 @@ export const VerifyCaseCompletionResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -1093,6 +1156,10 @@ export const RejectCaseCompletionResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -1201,6 +1268,10 @@ export const ListSchedulesResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -1229,6 +1300,10 @@ export const ListSchedulesResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -1317,6 +1392,10 @@ export const CreateScheduleResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -1345,6 +1424,10 @@ export const CreateScheduleResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -1423,6 +1506,10 @@ export const GetScheduleResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -1451,6 +1538,10 @@ export const GetScheduleResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -1543,6 +1634,10 @@ export const UpdateScheduleResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -1571,6 +1666,10 @@ export const UpdateScheduleResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -1620,6 +1719,9 @@ export const ListAttendanceResponseItem = zod.object({
   "remarks": zod.string().nullish(),
   "needsMakeup": zod.boolean().optional(),
   "makeupCompleted": zod.boolean().optional(),
+  "isBuddyAttendance": zod.boolean().optional(),
+  "verifiedByStudentId": zod.string().nullish(),
+  "deviceId": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "student": zod.object({
   "id": zod.string(),
@@ -1640,6 +1742,10 @@ export const ListAttendanceResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -1708,6 +1814,10 @@ export const ListAttendanceResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -1736,6 +1846,10 @@ export const ListAttendanceResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -1760,7 +1874,8 @@ export const RecordTimeInBody = zod.object({
   "gpsVerified": zod.boolean(),
   "faceVerified": zod.boolean(),
   "livenessVerified": zod.boolean(),
-  "deviceInfo": zod.string().optional()
+  "deviceInfo": zod.string().optional(),
+  "faceVerificationToken": zod.string().optional()
 })
 
 export const RecordTimeInResponse = zod.object({
@@ -1781,6 +1896,9 @@ export const RecordTimeInResponse = zod.object({
   "remarks": zod.string().nullish(),
   "needsMakeup": zod.boolean().optional(),
   "makeupCompleted": zod.boolean().optional(),
+  "isBuddyAttendance": zod.boolean().optional(),
+  "verifiedByStudentId": zod.string().nullish(),
+  "deviceId": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "student": zod.object({
   "id": zod.string(),
@@ -1801,6 +1919,10 @@ export const RecordTimeInResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -1869,6 +1991,10 @@ export const RecordTimeInResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -1897,6 +2023,10 @@ export const RecordTimeInResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -1941,6 +2071,9 @@ export const RecordTimeOutResponse = zod.object({
   "remarks": zod.string().nullish(),
   "needsMakeup": zod.boolean().optional(),
   "makeupCompleted": zod.boolean().optional(),
+  "isBuddyAttendance": zod.boolean().optional(),
+  "verifiedByStudentId": zod.string().nullish(),
+  "deviceId": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "student": zod.object({
   "id": zod.string(),
@@ -1961,6 +2094,10 @@ export const RecordTimeOutResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -2029,6 +2166,10 @@ export const RecordTimeOutResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -2057,6 +2198,10 @@ export const RecordTimeOutResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -2100,6 +2245,9 @@ export const CiAssistedAttendanceResponse = zod.object({
   "remarks": zod.string().nullish(),
   "needsMakeup": zod.boolean().optional(),
   "makeupCompleted": zod.boolean().optional(),
+  "isBuddyAttendance": zod.boolean().optional(),
+  "verifiedByStudentId": zod.string().nullish(),
+  "deviceId": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "student": zod.object({
   "id": zod.string(),
@@ -2120,6 +2268,10 @@ export const CiAssistedAttendanceResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -2188,6 +2340,10 @@ export const CiAssistedAttendanceResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -2216,6 +2372,10 @@ export const CiAssistedAttendanceResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -2259,6 +2419,9 @@ export const ManualAttendanceOverrideResponse = zod.object({
   "remarks": zod.string().nullish(),
   "needsMakeup": zod.boolean().optional(),
   "makeupCompleted": zod.boolean().optional(),
+  "isBuddyAttendance": zod.boolean().optional(),
+  "verifiedByStudentId": zod.string().nullish(),
+  "deviceId": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "student": zod.object({
   "id": zod.string(),
@@ -2279,6 +2442,10 @@ export const ManualAttendanceOverrideResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -2347,6 +2514,10 @@ export const ManualAttendanceOverrideResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -2375,6 +2546,10 @@ export const ManualAttendanceOverrideResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -2454,6 +2629,10 @@ export const ListSlotsResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -2541,6 +2720,10 @@ export const CreateSlotResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -2631,6 +2814,10 @@ export const UpdateSlotResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -2690,6 +2877,10 @@ export const ApplyForSlotResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -2756,6 +2947,10 @@ export const ApplyForSlotResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -2806,6 +3001,10 @@ export const ListSlotApplicationsResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -2872,6 +3071,10 @@ export const ListSlotApplicationsResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -2929,6 +3132,10 @@ export const ReviewSlotApplicationResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -2995,6 +3202,10 @@ export const ReviewSlotApplicationResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -3046,6 +3257,10 @@ export const GetRecommendationsResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "totalHoursCompleted": zod.number().optional(),
@@ -3159,6 +3374,10 @@ export const ListAnnouncementsResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -3213,6 +3432,10 @@ export const CreateAnnouncementResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -3270,6 +3493,10 @@ export const UpdateAnnouncementResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -3367,6 +3594,10 @@ export const GetCaseGapsResponse = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -3487,6 +3718,10 @@ export const GetTodayDutiesResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({
@@ -3515,6 +3750,10 @@ export const GetTodayDutiesResponseItem = zod.object({
   "program": zod.string().nullish(),
   "academicYear": zod.string().nullish(),
   "totalHoursRequired": zod.number().optional(),
+  "landmark": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "transportationMethod": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
   "createdAt": zod.coerce.date().optional()
 }).optional(),
   "ciProfile": zod.object({

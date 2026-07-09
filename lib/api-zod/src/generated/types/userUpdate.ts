@@ -14,4 +14,12 @@ export interface UserUpdate {
   isActive?: boolean;
   section?: string;
   yearLevel?: number;
+  program?: string;
+  academicYear?: string;
+  studentNumber?: string;
+  password?: string;
+  landmark?: string;
+  city?: string;
+  transportationMethod?: string;
+  emergencyContact?: string;
 }

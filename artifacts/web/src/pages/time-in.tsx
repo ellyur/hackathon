@@ -1,9 +1,11 @@
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   MapPin, ScanFace, CheckCircle2, AlertCircle,
-  RefreshCw, Loader2, Navigation, ExternalLink, LogOut, Clock,
+  RefreshCw, Loader2, Navigation, LogOut, Clock,
+  HelpCircle, ChevronDown, ChevronUp, Users, UserCheck,
 } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRoute, Link } from 'wouter';
@@ -11,17 +13,27 @@ import { getDistance } from 'geolib';
 import {
   useGetSchedule, useRecordTimeIn, useRecordTimeOut,
   useListAttendance, useGetMyFaceDescriptor,
+  useWhyAssigned, useBuddyTimeIn, useBuddyEligible,
 } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
 import { loadFaceApiModels, detectFaceDescriptor, prefetchFaceApiModels } from '@/lib/face-detection';
 import { AttendanceMap, type GpsZoneStatus } from '@/components/attendance-map';
+import { DutyInfoPanel } from '@/components/duty-info-panel';
+import { useAuth } from '@/hooks/use-auth';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Step =
+type SelfStep =
   | 'idle' | 'gps-checking' | 'gps-ok' | 'gps-error'
   | 'face-loading' | 'face-scanning' | 'face-ok' | 'face-error' | 'face-no-match'
   | 'submitting' | 'done' | 'submit-error' | 'timed-out';
+
+type BuddyStep =
+  | 'buddy-select'
+  | 'buddy-face-loading' | 'buddy-face-scanning'
+  | 'buddy-submitting' | 'buddy-done' | 'buddy-error';
+
+type Step = SelfStep | BuddyStep;
 
 interface GpsResult {
   distance: number;
@@ -37,6 +49,14 @@ interface LiveGps {
   accuracy: number;
   distance: number;
   withinRange: boolean;
+}
+
+interface ScheduleStudent {
+  id: string;
+  firstName: string;
+  lastName: string;
+  avatarUrl?: string | null;
+  section?: string | null;
 }
 
 // ── GPS status panel ───────────────────────────────────────────────────────────
@@ -85,12 +105,69 @@ function GpsStatusPanel({
   );
 }
 
+// ── Why Was I Assigned section ─────────────────────────────────────────────────
+
+function WhyAssignedSection({ scheduleId }: { scheduleId: string }) {
+  const [open, setOpen] = useState(false);
+  const { data, isLoading, isError } = useWhyAssigned(scheduleId, open);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger asChild>
+        <Button variant="outline" size="sm" className="w-full gap-2 justify-between">
+          <span className="flex items-center gap-2">
+            <HelpCircle className="w-4 h-4 text-primary" />
+            Why was I assigned to this duty?
+          </span>
+          {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="mt-2 rounded-xl border bg-muted/40 p-4 text-sm space-y-2">
+          {isLoading && (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading reasons…
+            </div>
+          )}
+          {isError && (
+            <p className="text-muted-foreground">Could not load assignment reasons.</p>
+          )}
+          {data?.reasons && data.reasons.length > 0 && (
+            <>
+              <p className="font-semibold text-foreground">You were selected because:</p>
+              <ul className="space-y-1.5">
+                {data.reasons.map((reason, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+                    <span>{reason}</span>
+                  </li>
+                ))}
+              </ul>
+              {data.score != null && (
+                <p className="text-xs text-muted-foreground pt-1 border-t">
+                  Recommendation score: <span className="font-semibold">{data.score}/100</span>
+                </p>
+              )}
+            </>
+          )}
+          {data?.reasons && data.reasons.length === 0 && (
+            <p className="text-muted-foreground">You were selected for this duty by your scheduler.</p>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function TimeInSimulatorPage() {
   const [, params] = useRoute('/schedule/:id');
   const scheduleId = params?.id ?? '';
   const { toast } = useToast();
+  const { user } = useAuth();
+  const currentUserId = (user as { id?: string } | undefined)?.id;
 
   const { data: schedule, isLoading: scheduleLoading } = useGetSchedule(scheduleId, {
     query: { enabled: !!scheduleId, staleTime: 60_000 } as never,
@@ -98,32 +175,49 @@ export function TimeInSimulatorPage() {
   const { data: faceData, isLoading: faceLoading } = useGetMyFaceDescriptor({
     query: { staleTime: 60_000 } as never,
   });
-  const { data: attendanceList, isLoading: attendanceLoading } = useListAttendance(
+  const { data: attendanceList, isLoading: attendanceLoading, refetch: refetchAttendance } = useListAttendance(
     { scheduleId },
     { query: { enabled: !!scheduleId, staleTime: 0, refetchOnMount: true } as never },
   );
   const recordTimeIn = useRecordTimeIn();
   const recordTimeOut = useRecordTimeOut();
+  const buddyMutate = useBuddyTimeIn();
 
   // ── Derived schedule data ─────────────────────────────────────────────────
-  const hospitalRadius =
-    (schedule as { attendanceRadius?: number } | undefined)?.attendanceRadius ??
-    (schedule as { hospital?: { attendanceRadius?: number } } | undefined)?.hospital?.attendanceRadius ?? 150;
-  const hospitalLat = (schedule as { hospital?: { latitude?: number } } | undefined)?.hospital?.latitude ?? 0;
-  const hospitalLng = (schedule as { hospital?: { longitude?: number } } | undefined)?.hospital?.longitude ?? 0;
+  const sch = schedule as {
+    attendanceRadius?: number;
+    hospital?: { attendanceRadius?: number; latitude?: number; longitude?: number; name?: string; address?: string };
+    department?: { name?: string };
+    ci?: { firstName?: string; lastName?: string };
+    students?: ScheduleStudent[];
+    dutyDate?: string;
+    startTime?: string;
+    endTime?: string;
+    dutyHours?: number | null;
+    title?: string;
+    status?: string;
+  } | undefined;
+
+  const hospitalRadius = sch?.attendanceRadius ?? sch?.hospital?.attendanceRadius ?? 150;
+  const hospitalLat = sch?.hospital?.latitude ?? 0;
+  const hospitalLng = sch?.hospital?.longitude ?? 0;
   const hasHospitalGps = hospitalLat !== 0 || hospitalLng !== 0;
 
-  const hospitalName =
-    (schedule as { hospital?: { name?: string } } | undefined)?.hospital?.name ??
-    (schedule as { title?: string } | undefined)?.title ?? 'Hospital';
-  const deptName = (schedule as { department?: { name?: string } } | undefined)?.department?.name ?? '';
-  const dutyDate = (schedule as { dutyDate?: string } | undefined)?.dutyDate ?? '';
-  const startTime = (schedule as { startTime?: string } | undefined)?.startTime ?? '';
-  const endTime = (schedule as { endTime?: string } | undefined)?.endTime ?? '';
+  const hospitalName = sch?.hospital?.name ?? sch?.title ?? 'Hospital';
+  const hospitalAddress = sch?.hospital?.address ?? null;
+  const deptName = sch?.department?.name ?? '';
+  const dutyDate = sch?.dutyDate ?? '';
+  const startTime = sch?.startTime ?? '';
+  const endTime = sch?.endTime ?? '';
+  const dutyHours = sch?.dutyHours ?? null;
+  const scheduleStatus = sch?.status ?? 'upcoming';
+  const ciFirstName = sch?.ci?.firstName ?? null;
+  const ciLastName = sch?.ci?.lastName ?? null;
+  const scheduleStudents: ScheduleStudent[] = (sch?.students ?? []) as ScheduleStudent[];
 
   const isEnrolled = faceData?.enrolled === true;
 
-  // ── State ─────────────────────────────────────────────────────────────────
+  // ── Self attendance state ─────────────────────────────────────────────────
   const [step, setStep] = useState<Step>('idle');
   const [gpsResult, setGpsResult] = useState<GpsResult | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
@@ -134,6 +228,14 @@ export function TimeInSimulatorPage() {
   const [timeOutAt, setTimeOutAt] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // ── Buddy state ───────────────────────────────────────────────────────────
+  const [buddyTarget, setBuddyTarget] = useState<ScheduleStudent | null>(null);
+  const [buddyFaceDetected, setBuddyFaceDetected] = useState(false);
+  const [buddyError, setBuddyError] = useState<string | null>(null);
+  const [buddyDoneName, setBuddyDoneName] = useState<string | null>(null);
+  // Tracks which terminal step (done/timed-out) was active before entering buddy flow
+  const [prebuddyStep, setPrebuddyStep] = useState<'done' | 'timed-out'>('done');
+
   // ── Live GPS state ────────────────────────────────────────────────────────
   const [liveGps, setLiveGps] = useState<LiveGps | null>(null);
   const [gpsPermDenied, setGpsPermDenied] = useState(false);
@@ -142,6 +244,10 @@ export function TimeInSimulatorPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const processingRef = useRef(false);
+
+  // ── Buddy eligibility check ───────────────────────────────────────────────
+  const isDoneScreen = step === 'done' || step === 'timed-out';
+  const { data: buddyEligibility } = useBuddyEligible(scheduleId, isDoneScreen);
 
   // ── GPS zone status ───────────────────────────────────────────────────────
   const gpsZoneStatus: GpsZoneStatus = !hasHospitalGps
@@ -156,15 +262,12 @@ export function TimeInSimulatorPage() {
 
   const canStartVerification = !hasHospitalGps || (liveGps !== null && liveGps.withinRange);
 
-  // Warm up face-api.js models immediately so they're ready before the user starts verification
   useEffect(() => { prefetchFaceApiModels(); }, []);
 
-  // ── Sync step from existing attendance record on load ─────────────────────
-  // Only runs when idle to avoid clobbering in-progress verification flows.
-  // Backend sorts by createdAt DESC, so [0] is the most recent record.
+  // ── Sync step from existing attendance record ─────────────────────────────
   useEffect(() => {
     if (!attendanceList || step !== 'idle') return;
-    const record = attendanceList[0]; // backend already filters by student role
+    const record = attendanceList[0];
     if (!record) return;
     if (record.timeIn) {
       setTimeInAt(new Date(record.timeIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -178,7 +281,7 @@ export function TimeInSimulatorPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attendanceList]);
 
-  // ── Start GPS watching on mount ───────────────────────────────────────────
+  // ── Live GPS watch ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!navigator.geolocation || !scheduleId) return;
 
@@ -221,7 +324,7 @@ export function TimeInSimulatorPage() {
     processingRef.current = false;
   }, []);
 
-  // ── Start from live GPS (skips gps-checking step) ────────────────────────
+  // ── Start from live GPS ───────────────────────────────────────────────────
   const startFromLiveGps = useCallback(() => {
     const g = liveGps;
     if (!hasHospitalGps) {
@@ -234,7 +337,7 @@ export function TimeInSimulatorPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveGps, hasHospitalGps]);
 
-  // ── GPS verification (legacy one-shot, used for retry) ────────────────────
+  // ── GPS verification (retry) ──────────────────────────────────────────────
   const verifyGps = useCallback(() => {
     setStep('gps-checking');
     setGpsError(null);
@@ -312,7 +415,7 @@ export function TimeInSimulatorPage() {
     }
   }, []);
 
-  // ── Face capture & verify ─────────────────────────────────────────────────
+  // ── Face capture & verify (self) ──────────────────────────────────────────
   const captureAndVerify = useCallback(async () => {
     const vid = videoRef.current;
     if (!vid || vid.readyState < 2) {
@@ -368,9 +471,10 @@ export function TimeInSimulatorPage() {
           studentLatitude: gpsResult?.latitude,
           studentLongitude: gpsResult?.longitude,
           gpsVerified: true,
+          faceVerified: true,
           faceVerificationToken: faceVerificationToken ?? undefined,
           livenessVerified: true,
-        } as Parameters<typeof recordTimeIn.mutate>[0]['data'],
+        },
       },
       {
         onSuccess: () => {
@@ -402,10 +506,87 @@ export function TimeInSimulatorPage() {
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
-  // ── Derived screen ────────────────────────────────────────────────────────
+  // ── Buddy flow helpers ────────────────────────────────────────────────────
+  const startBuddyFaceScan = useCallback(async () => {
+    setStep('buddy-face-loading');
+    setBuddyError(null);
+    setBuddyFaceDetected(false);
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('MEDIA_DEVICES_UNAVAILABLE');
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+      });
+      streamRef.current = stream;
+      setStep('buddy-face-scanning');
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setBuddyError(msg.includes('mediaDevices') || msg === 'MEDIA_DEVICES_UNAVAILABLE'
+        ? 'Camera API unavailable. Open the app in a new browser tab.'
+        : msg.includes('Permission') || msg.includes('NotAllowed')
+        ? 'Camera access denied. Allow camera permission and try again.'
+        : `Camera error: ${msg}`
+      );
+      setStep('buddy-error');
+    }
+  }, []);
+
+  const captureAndVerifyBuddy = useCallback(async () => {
+    const vid = videoRef.current;
+    if (!vid || vid.readyState < 2 || !buddyTarget) {
+      setBuddyError('Camera is not ready. Please wait and try again.');
+      return;
+    }
+    setBuddyFaceDetected(true);
+    try {
+      await loadFaceApiModels();
+      const descriptor = await detectFaceDescriptor(vid);
+      stopCamera();
+      if (!descriptor) {
+        setBuddyFaceDetected(false);
+        setBuddyError('No face detected. Make sure the classmate\'s face is centred and well-lit, then try again.');
+        setStep('buddy-error');
+        return;
+      }
+      setStep('buddy-submitting');
+      await buddyMutate.mutateAsync({
+        scheduleId,
+        targetStudentId: buddyTarget.id,
+        descriptor,
+        latitude: liveGps?.latitude,
+        longitude: liveGps?.longitude,
+      } as Parameters<typeof buddyMutate.mutateAsync>[0]);
+      setBuddyDoneName(`${buddyTarget.firstName} ${buddyTarget.lastName}`);
+      setStep('buddy-done');
+      toast({ title: 'Buddy attendance recorded', description: `Attendance for ${buddyTarget.firstName} ${buddyTarget.lastName} has been saved.` });
+      refetchAttendance();
+    } catch (err) {
+      stopCamera();
+      setBuddyFaceDetected(false);
+      const msg = err instanceof Error ? err.message : 'Verification failed.';
+      setBuddyError(msg);
+      setStep('buddy-error');
+    }
+  }, [buddyTarget, stopCamera, buddyMutate, scheduleId, liveGps, toast, refetchAttendance]);
+
+  const resetBuddy = useCallback(() => {
+    stopCamera();
+    setStep(prebuddyStep);
+    setBuddyTarget(null);
+    setBuddyFaceDetected(false);
+    setBuddyError(null);
+    setBuddyDoneName(null);
+  }, [stopCamera, prebuddyStep]);
+
+  // ── Derived screen flags ──────────────────────────────────────────────────
   const isGpsScreen = ['idle', 'gps-checking', 'gps-ok', 'gps-error'].includes(step);
   const isFaceScreen = ['face-loading', 'face-scanning', 'face-ok', 'face-error', 'face-no-match', 'submitting', 'submit-error'].includes(step);
-  const isDoneScreen = step === 'done' || step === 'timed-out';
+  const isBuddyScreen = ['buddy-select', 'buddy-face-loading', 'buddy-face-scanning', 'buddy-submitting', 'buddy-done', 'buddy-error'].includes(step);
 
   // ── Loading / enroll guard ────────────────────────────────────────────────
   if (scheduleLoading || faceLoading || attendanceLoading) {
@@ -464,12 +645,242 @@ export function TimeInSimulatorPage() {
     </div>
   );
 
+  // ── Shared duty info panel props ──────────────────────────────────────────
+  const dutyPanelProps = {
+    hospitalName,
+    hospitalAddress,
+    hospitalLat,
+    hospitalLng,
+    departmentName: deptName,
+    dutyDate,
+    startTime,
+    endTime,
+    dutyHours,
+    status: scheduleStatus,
+    ciFirstName,
+    ciLastName,
+    students: scheduleStudents,
+    currentUserId,
+  };
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // BUDDY FLOW SCREENS
+  // ════════════════════════════════════════════════════════════════════════════
+  if (isBuddyScreen) {
+    // ── Buddy: Select classmate ─────────────────────────────────────────────
+    if (step === 'buddy-select') {
+      const classmates = scheduleStudents.filter(s => s.id !== currentUserId);
+      return (
+        <div className="max-w-2xl mx-auto space-y-4 -mt-2">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Users className="w-5 h-5 text-primary" /> Select Classmate
+              </h2>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Choose the classmate whose face you will scan
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={resetBuddy}>
+              ← Back
+            </Button>
+          </div>
+
+          {classmates.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Users className="w-10 h-10 mx-auto mb-3 opacity-40" />
+              <p>No other classmates are assigned to this duty.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {classmates.map(s => {
+                const initials = `${s.firstName?.[0] ?? '?'}${s.lastName?.[0] ?? '?'}`.toUpperCase();
+                return (
+                  <button
+                    key={s.id}
+                    className="w-full flex items-center gap-3 p-3.5 rounded-xl border bg-card hover:bg-accent hover:border-primary transition-colors text-left"
+                    onClick={() => {
+                      setBuddyTarget(s);
+                      startBuddyFaceScan();
+                    }}
+                  >
+                    <div className="w-10 h-10 rounded-full overflow-hidden border border-border flex-shrink-0">
+                      {s.avatarUrl ? (
+                        <img src={s.avatarUrl} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+                          {initials}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="font-semibold">{s.firstName} {s.lastName}</div>
+                      {s.section && <div className="text-xs text-muted-foreground">{s.section}</div>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+            <strong>Emergency use only.</strong> Buddy attendance requires live face verification. The classmate must pass face recognition — this cannot be bypassed.
+          </div>
+        </div>
+      );
+    }
+
+    // ── Buddy: Face scan ────────────────────────────────────────────────────
+    if (step === 'buddy-face-loading' || step === 'buddy-face-scanning') {
+      const isScanning = step === 'buddy-face-scanning';
+      const isLoading = step === 'buddy-face-loading';
+      const targetName = buddyTarget ? `${buddyTarget.firstName} ${buddyTarget.lastName}` : 'Classmate';
+
+      return (
+        <div className="max-w-2xl mx-auto space-y-0 -mt-2">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+                <UserCheck className="w-5 h-5 text-primary" /> Verify Classmate
+              </h2>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Have <strong>{targetName}</strong> face the camera, then tap Verify
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5 shrink-0" onClick={() => { stopCamera(); setStep('buddy-select'); }}>
+              <RefreshCw className="w-3.5 h-3.5" /> Back
+            </Button>
+          </div>
+
+          <div className="relative rounded-2xl overflow-hidden bg-black border shadow-xl aspect-[3/4] max-h-[520px] w-full">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover scale-x-[-1]"
+              style={{ display: isScanning || buddyFaceDetected ? 'block' : 'none' }}
+            />
+            {isLoading && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-zinc-950">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                </div>
+                <p className="text-white/80 text-sm font-medium">Opening camera…</p>
+              </div>
+            )}
+            {isScanning && !buddyFaceDetected && (
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/30" style={{
+                  maskImage: 'radial-gradient(ellipse 55% 65% at 50% 45%, transparent 70%, black 100%)',
+                  WebkitMaskImage: 'radial-gradient(ellipse 55% 65% at 50% 45%, transparent 70%, black 100%)',
+                }} />
+                <div className="w-48 h-64 border-2 border-white/70 rounded-full" />
+              </div>
+            )}
+            {isScanning && buddyFaceDetected && (
+              <div className="absolute inset-0 bg-primary/25 flex flex-col items-center justify-center gap-3">
+                <Loader2 className="w-14 h-14 text-white animate-spin" />
+                <p className="text-white font-semibold text-sm">Verifying classmate's face…</p>
+              </div>
+            )}
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-sm text-white text-xs px-3 py-1 rounded-full font-medium">
+              {isScanning && !buddyFaceDetected ? `Have ${buddyTarget?.firstName ?? 'classmate'} face the camera`
+              : buddyFaceDetected ? 'Hold still…'
+              : 'Starting camera…'}
+            </div>
+          </div>
+
+          <div className="pt-3 space-y-2">
+            {isScanning && !buddyFaceDetected && (
+              <Button size="lg" className="w-full h-14 text-base rounded-xl gap-2" onClick={captureAndVerifyBuddy}>
+                <ScanFace className="w-5 h-5" /> Capture &amp; Verify Face
+              </Button>
+            )}
+            <p className="text-xs text-muted-foreground text-center pt-1">
+              <ScanFace className="w-3 h-3 inline mr-1" />
+              Face matching is processed securely on the server
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Buddy: Submitting ───────────────────────────────────────────────────
+    if (step === 'buddy-submitting') {
+      return (
+        <div className="flex items-center justify-center h-64 text-muted-foreground gap-2">
+          <Loader2 className="w-5 h-5 animate-spin" /> Recording attendance…
+        </div>
+      );
+    }
+
+    // ── Buddy: Done ─────────────────────────────────────────────────────────
+    if (step === 'buddy-done') {
+      return (
+        <div className="max-w-md mx-auto mt-10 text-center space-y-6">
+          <div className="w-24 h-24 rounded-full bg-emerald-100 flex items-center justify-center mx-auto">
+            <UserCheck className="w-12 h-12 text-emerald-600" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-emerald-700">Buddy Attendance Recorded</h2>
+            <p className="text-muted-foreground mt-2">
+              {buddyDoneName ? `Attendance for ${buddyDoneName} has been saved via buddy verification.` : 'Classmate attendance saved.'}
+            </p>
+          </div>
+          <div className="bg-muted/50 rounded-xl p-4 space-y-2 text-sm text-left">
+            <div className="flex items-center gap-2 text-emerald-700">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>Face identity verified</span>
+            </div>
+            <div className="flex items-center gap-2 text-amber-700">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>Attendance recorded through verified classmate device</span>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" className="flex-1" onClick={resetBuddy}>
+              Attend Another Classmate
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/schedule">← Back to Schedule</Link>
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Buddy: Error ────────────────────────────────────────────────────────
+    if (step === 'buddy-error') {
+      return (
+        <div className="max-w-md mx-auto mt-10 text-center space-y-6">
+          <div className="w-24 h-24 rounded-full bg-red-100 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-12 h-12 text-red-500" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold">Verification Failed</h2>
+            <p className="text-muted-foreground mt-2">{buddyError ?? 'Something went wrong.'}</p>
+          </div>
+          <div className="flex gap-3">
+            <Button className="flex-1" onClick={() => { setBuddyError(null); setBuddyFaceDetected(false); setStep('buddy-select'); }}>
+              <RefreshCw className="w-4 h-4 mr-2" /> Try Again
+            </Button>
+            <Button variant="ghost" size="sm" onClick={resetBuddy}>Cancel</Button>
+          </div>
+        </div>
+      );
+    }
+  }
+
   // ════════════════════════════════════════════════════════════════════════════
   // SCREEN 1 — GPS Location Check
   // ════════════════════════════════════════════════════════════════════════════
   if (isGpsScreen) {
     return (
       <div className="max-w-2xl mx-auto space-y-0 -mt-2">
+        {/* Duty Info Panel */}
+        <DutyInfoPanel {...dutyPanelProps} />
+
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -513,7 +924,6 @@ export function TimeInSimulatorPage() {
             hospitalName={hospitalName}
           />
 
-          {/* GPS error */}
           {step === 'gps-error' && gpsError && (
             <Alert variant="destructive">
               <AlertCircle className="w-4 h-4" />
@@ -521,7 +931,6 @@ export function TimeInSimulatorPage() {
             </Alert>
           )}
 
-          {/* Google Maps link */}
           {hasHospitalGps && (
             <a
               href={`https://www.google.com/maps/dir/?api=1&destination=${hospitalLat},${hospitalLng}`}
@@ -529,11 +938,10 @@ export function TimeInSimulatorPage() {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
             >
-              <ExternalLink className="w-3 h-3" /> Open navigation in Google Maps
+              <Navigation className="w-3 h-3" /> Open navigation in Google Maps
             </a>
           )}
 
-          {/* GPS error retry — always tappable */}
           {step === 'gps-error' && (
             <Button
               size="lg"
@@ -545,7 +953,6 @@ export function TimeInSimulatorPage() {
             </Button>
           )}
 
-          {/* Main CTA — proceed to face verification */}
           {step !== 'gps-error' && (
             <Button
               size="lg"
@@ -604,8 +1011,6 @@ export function TimeInSimulatorPage() {
 
         {/* Camera frame */}
         <div className="relative rounded-2xl overflow-hidden bg-black border shadow-xl aspect-[3/4] max-h-[520px] w-full">
-
-          {/* Video feed */}
           <video
             ref={videoRef}
             autoPlay
@@ -615,7 +1020,6 @@ export function TimeInSimulatorPage() {
             style={{ display: isScanning || faceDetected ? 'block' : 'none' }}
           />
 
-          {/* Loading state */}
           {(isLoading || isSubmitting) && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-zinc-950">
               <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
@@ -627,17 +1031,13 @@ export function TimeInSimulatorPage() {
             </div>
           )}
 
-          {/* Face guide overlay — corner brackets */}
           {isScanning && !faceDetected && (
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-              {/* Dim vignette */}
               <div className="absolute inset-0 bg-black/30" style={{
                 maskImage: 'radial-gradient(ellipse 55% 65% at 50% 45%, transparent 70%, black 100%)',
                 WebkitMaskImage: 'radial-gradient(ellipse 55% 65% at 50% 45%, transparent 70%, black 100%)',
               }} />
-              {/* Oval guide */}
               <div className="w-48 h-64 border-2 border-white/70 rounded-full" />
-              {/* Corner brackets */}
               {(['tl','tr','bl','br'] as const).map((pos) => (
                 <div
                   key={pos}
@@ -661,7 +1061,6 @@ export function TimeInSimulatorPage() {
             </div>
           )}
 
-          {/* Verifying overlay */}
           {isScanning && faceDetected && (
             <div className="absolute inset-0 bg-primary/25 flex flex-col items-center justify-center gap-3">
               <Loader2 className="w-14 h-14 text-white animate-spin" />
@@ -669,7 +1068,6 @@ export function TimeInSimulatorPage() {
             </div>
           )}
 
-          {/* Error state */}
           {hasError && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-zinc-950 px-6 text-center">
               <div className="w-16 h-16 rounded-full bg-destructive/15 flex items-center justify-center">
@@ -688,7 +1086,6 @@ export function TimeInSimulatorPage() {
             </div>
           )}
 
-          {/* Step badge — top-right */}
           <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-sm text-white text-xs px-3 py-1 rounded-full font-medium">
             {isScanning && !faceDetected ? 'Centre your face in the oval'
             : faceDetected ? 'Hold still…'
@@ -741,32 +1138,35 @@ export function TimeInSimulatorPage() {
   if (isDoneScreen) {
     const isTimedOut = step === 'timed-out';
     return (
-      <div className="max-w-md mx-auto mt-10 text-center space-y-6">
-        <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto ${isTimedOut ? 'bg-blue-100' : 'bg-emerald-100'}`}>
-          {isTimedOut
-            ? <Clock className="w-12 h-12 text-blue-600" />
-            : <CheckCircle2 className="w-12 h-12 text-emerald-600" />}
-        </div>
-        <div>
-          <h2 className={`text-2xl font-bold ${isTimedOut ? 'text-blue-700' : 'text-emerald-700'}`}>
-            {isTimedOut ? 'Duty Complete' : 'Verified & Timed In'}
-          </h2>
-          <p className="text-muted-foreground mt-2">
-            {isTimedOut && timeInAt && timeOutAt
-              ? `Time in: ${timeInAt} · Time out: ${timeOutAt}`
-              : isTimedOut && timeOutAt
-              ? `Time out recorded at ${timeOutAt}`
-              : timeInAt
-              ? `Attendance recorded at ${timeInAt}`
-              : 'Your attendance has been saved.'}
-          </p>
-          <p className="text-sm text-muted-foreground mt-1">
-            {hospitalName}{deptName ? ` · ${deptName}` : ''}
-          </p>
+      <div className="max-w-md mx-auto mt-6 space-y-5">
+        {/* Attendance confirmation */}
+        <div className="text-center space-y-4">
+          <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto ${isTimedOut ? 'bg-blue-100' : 'bg-emerald-100'}`}>
+            {isTimedOut
+              ? <Clock className="w-12 h-12 text-blue-600" />
+              : <CheckCircle2 className="w-12 h-12 text-emerald-600" />}
+          </div>
+          <div>
+            <h2 className={`text-2xl font-bold ${isTimedOut ? 'text-blue-700' : 'text-emerald-700'}`}>
+              {isTimedOut ? 'Duty Complete' : 'Verified & Timed In'}
+            </h2>
+            <p className="text-muted-foreground mt-2">
+              {isTimedOut && timeInAt && timeOutAt
+                ? `Time in: ${timeInAt} · Time out: ${timeOutAt}`
+                : isTimedOut && timeOutAt
+                ? `Time out recorded at ${timeOutAt}`
+                : timeInAt
+                ? `Attendance recorded at ${timeInAt}`
+                : 'Your attendance has been saved.'}
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {hospitalName}{deptName ? ` · ${deptName}` : ''}
+            </p>
+          </div>
         </div>
 
-        {/* Step recap */}
-        <div className="bg-muted/50 rounded-xl p-4 space-y-2 text-sm text-left">
+        {/* Verification recap */}
+        <div className="bg-muted/50 rounded-xl p-4 space-y-2 text-sm">
           <div className="flex items-center gap-2 text-emerald-700">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>GPS location verified within {hospitalRadius}m</span>
@@ -783,6 +1183,7 @@ export function TimeInSimulatorPage() {
           )}
         </div>
 
+        {/* Time Out button */}
         {!isTimedOut && (
           <Button
             size="lg"
@@ -817,7 +1218,36 @@ export function TimeInSimulatorPage() {
           </Button>
         )}
 
-        <Button variant="ghost" size="sm" asChild>
+        {/* Why was I assigned? */}
+        <WhyAssignedSection scheduleId={scheduleId} />
+
+        {/* Buddy Attendance */}
+        {buddyEligibility?.eligible && (
+          <div className="rounded-xl border bg-card p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-primary" />
+              <p className="text-sm font-semibold">Attend a Classmate</p>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">Emergency Only</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              For emergency situations only (no internet, low battery, broken phone). Your classmate must pass live face verification — this cannot be skipped.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full gap-2"
+              onClick={() => {
+                setPrebuddyStep(step as 'done' | 'timed-out');
+                setStep('buddy-select');
+              }}
+            >
+              <UserCheck className="w-4 h-4" />
+              Help a Classmate Time In
+            </Button>
+          </div>
+        )}
+
+        <Button variant="ghost" size="sm" className="w-full" asChild>
           <Link href="/schedule">← Back to Schedule</Link>
         </Button>
       </div>

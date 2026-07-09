@@ -1472,10 +1472,29 @@ components:
           type: string
         isActive:
           type: boolean
+        # Admin-only academic fields
         section:
           type: string
         yearLevel:
           type: integer
+        program:
+          type: string
+        academicYear:
+          type: string
+        studentNumber:
+          type: string
+        # Password change (self or admin)
+        password:
+          type: string
+        # Student self-updatable personal/location fields
+        landmark:
+          type: string
+        city:
+          type: string
+        transportationMethod:
+          type: string
+        emergencyContact:
+          type: string
 
     StudentProfile:
       type: object
@@ -1497,6 +1516,14 @@ components:
           type: ["string", "null"]
         totalHoursRequired:
           type: integer
+        landmark:
+          type: ["string", "null"]
+        city:
+          type: ["string", "null"]
+        transportationMethod:
+          type: ["string", "null"]
+        emergencyContact:
+          type: ["string", "null"]
         createdAt:
           type: string
           format: date-time
@@ -1936,6 +1963,12 @@ components:
           type: boolean
         makeupCompleted:
           type: boolean
+        isBuddyAttendance:
+          type: boolean
+        verifiedByStudentId:
+          type: ["string", "null"]
+        deviceId:
+          type: ["string", "null"]
         createdAt:
           type: string
           format: date-time
@@ -1961,6 +1994,8 @@ components:
         livenessVerified:
           type: boolean
         deviceInfo:
+          type: string
+        faceVerificationToken:
           type: string
 
     AttendanceTimeOut:
