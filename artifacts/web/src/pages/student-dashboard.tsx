@@ -4,6 +4,10 @@ import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Clock, MapPin, CheckCircle2, AlertCircle, ArrowRight, Loader2, ScanFace, Calendar, CalendarDays, ClipboardCheck, FileCheck } from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  Cell, Legend,
+} from 'recharts';
 import { Link, useLocation } from 'wouter';
 import { useListSchedules, useGetMyFaceDescriptor, useListAttendance } from '@workspace/api-client-react';
 import { useAuth } from '@/hooks/use-auth';
@@ -144,6 +148,36 @@ export function StudentDashboard() {
   const verifiedCaseInstances = allWardCases.reduce((s, c) => s + c.verified, 0);
   const casesPct = totalCaseInstances > 0 ? Math.round(verifiedCaseInstances / totalCaseInstances * 100) : 0;
   const overallPct = totalCaseTypes > 0 ? casesPct : Math.round((passport?.overallCompletion ?? 0) * 100);
+
+  // ── Chart data ─────────────────────────────────────────────
+  // Monthly attendance (last 6 months)
+  const monthlyAttendance = (() => {
+    const buckets: Record<string, { month: string; Present: number; Late: number; Absent: number }> = {};
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleString('default', { month: 'short', year: '2-digit' });
+      buckets[key] = { month: label, Present: 0, Late: 0, Absent: 0 };
+    }
+    for (const r of attendance as any[]) {
+      const key = r.dutyDate?.slice(0, 7);
+      if (key && buckets[key]) {
+        const s = r.status as string;
+        if (s === 'present') buckets[key].Present++;
+        else if (s === 'late') buckets[key].Late++;
+        else if (s === 'absent') buckets[key].Absent++;
+      }
+    }
+    return Object.values(buckets);
+  })();
+
+  // Case completion per ward from passport
+  const wardChartData = (passport?.wards ?? []).map((w: any, i: number) => {
+    const total = w.requiredCases?.reduce((s: number, c: any) => s + (c.required ?? 0), 0) ?? 0;
+    const done  = w.requiredCases?.reduce((s: number, c: any) => s + (c.verified ?? 0), 0) ?? 0;
+    return { ward: w.name ?? `Ward ${i + 1}`, Verified: done, Remaining: Math.max(0, total - done) };
+  }).filter((w: any) => w.Verified + w.Remaining > 0).slice(0, 6);
 
   return (
     <div className="space-y-8">
@@ -360,6 +394,67 @@ export function StudentDashboard() {
                 <div className="text-2xl font-bold">{lateCount}</div>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Analytics Charts ─────────────────────────────────── */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Monthly Attendance Bar Chart */}
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Attendance Trend</CardTitle>
+            <CardDescription>Monthly duty attendance over the last 6 months</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={monthlyAttendance} barSize={14} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }}
+                  labelStyle={{ fontWeight: 600, fontSize: 12 }}
+                  itemStyle={{ fontSize: 12 }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                <Bar dataKey="Present" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Late" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Absent" fill="#ef4444" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Case Completion by Ward */}
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Case Completion by Ward</CardTitle>
+            <CardDescription>Verified vs remaining cases per ward</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {wardChartData.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-[200px] text-muted-foreground text-sm gap-2">
+                <ClipboardCheck className="w-8 h-8 opacity-30" />
+                No ward data yet
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={wardChartData} layout="vertical" barSize={14} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
+                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="ward" width={72} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }}
+                    labelStyle={{ fontWeight: 600, fontSize: 12 }}
+                    itemStyle={{ fontSize: 12 }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                  <Bar dataKey="Verified" stackId="a" fill="hsl(var(--primary))" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="Remaining" stackId="a" fill="hsl(var(--muted))" radius={[4, 4, 4, 4]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
       </div>
