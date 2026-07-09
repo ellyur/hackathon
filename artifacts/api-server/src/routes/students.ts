@@ -12,7 +12,7 @@ import {
   schedulesTable,
   academicYearSettingsTable,
 } from "@workspace/db";
-import { eq, and, sql, inArray, sum } from "drizzle-orm";
+import { eq, and, sql, inArray, sum, count } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
 
 const router: IRouter = Router();
@@ -76,21 +76,63 @@ router.get("/students", requireAuth, async (req, res): Promise<void> => {
     .from(usersTable)
     .where(eq(usersTable.role, "student"));
 
-  const withProfiles = await Promise.all(
-    users.map(async (u) => {
-      const [profile] = await db
-        .select()
-        .from(studentProfilesTable)
-        .where(eq(studentProfilesTable.userId, u.id));
-      return { ...u, studentProfile: profile ?? null };
-    }),
-  );
+  if (users.length === 0) {
+    res.json([]);
+    return;
+  }
+
+  const studentIds = users.map((u) => u.id);
+
+  // Batch-fetch profiles, hours, and case completions in parallel
+  const [profiles, hoursRows, verifiedRows, totalCasesRow] = await Promise.all([
+    db.select().from(studentProfilesTable).where(inArray(studentProfilesTable.userId, studentIds)),
+    db
+      .select({ studentId: attendanceTable.studentId, totalHours: sum(attendanceTable.dutyHours) })
+      .from(attendanceTable)
+      .where(and(inArray(attendanceTable.studentId, studentIds), sql`${attendanceTable.dutyHours} IS NOT NULL`))
+      .groupBy(attendanceTable.studentId),
+    db
+      .select({ studentId: caseCompletionsTable.studentId, cnt: count() })
+      .from(caseCompletionsTable)
+      .where(and(inArray(caseCompletionsTable.studentId, studentIds), eq(caseCompletionsTable.status, "verified")))
+      .groupBy(caseCompletionsTable.studentId),
+    db
+      .select({ totalRequired: sql<number>`COALESCE(SUM(${clinicalCasesTable.requiredCount}), 1)` })
+      .from(clinicalCasesTable)
+      .where(eq(clinicalCasesTable.isActive, true)),
+  ]);
+
+  const profileMap = new Map(profiles.map((p) => [p.userId, p]));
+  const hoursMap = new Map(hoursRows.map((r) => [r.studentId, Math.round(Number(r.totalHours ?? 0) * 100) / 100]));
+  const verifiedMap = new Map(verifiedRows.map((r) => [r.studentId, Number(r.cnt)]));
+  const totalRequired = Math.max(1, Number(totalCasesRow[0]?.totalRequired ?? 1));
+
+  const withProfiles = users.map((u) => {
+    const profile = profileMap.get(u.id) ?? null;
+    const hoursCompleted = hoursMap.get(u.id) ?? 0;
+    const hoursRequired = profile?.totalHoursRequired ?? 500;
+    const verifiedCount = verifiedMap.get(u.id) ?? 0;
+    const caseCompletionRate = verifiedCount / totalRequired;
+    const isAtRisk = hoursCompleted < hoursRequired * 0.25 || caseCompletionRate < 0.5;
+    const { passwordHash: _pw, ...safeUser } = u;
+    return {
+      ...safeUser,
+      studentProfile: profile,
+      totalHoursCompleted: hoursCompleted,
+      totalHoursRequired: hoursRequired,
+      caseCompletionRate,
+      verifiedCaseCount: verifiedCount,
+      totalCasesRequired: totalRequired,
+      isAtRisk,
+    };
+  });
 
   const filtered = search
     ? withProfiles.filter(
         (u) =>
           u.firstName.toLowerCase().includes(search.toLowerCase()) ||
           u.lastName.toLowerCase().includes(search.toLowerCase()) ||
+          (u.studentProfile?.studentNumber ?? "").toLowerCase().includes(search.toLowerCase()) ||
           u.email.toLowerCase().includes(search.toLowerCase()),
       )
     : withProfiles;
