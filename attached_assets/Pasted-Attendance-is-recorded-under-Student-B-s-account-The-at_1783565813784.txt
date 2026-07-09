@@ -1,0 +1,258 @@
+Attendance is recorded under Student B's account.
+
+The attendance record must store:
+
+• Verified By Student • GPS Location • Device ID • Time • Date
+
+The system should clearly indicate that attendance was completed through a verified classmate device.
+
+This feature MUST NOT bypass Face Verification.
+
+Student B must still pass Live Face Verification==================================================== 3. STUDENT PROFILE
+Remove Exact Address.
+
+Replace it with
+
+Nearest Landmark
+
+Example
+
+SM North EDSA
+
+SM Fairview
+
+Robinsons Novaliches
+
+Market Market
+
+Also include
+
+City
+
+Transportation Method
+
+Examples
+
+Public Transportation
+
+Motorcycle
+
+Private Car
+
+Walking
+
+This information is ONLY used for AI recommendations.
+
+==================================================== 4. ADMIN MANAGES STUDENT INFORMATION
+Students CANNOT edit
+
+• Student ID • School Year • Course • Year Level • Section • Block
+
+Only Admin can manage those.
+
+Students may only edit
+
+• Phone Number • Emergency Contact • Profile Picture • Password • Landmark • Transportation Method
+
+==================================================== 5. AI STUDENT RECOMMENDATION
+Improve the recommendation engine.
+
+When Scheduler creates a Duty,
+
+the system should automatically recommend students.
+
+The recommendation score should consider:
+
+Same Section Weight: Highest
+
+No Academic Schedule Conflict
+
+Missing Required Clinical Cases
+
+Lowest Completed Duty Hours
+
+Landmark Distance
+
+Fair Distribution of Duties
+
+Existing Duty Schedule Conflicts
+
+Each student should receive a Recommendation Score.
+
+Example
+
+98%
+
+The Scheduler should also see WHY.
+
+Example
+
+Recommended because
+
+✓ Same Section
+
+✓ No Class Conflict✓ Needs Delivery Room Cases
+
+✓ Only 180 / 500 Duty Hours
+
+✓ Near Hospital
+
+==================================================== 6. SECTION-FIRST ASSIGNMENT
+The recommendation engine should prioritize by SECTION.
+
+Example
+
+Hospital requests
+
+BSN 3A
+
+10 Students
+
+The system first analyzes ALL students within BSN 3A.
+
+It should then rank students according to:
+
+No class conflict
+
+Missing clinical cases
+
+Lowest duty hours
+
+Nearest landmark
+
+Balanced workload
+
+Only students from the selected section should be recommended.
+
+==================================================== 7. AI EXPLANATION
+Each recommendation should have an explanation.
+
+Example
+
+Maria Santos
+
+98%
+
+Reason
+
+• Same Section
+
+• No Schedule Conflict
+
+• Missing Delivery Room Cases
+
+• Only 150 / 500 Duty Hours
+
+• Landmark close to hospital
+
+• Balanced workload
+
+==================================================== 8. STUDENT ASSIGNMENT EXPLANATION
+When a student opens a Duty,
+
+display
+
+"Why was I assigned?"
+
+Example
+
+You were selected because
+
+• Your section was assigned to this duty.
+
+• You currently need Delivery Room cases.
+
+• You have no class conflict.
+
+• You still need more duty hours.
+
+• Your registered landmark is near this hospital.
+
+• Your workload is balanced.
+
+This improves transparency.
+
+==================================================== 9. DATABASE UPDATES
+Update database tables as needed.
+
+Duty Assignment
+
+Store
+
+Clinical Instructor
+
+Assigned Students
+
+Recommendation Score
+
+Recommendation Reason
+
+Student Profile
+
+Store
+
+Landmark
+
+City
+
+Transportation Method
+
+AttendanceStore
+
+Verified By Student
+
+Verification Method
+
+Primary Attendance
+
+Buddy Attendance
+
+Device ID
+
+GPS Coordinates
+
+AI Recommendation
+
+Store
+
+Recommendation Score
+
+Reason List
+
+==================================================== 10. UI IMPROVEMENTS
+Student Upcoming Duty page should now contain
+
+Hospital Information
+
+Map
+
+Navigation
+
+Clinical Instructor
+
+Assigned Classmates
+
+Attendance Button
+
+Why Assigned
+
+Attendance History
+
+The page should feel like a professional hospital scheduling application.
+
+==================================================== 11. BUSINESS RULES
+Student cannot change academic information.
+
+Only Admin manages
+
+School Year
+
+Section
+
+Year
+
+Course
+
+Students may only update personal information.
+
+Buddy Attendance only works AFTER the verifying student has already completed their own attendance.

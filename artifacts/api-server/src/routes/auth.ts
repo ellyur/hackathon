@@ -103,12 +103,13 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
     expiresAt,
   });
 
-  // No email provider is configured for this project, so the reset token is
-  // returned directly in the response for the demo/reset-password flow to consume.
+  // No email provider is configured for this project.
+  // In development only, return the token so the UI can build the reset link.
+  // In production, tokens must be delivered out-of-band (email/SMS).
+  const isDev = process.env.NODE_ENV !== "production";
   res.json({
     message: "If an account exists for that email, a reset link has been issued.",
-    resetToken: token,
-    expiresAt,
+    ...(isDev ? { resetToken: token, expiresAt } : {}),
   });
 });
 
