@@ -25,12 +25,15 @@ import {
   History,
   GraduationCap,
   ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useState } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,6 +56,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem('sidebarCollapsed') === 'true',
+  );
+
+  function toggleCollapse() {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('sidebarCollapsed', String(next));
+      return next;
+    });
+  }
 
   if (!user) {
     if (authLoading) {
@@ -114,6 +128,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const navItems = roleNavItems[user.role as keyof typeof roleNavItems] || [];
 
   return (
+    <TooltipProvider delayDuration={300}>
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
       {/* Mobile overlay */}
       {isMobile && sidebarOpen && (
@@ -126,88 +141,109 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* ── Sidebar ──────────────────────────────────────────── */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-64 flex flex-col transition-transform duration-300 ease-in-out',
+          'fixed inset-y-0 left-0 z-50 flex flex-col transition-all duration-300 ease-in-out',
           'bg-sidebar border-r border-sidebar-border',
           isMobile
             ? sidebarOpen
-              ? 'translate-x-0 shadow-2xl'
-              : '-translate-x-full'
-            : 'translate-x-0 md:relative',
+              ? 'translate-x-0 shadow-2xl w-64'
+              : '-translate-x-full w-64'
+            : cn('translate-x-0 md:relative', sidebarCollapsed ? 'w-16' : 'w-64'),
         )}
       >
         {/* Logo & Brand */}
-        <div className="h-16 flex items-center px-5 border-b border-sidebar-border/40 shrink-0">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="h-16 flex items-center px-3 border-b border-sidebar-border/40 shrink-0">
+          <div className={cn('flex items-center gap-3 flex-1 min-w-0', sidebarCollapsed && !isMobile && 'justify-center')}>
             <img
               src="/sipag-logo.png"
               alt="SIPAG"
               className="w-9 h-9 rounded-lg object-contain shrink-0 shadow-md bg-white p-1"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
             />
-            <div className="min-w-0">
-              <div className="text-white font-bold text-lg leading-tight tracking-wide">
-                SIPAG
+            {(!sidebarCollapsed || isMobile) && (
+              <div className="min-w-0">
+                <div className="text-white font-bold text-lg leading-tight tracking-wide">SIPAG</div>
+                <div className="text-sidebar-foreground/50 text-[10px] leading-tight font-medium uppercase tracking-widest truncate">
+                  Clinical Scheduling
+                </div>
               </div>
-              <div className="text-sidebar-foreground/50 text-[10px] leading-tight font-medium uppercase tracking-widest truncate">
-                Clinical Scheduling
-              </div>
-            </div>
+            )}
           </div>
-          {isMobile && (
+          {isMobile ? (
             <button
               className="p-1.5 rounded-md text-sidebar-foreground/70 hover:text-white hover:bg-sidebar-accent transition-colors ml-2"
               onClick={() => setSidebarOpen(false)}
             >
               <X className="w-4 h-4" />
             </button>
+          ) : (
+            <button
+              className="p-1.5 rounded-md text-sidebar-foreground/70 hover:text-white hover:bg-sidebar-accent transition-colors shrink-0"
+              onClick={toggleCollapse}
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+            </button>
           )}
         </div>
 
         {/* Role chip */}
-        <div className="px-4 pt-4 pb-2">
-          <div className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40 px-1 mb-1">
-            {ROLE_LABELS[user.role] ?? user.role}
+        {(!sidebarCollapsed || isMobile) && (
+          <div className="px-4 pt-4 pb-2">
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/40 px-1 mb-1">
+              {ROLE_LABELS[user.role] ?? user.role}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Nav Items */}
-        <nav className="flex-1 overflow-y-auto px-3 pb-4 flex flex-col gap-0.5">
+        <nav className={cn('flex-1 overflow-y-auto pb-4 flex flex-col gap-0.5', sidebarCollapsed && !isMobile ? 'px-2 pt-3' : 'px-3')}>
           {navItems.map((item) => {
             const isActive =
               location === item.href ||
               (item.href !== '/dashboard' && location.startsWith(item.href));
 
-            return (
+            const linkEl = (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => isMobile && setSidebarOpen(false)}
                 className={cn(
-                  'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
+                  'relative flex items-center rounded-lg text-sm font-medium transition-all duration-150',
+                  sidebarCollapsed && !isMobile ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5',
                   isActive
                     ? 'bg-sidebar-primary/15 text-white'
                     : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-white',
                 )}
               >
-                {/* Orange left indicator for active item */}
                 {isActive && (
                   <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-primary rounded-r-full" />
                 )}
                 <item.icon
                   className={cn(
-                    'w-4.5 h-4.5 shrink-0',
+                    'shrink-0',
+                    sidebarCollapsed && !isMobile ? 'w-5 h-5' : 'w-4.5 h-4.5',
                     isActive ? 'text-primary' : 'text-sidebar-foreground/50',
                   )}
                   strokeWidth={isActive ? 2.5 : 2}
                 />
-                <span className="flex-1 truncate">{item.name}</span>
-                {isActive && (
-                  <ChevronRight className="w-3.5 h-3.5 text-primary/60 shrink-0" />
+                {(!sidebarCollapsed || isMobile) && (
+                  <>
+                    <span className="flex-1 truncate">{item.name}</span>
+                    {isActive && <ChevronRight className="w-3.5 h-3.5 text-primary/60 shrink-0" />}
+                  </>
                 )}
               </Link>
             );
+
+            if (sidebarCollapsed && !isMobile) {
+              return (
+                <Tooltip key={item.href}>
+                  <TooltipTrigger asChild>{linkEl}</TooltipTrigger>
+                  <TooltipContent side="right">{item.name}</TooltipContent>
+                </Tooltip>
+              );
+            }
+            return linkEl;
           })}
         </nav>
 
@@ -215,6 +251,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="p-3 border-t border-sidebar-border/40 shrink-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
+              {sidebarCollapsed && !isMobile ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button className="flex items-center justify-center w-full p-2 rounded-lg hover:bg-sidebar-accent transition-colors">
+                      <Avatar className="w-8 h-8 shrink-0 ring-2 ring-sidebar-border">
+                        <AvatarImage src={user.avatarUrl || ''} />
+                        <AvatarFallback className="bg-primary text-white text-xs font-semibold">
+                          {user.firstName[0]}{user.lastName[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">{user.firstName} {user.lastName}</TooltipContent>
+                </Tooltip>
+              ) : (
               <button className="flex items-center gap-3 w-full p-2.5 rounded-lg hover:bg-sidebar-accent transition-colors text-left group">
                 <Avatar className="w-8 h-8 shrink-0 ring-2 ring-sidebar-border">
                   <AvatarImage src={user.avatarUrl || ''} />
@@ -233,6 +284,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </div>
                 <ChevronRight className="w-4 h-4 text-sidebar-foreground/30 group-hover:text-sidebar-foreground/60 transition-colors shrink-0" />
               </button>
+              )}
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
@@ -363,5 +415,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </main>
     </div>
+    </TooltipProvider>
   );
 }
