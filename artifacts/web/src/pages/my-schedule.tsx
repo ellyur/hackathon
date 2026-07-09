@@ -210,8 +210,8 @@ function ScheduleCard({
             </Link>
           )}
 
-          {/* Request Duty Verification — shown on past attended duties */}
-          {isPast && hasAttendance && (
+          {/* Request Duty Verification — shown on any attended duty */}
+          {hasAttendance && (
             <div className="flex items-center gap-2">
               {existingVerification ? (
                 <Link href={`/duty-verifications/${existingVerification.id}`}>

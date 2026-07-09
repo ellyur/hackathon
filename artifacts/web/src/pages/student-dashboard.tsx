@@ -28,6 +28,9 @@ interface StudentPassport {
   totalDutyDaysCompleted: number;
   overallCompletion: number;
   wards: WardProgress[];
+  earnedDutyHours: number;
+  requiredDutyHours: number;
+  dutyHoursCompletion: number;
 }
 
 function formatTime(t: string): string {
@@ -120,6 +123,9 @@ export function StudentDashboard() {
 
   const totalDays = passport?.totalDutyDaysRequired ?? 0;
   const completedDays = passport?.totalDutyDaysCompleted ?? 0;
+  const earnedHours = passport?.earnedDutyHours ?? 0;
+  const requiredHours = passport?.requiredDutyHours ?? 0;
+  const hoursPct = passport?.dutyHoursCompletion ?? 0;
 
   // Case-type stats from wards (matches what the full passport page shows)
   const allWardCases = (passport?.wards ?? []).flatMap(w => w.requiredCases);
@@ -243,7 +249,22 @@ export function StudentDashboard() {
                 </div>
               </div>
             </div>
-            <div className="mt-5 space-y-2">
+            {/* Clinical Hours Progress Bar */}
+            <div className="mt-4 space-y-1.5">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">Clinical Hours</span>
+                <span className="font-semibold tabular-nums">
+                  {earnedHours}h
+                  <span className="text-muted-foreground font-normal"> / {requiredHours}h</span>
+                </span>
+              </div>
+              <Progress value={hoursPct} className="h-3" />
+              <p className="text-xs text-muted-foreground text-right">
+                {hoursPct}% complete · {Math.max(0, requiredHours - earnedHours)}h remaining
+              </p>
+            </div>
+
+            <div className="mt-4 space-y-2">
               {/* Case types row */}
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Case Types</span>
