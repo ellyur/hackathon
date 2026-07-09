@@ -96,7 +96,7 @@ async function enrichSchedule(schedule: typeof schedulesTable.$inferSelect) {
       .where(eq(departmentsTable.id, schedule.departmentId))
       .then(r => r[0] ?? null),
 
-    db.select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName })
+    db.select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName, phone: usersTable.phone })
       .from(usersTable)
       .where(eq(usersTable.id, schedule.ciId))
       .then(r => r[0] ?? null),
@@ -418,6 +418,46 @@ router.patch("/schedules/:id", requireRole("scheduler", "admin"), async (req, re
           type: "schedule_change",
           title: "Schedule Updated",
           message: notifMessage,
+          relatedEntity: "schedule",
+          relatedId: id,
+          isRead: false,
+        }))
+      );
+    }
+  }
+
+  const [updated] = await db.select().from(schedulesTable).where(eq(schedulesTable.id, id));
+  res.json(await enrichSchedule(updated));
+});
+
+// ── PATCH /schedules/:id/notes  (CI only — update note on own duty) ───────────
+
+router.patch("/schedules/:id/notes", requireRole("ci"), async (req, res): Promise<void> => {
+  const { id } = req.params;
+  const { notes } = req.body as { notes?: string };
+
+  const [schedule] = await db.select().from(schedulesTable).where(eq(schedulesTable.id, id));
+  if (!schedule) { res.status(404).json({ error: "Schedule not found" }); return; }
+  if (schedule.ciId !== req.session.userId) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  await db.update(schedulesTable)
+    .set({ notes: notes ?? null, updatedAt: new Date() })
+    .where(eq(schedulesTable.id, id));
+
+  // Notify assigned students about the new/updated note
+  if (notes?.trim()) {
+    const studentLinks = await db.select({ studentId: scheduleStudentsTable.studentId })
+      .from(scheduleStudentsTable)
+      .where(eq(scheduleStudentsTable.scheduleId, id));
+
+    if (studentLinks.length > 0) {
+      await db.insert(notificationsTable).values(
+        studentLinks.map(s => ({
+          id: randomUUID(),
+          userId: s.studentId,
+          type: "schedule_change",
+          title: "Duty Note Updated",
+          message: `Your CI left a note for your duty on ${schedule.dutyDate}: "${notes.trim()}"`,
           relatedEntity: "schedule",
           relatedId: id,
           isRead: false,

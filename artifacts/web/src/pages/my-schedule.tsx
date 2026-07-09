@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Calendar, Clock, MapPin, User, LogIn, Loader2, CheckCircle2, AlertCircle, ClipboardCheck, Users, ChevronDown, ChevronUp, Stethoscope } from 'lucide-react';
+import { Calendar, Clock, MapPin, User, LogIn, Loader2, CheckCircle2, AlertCircle, ClipboardCheck, Users, ChevronDown, ChevronUp, Stethoscope, Phone, StickyNote } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -117,7 +117,10 @@ function ScheduleCard({
 
   const hospitalName = (schedule as any).hospital?.name ?? 'Hospital';
   const deptName = (schedule as any).department?.name ?? '';
-  const ciName = (schedule as any).ci ? `${(schedule as any).ci.firstName} ${(schedule as any).ci.lastName}` : 'Clinical Instructor';
+  const ci = (schedule as any).ci;
+  const ciName = ci ? `${ci.firstName} ${ci.lastName}` : 'Clinical Instructor';
+  const ciPhone = ci?.phone ?? null;
+  const dutyNote = (schedule as any).notes ?? null;
 
   const classmates = ((schedule as any).students as any[] | undefined) ?? [];
   const totalClassmates = classmates.length;
@@ -163,6 +166,26 @@ function ScheduleCard({
             <span>{ciName}</span>
           </div>
         </div>
+
+        {/* CI contact number */}
+        {ciPhone && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
+            <Phone className="h-3.5 w-3.5 flex-shrink-0 text-primary" />
+            <span className="font-medium text-foreground">CI Contact:</span>
+            <a href={`tel:${ciPhone}`} className="text-primary hover:underline">{ciPhone}</a>
+          </div>
+        )}
+
+        {/* Duty note from CI */}
+        {dutyNote && (
+          <div className="flex items-start gap-2 text-sm bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <StickyNote className="h-3.5 w-3.5 flex-shrink-0 text-amber-600 mt-0.5" />
+            <div>
+              <span className="font-medium text-amber-800">Note from CI: </span>
+              <span className="text-amber-700">{dutyNote}</span>
+            </div>
+          </div>
+        )}
 
         {/* Classmates section */}
         {totalClassmates > 0 && (

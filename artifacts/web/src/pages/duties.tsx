@@ -1,11 +1,15 @@
+import { useState } from 'react';
 import { Link } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Calendar, Clock, Users, Building2, ClipboardCheck, CheckSquare, Loader2 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Calendar, Clock, Users, Building2, ClipboardCheck, CheckSquare, Loader2, StickyNote, Pencil, Check, X } from 'lucide-react';
 import { useGetTodayDuties, useListSchedules } from '@workspace/api-client-react';
 import type { Schedule } from '@workspace/api-client-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
 
 function statusBadge(status: string) {
   if (status === 'active')
@@ -15,52 +19,144 @@ function statusBadge(status: string) {
   return <Badge variant="completed">Completed</Badge>;
 }
 
+function getAuthToken() { return localStorage.getItem('authToken'); }
+
 function DutyCard({ duty }: { duty: Schedule }) {
+  const [editing, setEditing] = useState(false);
+  const [noteText, setNoteText] = useState((duty as any).notes ?? '');
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const currentNote = (duty as any).notes ?? '';
+
+  async function saveNote() {
+    setSaving(true);
+    try {
+      const token = getAuthToken();
+      const res = await fetch(`/api/schedules/${duty.id}/notes`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ notes: noteText.trim() || null }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText);
+      queryClient.invalidateQueries({ queryKey: ['listSchedules'] });
+      queryClient.invalidateQueries({ queryKey: ['getTodayDuties'] });
+      toast({ title: 'Note saved', description: 'Students will be notified.' });
+      setEditing(false);
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to save note', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function cancelEdit() {
+    setNoteText(currentNote);
+    setEditing(false);
+  }
+
   return (
-    <Card className="flex flex-col md:flex-row md:items-center gap-4 p-5">
-      <div className="flex-1 space-y-1.5">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-semibold text-base">{duty.hospital?.name ?? duty.hospitalId}</span>
-          {statusBadge(duty.status)}
-        </div>
-        <p className="text-sm text-muted-foreground flex items-center gap-1">
-          <Building2 className="w-3.5 h-3.5" />
-          {duty.department?.name ?? duty.departmentId}
-        </p>
-        <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mt-1">
-          <span className="flex items-center gap-1">
-            <Calendar className="w-3.5 h-3.5" />
-            {duty.dutyDate}
-          </span>
-          <span className="flex items-center gap-1">
-            <Clock className="w-3.5 h-3.5" />
-            {duty.startTime} – {duty.endTime}
-          </span>
-          <span className="flex items-center gap-1">
-            <Users className="w-3.5 h-3.5" />
-            {duty.students?.length ?? 0} students
-          </span>
-          {(duty as any).dutyHours != null && (
-            <span className="flex items-center gap-1 font-medium text-primary">
-              <Clock className="w-3.5 h-3.5" />
-              {(duty as any).dutyHours} duty hrs
+    <Card className="flex flex-col gap-4 p-5">
+      <div className="flex flex-col md:flex-row md:items-start gap-4">
+        <div className="flex-1 space-y-1.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-base">{duty.hospital?.name ?? duty.hospitalId}</span>
+            {statusBadge(duty.status)}
+          </div>
+          <p className="text-sm text-muted-foreground flex items-center gap-1">
+            <Building2 className="w-3.5 h-3.5" />
+            {duty.department?.name ?? duty.departmentId}
+          </p>
+          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mt-1">
+            <span className="flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5" />
+              {duty.dutyDate}
             </span>
-          )}
+            <span className="flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" />
+              {duty.startTime} – {duty.endTime}
+            </span>
+            <span className="flex items-center gap-1">
+              <Users className="w-3.5 h-3.5" />
+              {duty.students?.length ?? 0} students
+            </span>
+            {(duty as any).dutyHours != null && (
+              <span className="flex items-center gap-1 font-medium text-primary">
+                <Clock className="w-3.5 h-3.5" />
+                {(duty as any).dutyHours} duty hrs
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex gap-2 flex-shrink-0 flex-wrap">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/duties/${duty.id}/attendance`}>
+              <ClipboardCheck className="w-4 h-4 mr-1" />
+              View Attendance
+            </Link>
+          </Button>
+          <Button asChild size="sm">
+            <Link href={`/duties/${duty.id}/verify`}>
+              <CheckSquare className="w-4 h-4 mr-1" />
+              Verify Cases
+            </Link>
+          </Button>
         </div>
       </div>
-      <div className="flex gap-2 flex-shrink-0">
-        <Button asChild variant="outline" size="sm">
-          <Link href={`/duties/${duty.id}/attendance`}>
-            <ClipboardCheck className="w-4 h-4 mr-1" />
-            View Attendance
-          </Link>
-        </Button>
-        <Button asChild size="sm">
-          <Link href={`/duties/${duty.id}/verify`}>
-            <CheckSquare className="w-4 h-4 mr-1" />
-            Verify Cases
-          </Link>
-        </Button>
+
+      {/* Duty note section */}
+      <div className="border-t pt-3">
+        {editing ? (
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <StickyNote className="w-3.5 h-3.5" /> Note to students
+            </label>
+            <Textarea
+              value={noteText}
+              onChange={e => setNoteText(e.target.value)}
+              placeholder="e.g. Please bring your stethoscope and nursing notes. Wear complete uniform."
+              rows={3}
+              className="text-sm resize-none"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <Button size="sm" onClick={saveNote} disabled={saving} className="gap-1.5">
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                Save Note
+              </Button>
+              <Button size="sm" variant="ghost" onClick={cancelEdit} disabled={saving} className="gap-1.5">
+                <X className="w-3.5 h-3.5" /> Cancel
+              </Button>
+            </div>
+          </div>
+        ) : currentNote ? (
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2 text-sm">
+              <StickyNote className="w-3.5 h-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <span className="font-medium text-amber-700">Your note: </span>
+                <span className="text-muted-foreground">{currentNote}</span>
+              </div>
+            </div>
+            <Button size="sm" variant="ghost" className="gap-1.5 text-muted-foreground flex-shrink-0 h-7 px-2" onClick={() => { setNoteText(currentNote); setEditing(true); }}>
+              <Pencil className="w-3.5 h-3.5" /> Edit
+            </Button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <StickyNote className="w-3.5 h-3.5" />
+            Add a note for students (e.g. what to bring, reminders)
+          </button>
+        )}
       </div>
     </Card>
   );
