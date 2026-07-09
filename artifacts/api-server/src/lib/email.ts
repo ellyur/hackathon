@@ -28,8 +28,8 @@ function esc(value: string | null | undefined): string {
 
 // ── Brand constants ────────────────────────────────────────────────────────────
 
-const FROM = process.env.EMAIL_FROM ?? "SIPAG <no-reply@sipag.app>";
-const APP_URL = process.env.APP_URL ?? "https://sipag.app";
+const FROM = process.env.EMAIL_FROM ?? "SIPAG <no-reply@sipag.online>";
+const APP_URL = process.env.APP_URL ?? "https://sipag.online";
 const PRIMARY = "#f97316"; // orange
 const DARK = "#1e293b";    // dark blue-slate
 
