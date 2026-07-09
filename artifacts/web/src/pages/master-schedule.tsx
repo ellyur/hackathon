@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'wouter';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -25,6 +26,28 @@ import {
   useListUsers,
   useUpdateSchedule,
 } from '@workspace/api-client-react';
+
+// ── Auth helper ───────────────────────────────────────────────────────────────
+
+function getAuthToken() { return localStorage.getItem('authToken'); }
+async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
+  const token = getAuthToken();
+  const res = await fetch(path, {
+    ...opts,
+    headers: { ...(opts?.headers ?? {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText);
+  return res.json();
+}
+
+interface ClinicalCase {
+  id: string;
+  name: string;
+  category: string;
+  requiredCount: number;
+  isActive: boolean;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -229,6 +252,19 @@ export function MasterSchedulePage() {
   });
   const { data: allUsers = [] } = useListUsers({ role: 'ci' });
   const ciList = allUsers.filter((u) => u.role === 'ci' && u.isActive);
+
+  // Clinical cases from admin library
+  const { data: clinicalCases = [] } = useQuery<ClinicalCase[]>({
+    queryKey: ['clinical-cases'],
+    queryFn: () => apiFetch('/api/cases'),
+    staleTime: 60_000,
+  });
+  const casesByCategory = clinicalCases.reduce<Record<string, ClinicalCase[]>>((acc, c) => {
+    if (!acc[c.category]) acc[c.category] = [];
+    acc[c.category].push(c);
+    return acc;
+  }, {});
+  const caseCategories = Object.keys(casesByCategory).sort();
   const createSchedule = useCreateSchedule();
   const updateSchedule = useUpdateSchedule();
 
@@ -633,7 +669,31 @@ export function MasterSchedulePage() {
                 {/* Clinical Case Type */}
                 <div className="col-span-2 space-y-1.5">
                   <Label>Clinical Case Type <span className="text-muted-foreground text-xs">(optional)</span></Label>
-                  <Input placeholder="e.g. Normal Delivery, IV Insertion…" value={form.caseTypeId} onChange={e => setForm(f => ({ ...f, caseTypeId: e.target.value }))} />
+                  <Select
+                    value={form.caseTypeId || '__none'}
+                    onValueChange={(v) => setForm(f => ({ ...f, caseTypeId: v === '__none' ? '' : v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a case type…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none">
+                        <span className="text-muted-foreground italic">None (general duty)</span>
+                      </SelectItem>
+                      {caseCategories.map((cat) => (
+                        <div key={cat}>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                            {cat}
+                          </div>
+                          {casesByCategory[cat].map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                        </div>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 {/* CI */}
                 <div className="col-span-2 space-y-1.5">
