@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Calendar, Clock, MapPin, User, LogIn, Loader2, CheckCircle2, AlertCircle, ClipboardCheck, ArrowRight, Users, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calendar, Clock, MapPin, User, LogIn, Loader2, CheckCircle2, AlertCircle, ClipboardCheck, Users, ChevronDown, ChevronUp, Stethoscope } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useQuery } from '@tanstack/react-query';
 import { useListSchedules, useListAttendance } from '@workspace/api-client-react';
 import type { Schedule, AttendanceRecord } from '@workspace/api-client-react';
 import { useListDutyVerifications, useRequestDutyVerification } from '@/hooks/use-duty-verifications';
@@ -20,6 +23,16 @@ const statusConfig: Record<ScheduleStatus, { label: string; variant: 'upcoming' 
   completed: { label: 'Completed', variant: 'completed' },
   cancelled: { label: 'Cancelled', variant: 'cancelled' },
 };
+
+interface ClinicalCase { id: string; name: string; category: string; requiredCount: number; }
+
+function getAuthToken() { return localStorage.getItem('authToken'); }
+async function apiFetch<T>(path: string): Promise<T> {
+  const token = getAuthToken();
+  const res = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {}, credentials: 'include' });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText);
+  return res.json();
+}
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString([], {
@@ -102,11 +115,11 @@ function ScheduleCard({
   const isPast = status === 'completed';
   const hasAttendance = !!attendanceRecord;
 
-  const hospitalName = schedule.hospital?.name ?? 'Hospital';
-  const deptName = schedule.department?.name ?? '';
-  const ciName = schedule.ci ? `${schedule.ci.firstName} ${schedule.ci.lastName}` : 'Clinical Instructor';
+  const hospitalName = (schedule as any).hospital?.name ?? 'Hospital';
+  const deptName = (schedule as any).department?.name ?? '';
+  const ciName = (schedule as any).ci ? `${(schedule as any).ci.firstName} ${(schedule as any).ci.lastName}` : 'Clinical Instructor';
 
-  const classmates = (schedule.students as any[] | undefined) ?? [];
+  const classmates = ((schedule as any).students as any[] | undefined) ?? [];
   const totalClassmates = classmates.length;
 
   return (
@@ -151,7 +164,7 @@ function ScheduleCard({
           </div>
         </div>
 
-        {/* Classmates section — always visible */}
+        {/* Classmates section */}
         {totalClassmates > 0 && (
           <div className="border rounded-lg overflow-hidden">
             <button
@@ -241,6 +254,112 @@ function ScheduleCard({
   );
 }
 
+// ── Case Selection Dialog ──────────────────────────────────────────────────────
+
+function RequestVerificationDialog({
+  schedule,
+  allCases,
+  casesLoading,
+  onConfirm,
+  onCancel,
+  isSubmitting,
+}: {
+  schedule: Schedule | null;
+  allCases: ClinicalCase[];
+  casesLoading: boolean;
+  onConfirm: (caseIds: string[]) => void;
+  onCancel: () => void;
+  isSubmitting: boolean;
+}) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const deptName = (schedule as any)?.department?.name?.toLowerCase() ?? '';
+  const relevantCases = allCases.filter(c => c.category.toLowerCase() === deptName);
+  const casesToShow = relevantCases.length > 0 ? relevantCases : allCases;
+
+  function toggle(id: string) {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+
+  return (
+    <Dialog open={!!schedule} onOpenChange={open => { if (!open) onCancel(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Stethoscope className="w-5 h-5 text-primary" />
+            Select Cases to Verify
+          </DialogTitle>
+          <DialogDescription>
+            Choose the clinical cases you performed during this duty.
+            Your CI will review and confirm them.
+          </DialogDescription>
+        </DialogHeader>
+
+        {schedule && (
+          <div className="text-sm text-muted-foreground border rounded-lg px-3 py-2 bg-muted/30">
+            <span className="font-medium text-foreground">{(schedule as any).department?.name ?? 'Ward'}</span>
+            {' · '}{schedule.dutyDate}
+          </div>
+        )}
+
+        <div className="max-h-72 overflow-y-auto space-y-1 pr-1">
+          {casesLoading ? (
+            <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading cases…
+            </div>
+          ) : casesToShow.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">
+              No clinical cases configured for this ward.
+            </p>
+          ) : (
+            casesToShow.map(c => (
+              <label
+                key={c.id}
+                className="flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+              >
+                <Checkbox
+                  id={`case-${c.id}`}
+                  checked={selectedIds.includes(c.id)}
+                  onCheckedChange={() => toggle(c.id)}
+                  className="mt-0.5"
+                />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium leading-tight">{c.name}</p>
+                  {c.category && c.category.toLowerCase() !== deptName && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{c.category}</p>
+                  )}
+                </div>
+              </label>
+            ))
+          )}
+        </div>
+
+        {selectedIds.length > 0 && (
+          <p className="text-xs text-primary font-medium">
+            {selectedIds.length} case{selectedIds.length > 1 ? 's' : ''} selected
+          </p>
+        )}
+
+        <DialogFooter className="gap-2 flex-col sm:flex-row">
+          <Button variant="outline" onClick={onCancel} disabled={isSubmitting} className="sm:order-1">
+            Cancel
+          </Button>
+          <Button
+            onClick={() => onConfirm(selectedIds)}
+            disabled={isSubmitting}
+            className="sm:order-2"
+          >
+            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            Submit Request
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+
 export function MySchedulePage() {
   const { user: rawUser } = useAuth();
   const user = rawUser as AuthUser | undefined;
@@ -248,7 +367,8 @@ export function MySchedulePage() {
 
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const [requestingFor, setRequestingFor] = useState<string | null>(null);
+  const [dialogSchedule, setDialogSchedule] = useState<Schedule | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { data: schedules, isLoading, isError } = useListSchedules(undefined, {
     query: { staleTime: 60_000, refetchOnMount: true } as never,
@@ -260,6 +380,12 @@ export function MySchedulePage() {
 
   const { data: myVerifications = [] } = useListDutyVerifications();
   const requestVerification = useRequestDutyVerification();
+
+  const { data: allCases = [], isLoading: casesLoading } = useQuery<ClinicalCase[]>({
+    queryKey: ['clinical-cases'],
+    queryFn: () => apiFetch('/api/cases'),
+    staleTime: 5 * 60_000,
+  });
 
   // Map scheduleId → attendance record
   const attendanceMap = useMemo(() => {
@@ -275,15 +401,19 @@ export function MySchedulePage() {
     return m;
   }, [myVerifications]);
 
-  async function handleRequestVerification(schedule: Schedule) {
-    const rec = attendanceMap.get(schedule.id);
+  async function handleConfirmRequest(caseIds: string[]) {
+    if (!dialogSchedule) return;
+    const rec = attendanceMap.get(dialogSchedule.id);
     if (!rec) return;
-    setRequestingFor(schedule.id);
+
+    setIsSubmitting(true);
     try {
       const created = await requestVerification.mutateAsync({
-        scheduleId: schedule.id,
+        scheduleId: dialogSchedule.id,
         attendanceId: rec.id,
+        studentCaseIds: caseIds,
       });
+      setDialogSchedule(null);
       toast({
         title: 'Verification Requested ✓',
         description: 'Your Clinical Instructor has been notified.',
@@ -293,7 +423,7 @@ export function MySchedulePage() {
       const msg = err instanceof Error ? err.message : 'Failed to request verification';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
     } finally {
-      setRequestingFor(null);
+      setIsSubmitting(false);
     }
   }
 
@@ -384,8 +514,8 @@ export function MySchedulePage() {
                   schedule={s}
                   attendanceRecord={rec}
                   existingVerification={verif}
-                  onRequestVerification={() => handleRequestVerification(s)}
-                  isRequesting={requestingFor === s.id}
+                  onRequestVerification={() => setDialogSchedule(s)}
+                  isRequesting={isSubmitting && dialogSchedule?.id === s.id}
                   currentUserId={currentUserId}
                 />
               );
@@ -393,6 +523,15 @@ export function MySchedulePage() {
           )}
         </TabsContent>
       </Tabs>
+
+      <RequestVerificationDialog
+        schedule={dialogSchedule}
+        allCases={allCases}
+        casesLoading={casesLoading}
+        onConfirm={handleConfirmRequest}
+        onCancel={() => setDialogSchedule(null)}
+        isSubmitting={isSubmitting}
+      />
     </div>
   );
 }

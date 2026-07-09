@@ -115,7 +115,7 @@ export function useGetDutyVerification(id: string) {
 export function useRequestDutyVerification() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { scheduleId: string; attendanceId: string }) =>
+    mutationFn: (body: { scheduleId: string; attendanceId: string; studentCaseIds?: string[] }) =>
       apiFetch<DutyVerification>('/api/duty-verifications', {
         method: 'POST',
         body: JSON.stringify(body),

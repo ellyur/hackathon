@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useRoute, useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -142,6 +142,15 @@ export function DutyVerificationDetailPage() {
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [remarks, setRemarks] = useState('');
   const [done, setDone] = useState(false);
+
+  // Pre-populate CI's case selection with whatever the student submitted
+  useEffect(() => {
+    if (dv?.selectedCases && dv.selectedCases.length > 0 && selectedCaseIds.length === 0) {
+      setSelectedCaseIds(dv.selectedCases.map(c => c.clinicalCaseId));
+    }
+  // only run when dv first loads
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dv?.id]);
 
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');

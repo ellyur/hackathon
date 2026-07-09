@@ -140,9 +140,10 @@ router.post(
   requireRole("student"),
   async (req, res): Promise<void> => {
     const studentId = req.session.userId!;
-    const { scheduleId, attendanceId } = req.body as {
+    const { scheduleId, attendanceId, studentCaseIds } = req.body as {
       scheduleId?: string;
       attendanceId?: string;
+      studentCaseIds?: unknown;
     };
 
     if (!scheduleId || !attendanceId) {
@@ -206,6 +207,11 @@ router.post(
       return;
     }
 
+    // Validate and normalise studentCaseIds
+    const validCaseIds: string[] = Array.isArray(studentCaseIds)
+      ? (studentCaseIds as unknown[]).filter((x): x is string => typeof x === "string")
+      : [];
+
     const id = randomUUID();
     await db.insert(dutyVerificationsTable).values({
       id,
@@ -218,6 +224,26 @@ router.post(
       dutyDate: schedule.dutyDate,
       status: "waiting_ci",
     });
+
+    // Pre-populate case selections from student's claim
+    if (validCaseIds.length > 0) {
+      // Verify the claimed case IDs exist before inserting
+      const existingCases = await db
+        .select({ id: clinicalCasesTable.id })
+        .from(clinicalCasesTable)
+        .where(and(inArray(clinicalCasesTable.id, validCaseIds), eq(clinicalCasesTable.isActive, true)));
+
+      const confirmedIds = existingCases.map(c => c.id);
+      if (confirmedIds.length > 0) {
+        await db.insert(dutyVerificationCasesTable).values(
+          confirmedIds.map(caseId => ({
+            id: randomUUID(),
+            dutyVerificationId: id,
+            clinicalCaseId: caseId,
+          })),
+        );
+      }
+    }
 
     // Notify CI
     try {
