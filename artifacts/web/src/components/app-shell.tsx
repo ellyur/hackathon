@@ -84,48 +84,132 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return <Redirect to="/login" />;
   }
 
-  const roleNavItems = {
+  type NavItem = { name: string; href: string; icon: React.ElementType };
+  type NavGroup = { label: string; items: NavItem[] };
+
+  const roleNavGroups: Record<string, NavGroup[]> = {
     student: [
-      { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { name: 'My Schedule', href: '/schedule', icon: Calendar },
-      { name: 'Academic Schedule', href: '/academic-schedule', icon: GraduationCap },
-      { name: 'Clinical Passport', href: '/passport', icon: ClipboardList },
-      { name: 'Attendance', href: '/attendance', icon: CheckCircle },
-      { name: 'Available Slots', href: '/slots', icon: PlusCircle },
-      { name: 'Face Setup', href: '/profile/face-setup', icon: ScanFace },
+      {
+        label: 'Overview',
+        items: [
+          { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+        ],
+      },
+      {
+        label: 'Schedule',
+        items: [
+          { name: 'My Schedule', href: '/schedule', icon: Calendar },
+          { name: 'Academic Schedule', href: '/academic-schedule', icon: GraduationCap },
+          { name: 'Available Slots', href: '/slots', icon: PlusCircle },
+        ],
+      },
+      {
+        label: 'Clinical',
+        items: [
+          { name: 'Clinical Passport', href: '/passport', icon: ClipboardList },
+          { name: 'Attendance', href: '/attendance', icon: CheckCircle },
+        ],
+      },
+      {
+        label: 'Profile',
+        items: [
+          { name: 'Face Setup', href: '/profile/face-setup', icon: ScanFace },
+        ],
+      },
     ],
     ci: [
-      { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { name: 'My Duties', href: '/duties', icon: ClipboardList },
-      { name: 'Duty Verifications', href: '/verifications', icon: CheckCircle },
-      { name: 'Student Progress', href: '/ci/students', icon: Users },
-      { name: 'Evaluations', href: '/evaluations', icon: Star },
+      {
+        label: 'Overview',
+        items: [
+          { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+        ],
+      },
+      {
+        label: 'Duties',
+        items: [
+          { name: 'My Duties', href: '/duties', icon: ClipboardList },
+          { name: 'Duty Verifications', href: '/verifications', icon: CheckCircle },
+        ],
+      },
+      {
+        label: 'Students',
+        items: [
+          { name: 'Student Progress', href: '/ci/students', icon: Users },
+          { name: 'Evaluations', href: '/evaluations', icon: Star },
+        ],
+      },
     ],
     scheduler: [
-      { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { name: 'Master Schedule', href: '/schedules', icon: Calendar },
-      { name: 'Students', href: '/students', icon: Users },
-      { name: 'Duty Slots', href: '/slots', icon: ClipboardList },
-      { name: 'Makeup Duties', href: '/makeup-duties', icon: AlertTriangle },
-      { name: 'Case Gaps', href: '/case-gaps', icon: PieChart },
-      { name: 'Duty Verifications', href: '/duty-verifications', icon: CheckCircle },
-      { name: 'Announcements', href: '/announcements/manage', icon: Bell },
+      {
+        label: 'Overview',
+        items: [
+          { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+        ],
+      },
+      {
+        label: 'Scheduling',
+        items: [
+          { name: 'Master Schedule', href: '/schedules', icon: Calendar },
+          { name: 'Duty Slots', href: '/slots', icon: ClipboardList },
+          { name: 'Makeup Duties', href: '/makeup-duties', icon: AlertTriangle },
+        ],
+      },
+      {
+        label: 'Management',
+        items: [
+          { name: 'Students', href: '/students', icon: Users },
+          { name: 'Case Gaps', href: '/case-gaps', icon: PieChart },
+          { name: 'Duty Verifications', href: '/duty-verifications', icon: CheckCircle },
+        ],
+      },
+      {
+        label: 'Communication',
+        items: [
+          { name: 'Announcements', href: '/announcements/manage', icon: Bell },
+        ],
+      },
     ],
     admin: [
-      { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { name: 'Analytics', href: '/admin/analytics', icon: PieChart },
-      { name: 'Users', href: '/admin/users', icon: Users },
-      { name: 'Hospitals', href: '/admin/hospitals', icon: Building2 },
-      { name: 'Clinical Cases', href: '/admin/cases', icon: Stethoscope },
-      { name: 'Academic Lists', href: '/admin/academic', icon: BookOpen },
-      { name: 'Academic Year Settings', href: '/admin/academic-year-settings', icon: Clock },
-      { name: 'Reports', href: '/admin/reports', icon: FileText },
-      { name: 'Notification Log', href: '/admin/notification-log', icon: History },
-      { name: 'Settings', href: '/admin/settings', icon: Settings },
+      {
+        label: 'Overview',
+        items: [
+          { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+          { name: 'Analytics', href: '/admin/analytics', icon: PieChart },
+        ],
+      },
+      {
+        label: 'Management',
+        items: [
+          { name: 'Users', href: '/admin/users', icon: Users },
+          { name: 'Hospitals', href: '/admin/hospitals', icon: Building2 },
+        ],
+      },
+      {
+        label: 'Academic',
+        items: [
+          { name: 'Clinical Cases', href: '/admin/cases', icon: Stethoscope },
+          { name: 'Academic Lists', href: '/admin/academic', icon: BookOpen },
+          { name: 'Academic Year Settings', href: '/admin/academic-year-settings', icon: Clock },
+        ],
+      },
+      {
+        label: 'Reports & Logs',
+        items: [
+          { name: 'Reports', href: '/admin/reports', icon: FileText },
+          { name: 'Notification Log', href: '/admin/notification-log', icon: History },
+        ],
+      },
+      {
+        label: 'System',
+        items: [
+          { name: 'Settings', href: '/admin/settings', icon: Settings },
+        ],
+      },
     ],
   };
 
-  const navItems = roleNavItems[user.role as keyof typeof roleNavItems] || [];
+  const navGroups: NavGroup[] = roleNavGroups[user.role as keyof typeof roleNavGroups] ?? [];
+  const navItems = navGroups.flatMap(g => g.items);
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -196,55 +280,67 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Nav Items */}
-        <nav className={cn('flex-1 overflow-y-auto pb-4 flex flex-col gap-0.5', sidebarCollapsed && !isMobile ? 'px-2 pt-3' : 'px-3')}>
-          {navItems.map((item) => {
-            const isActive =
-              location === item.href ||
-              (item.href !== '/dashboard' && location.startsWith(item.href));
+        <nav className={cn('flex-1 overflow-y-auto pb-4 flex flex-col', sidebarCollapsed && !isMobile ? 'px-2 pt-3 gap-1' : 'px-3 pt-2 gap-4')}>
+          {navGroups.map((group) => (
+            <div key={group.label}>
+              {/* Group label — hidden when collapsed */}
+              {(!sidebarCollapsed || isMobile) && (
+                <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/35">
+                  {group.label}
+                </p>
+              )}
+              <div className="flex flex-col gap-0.5">
+                {group.items.map((item) => {
+                  const isActive =
+                    location === item.href ||
+                    (item.href !== '/dashboard' && location.startsWith(item.href));
 
-            const linkEl = (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => isMobile && setSidebarOpen(false)}
-                className={cn(
-                  'relative flex items-center rounded-lg text-sm font-medium transition-all duration-150',
-                  sidebarCollapsed && !isMobile ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5',
-                  isActive
-                    ? 'bg-sidebar-primary/15 text-white'
-                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-white',
-                )}
-              >
-                {isActive && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-primary rounded-r-full" />
-                )}
-                <item.icon
-                  className={cn(
-                    'shrink-0',
-                    sidebarCollapsed && !isMobile ? 'w-5 h-5' : 'w-4.5 h-4.5',
-                    isActive ? 'text-primary' : 'text-sidebar-foreground/50',
-                  )}
-                  strokeWidth={isActive ? 2.5 : 2}
-                />
-                {(!sidebarCollapsed || isMobile) && (
-                  <>
-                    <span className="flex-1 truncate">{item.name}</span>
-                    {isActive && <ChevronRight className="w-3.5 h-3.5 text-primary/60 shrink-0" />}
-                  </>
-                )}
-              </Link>
-            );
+                  const linkEl = (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => isMobile && setSidebarOpen(false)}
+                      className={cn(
+                        'relative flex items-center rounded-lg text-sm font-medium transition-all duration-150',
+                        sidebarCollapsed && !isMobile ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5',
+                        isActive
+                          ? 'bg-sidebar-primary/15 text-white'
+                          : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-white',
+                      )}
+                    >
+                      {isActive && (
+                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-primary rounded-r-full" />
+                      )}
+                      <item.icon
+                        className={cn(
+                          'shrink-0',
+                          sidebarCollapsed && !isMobile ? 'w-5 h-5' : 'w-4.5 h-4.5',
+                          isActive ? 'text-primary' : 'text-sidebar-foreground/50',
+                        )}
+                        strokeWidth={isActive ? 2.5 : 2}
+                      />
+                      {(!sidebarCollapsed || isMobile) && (
+                        <>
+                          <span className="flex-1 truncate">{item.name}</span>
+                          {isActive && <ChevronRight className="w-3.5 h-3.5 text-primary/60 shrink-0" />}
+                        </>
+                      )}
+                    </Link>
+                  );
 
-            if (sidebarCollapsed && !isMobile) {
-              return (
-                <Tooltip key={item.href}>
-                  <TooltipTrigger asChild>{linkEl}</TooltipTrigger>
-                  <TooltipContent side="right">{item.name}</TooltipContent>
-                </Tooltip>
-              );
-            }
-            return linkEl;
-          })}
+                  if (sidebarCollapsed && !isMobile) {
+                    return (
+                      <Tooltip key={item.href}>
+                        <TooltipTrigger asChild>{linkEl}</TooltipTrigger>
+                        <TooltipContent side="right">{item.name}</TooltipContent>
+                      </Tooltip>
+                    );
+                  }
+                  return linkEl;
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         {/* Logout button */}
