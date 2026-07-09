@@ -234,6 +234,21 @@ router.post("/attendance/time-in", requireRole("student"), async (req, res): Pro
     return;
   }
 
+  // Block duplicate time-ins for the same student+schedule
+  const [existingRecord] = await db
+    .select()
+    .from(attendanceTable)
+    .where(
+      and(
+        eq(attendanceTable.scheduleId, body.scheduleId),
+        eq(attendanceTable.studentId, req.session.userId!),
+      ),
+    );
+  if (existingRecord) {
+    res.status(409).json({ error: "You have already timed in for this schedule." });
+    return;
+  }
+
   // Determine late status
   const now = new Date();
   const [h, m] = schedule.startTime.split(":").map(Number);

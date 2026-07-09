@@ -54,11 +54,21 @@ export function AttendanceHistoryPage() {
 
   const isLoading = recLoading || schLoading;
 
-  // Summary totals
-  const presentCount = records.filter((r: AttendanceRecord) => r.status === 'present').length;
-  const lateCount    = records.filter((r: AttendanceRecord) => r.status === 'late').length;
-  const absentCount  = records.filter((r: AttendanceRecord) => r.status === 'absent').length;
-  const totalHours   = records.reduce((sum: number, r: AttendanceRecord) => sum + (r.dutyHours ?? 0), 0);
+  // Summary totals — deduplicate by scheduleId so one duty = one count
+  // (guards against edge cases where a schedule gets two attendance rows)
+  const uniqueBySchedule = (recs: AttendanceRecord[]) => {
+    const seen = new Set<string>();
+    return recs.filter((r: AttendanceRecord) => {
+      if (seen.has(r.scheduleId)) return false;
+      seen.add(r.scheduleId);
+      return true;
+    });
+  };
+  const deduped      = uniqueBySchedule(records);
+  const presentCount = deduped.filter((r: AttendanceRecord) => r.status === 'present').length;
+  const lateCount    = deduped.filter((r: AttendanceRecord) => r.status === 'late').length;
+  const absentCount  = deduped.filter((r: AttendanceRecord) => r.status === 'absent').length;
+  const totalHours   = deduped.reduce((sum: number, r: AttendanceRecord) => sum + (r.dutyHours ?? 0), 0);
 
   const handleExport = () => {
     toast({ title: 'Attendance history exported to CSV.' });
@@ -88,7 +98,7 @@ export function AttendanceHistoryPage() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         {[
-          { label: 'Total Duties', value: records.length,              className: 'text-foreground' },
+          { label: 'Total Duties', value: deduped.length,              className: 'text-foreground' },
           { label: 'Present',      value: presentCount,                className: 'text-emerald-600' },
           { label: 'Late',         value: lateCount,                   className: 'text-amber-600' },
           { label: 'Absent',       value: absentCount,                 className: 'text-red-600' },
