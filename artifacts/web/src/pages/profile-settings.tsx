@@ -2,7 +2,8 @@ import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Camera, Loader2, User, MapPin, Car } from 'lucide-react';
+import { Camera, Loader2, Car, MapPin } from 'lucide-react';
+import { LocationAutocomplete } from '@/components/location-autocomplete';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -380,9 +381,14 @@ export function ProfileSettingsPage() {
                     <FormItem>
                       <FormLabel>Nearest Landmark</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g. SM North EDSA, Robinsons Novaliches" {...field} />
+                        <LocationAutocomplete
+                          value={field.value ?? ''}
+                          onChange={field.onChange}
+                          placeholder="e.g. SM North EDSA, Robinsons Novaliches"
+                          mode="landmark"
+                        />
                       </FormControl>
-                      <FormDescription className="text-xs">Your nearest major landmark or mall.</FormDescription>
+                      <FormDescription className="text-xs">Type to search — select from the dropdown.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -390,9 +396,14 @@ export function ProfileSettingsPage() {
                     <FormItem>
                       <FormLabel>City</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g. Quezon City, Caloocan" {...field} />
+                        <LocationAutocomplete
+                          value={field.value ?? ''}
+                          onChange={field.onChange}
+                          placeholder="e.g. Quezon City, Caloocan"
+                          mode="city"
+                        />
                       </FormControl>
-                      <FormDescription className="text-xs">The city where you live.</FormDescription>
+                      <FormDescription className="text-xs">Type to search for your city or municipality.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )} />
