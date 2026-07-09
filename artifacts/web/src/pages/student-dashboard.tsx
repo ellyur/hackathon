@@ -274,15 +274,6 @@ export function StudentDashboard() {
                   <span className="text-muted-foreground font-normal ml-1 text-xs">completed</span>
                 </span>
               </div>
-              {/* Duty days row */}
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Duty Days</span>
-                <span className="font-semibold">
-                  {completedDays}
-                  <span className="text-muted-foreground font-normal"> / {totalDays}</span>
-                  <span className="text-muted-foreground font-normal ml-1 text-xs">days done</span>
-                </span>
-              </div>
             </div>
             <Button variant="outline" className="w-full mt-4" asChild>
               <Link href="/passport">View Full Passport</Link>
