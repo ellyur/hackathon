@@ -824,19 +824,25 @@ export function MasterSchedulePage() {
                   <div>
                     <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5"><Users className="w-4 h-4" /> Assigned Students</h4>
                     <div className="space-y-1 max-h-40 overflow-y-auto">
-                      {detailSchedule.studentIds.map((sid) => (
-                        <div key={sid} className="flex items-center justify-between py-1.5 px-3 rounded border text-sm">
-                          <span className="font-mono text-xs text-muted-foreground truncate">{sid}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => removeStudent(detailSchedule.id, sid, detailSchedule.studentIds)}
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      ))}
+                      {detailSchedule.studentIds.map((sid) => {
+                        const student = (detailSchedule.students as { id: string; firstName: string; lastName: string; studentProfile?: { studentNumber?: string | null } }[] | undefined)?.find(s => s.id === sid);
+                        const displayName = student
+                          ? `${student.firstName} ${student.lastName}${student.studentProfile?.studentNumber ? ` (${student.studentProfile.studentNumber})` : ''}`
+                          : sid;
+                        return (
+                          <div key={sid} className="flex items-center justify-between py-1.5 px-3 rounded border text-sm">
+                            <span className="truncate">{displayName}</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 shrink-0 ml-2"
+                              onClick={() => removeStudent(detailSchedule.id, sid, detailSchedule.studentIds)}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
