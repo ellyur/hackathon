@@ -211,13 +211,13 @@ export function CertificateViewerModal({
 
   return (
     <Dialog open={!!cert} onOpenChange={o => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-3xl p-0 overflow-hidden">
+      <DialogContent className="max-w-3xl p-0 overflow-hidden max-h-[90vh] flex flex-col">
         <DialogHeader className="sr-only">
           <DialogTitle>{cert.title}</DialogTitle>
         </DialogHeader>
         {/* Certificate preview */}
         <div
-          className="relative p-10 md:p-14"
+          className="relative p-10 md:p-14 overflow-y-auto"
           style={{ background: c.bg, borderTop: `6px solid ${c.border}` }}
         >
           {/* Corner ornaments */}
@@ -288,7 +288,7 @@ export function CertificateViewerModal({
         </div>
 
         {/* Action bar */}
-        <div className="flex items-center justify-between px-6 py-4 border-t bg-background">
+        <div className="flex items-center justify-between px-6 py-4 border-t bg-background shrink-0">
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-xs">{certTypeLabel(cert.type)}</Badge>
             {cert.schoolYear && <Badge variant="outline" className="text-xs">AY {cert.schoolYear}</Badge>}
