@@ -17,8 +17,8 @@ Two workflows must be running simultaneously:
 
 | Workflow | Command | Port |
 |---|---|---|
-| **API Server** | `PORT=8080 pnpm --filter @workspace/api-server run dev` | 8080 (console) |
-| **Start application** | `PORT=5000 BASE_PATH=/ pnpm --filter @workspace/web run dev` | 5000 (webview) |
+| **artifacts/api-server: API Server** | `pnpm --filter @workspace/api-server run dev` | 8080 |
+| **artifacts/web: web** | `pnpm --filter @workspace/web run dev` | 5000 (webview) |
 
 The Vite dev server proxies `/api/*` → `http://localhost:8080`.
 
