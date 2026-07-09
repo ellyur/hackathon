@@ -443,9 +443,24 @@ export function MySchedulePage() {
     );
   }
 
+  const todayStr = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD" in UTC, close enough for date comparison
+
   const all = schedules ?? [];
-  const upcoming = all.filter((s: Schedule) => s.status === 'upcoming' || s.status === 'active');
-  const past = all.filter((s: Schedule) => s.status === 'completed' || s.status === 'cancelled');
+
+  // A duty is "past" if:
+  //   - the schedule is marked completed/cancelled by the server, OR
+  //   - the duty date is before today (server auto-advance may be delayed), OR
+  //   - the student has already timed OUT (duty is done regardless of schedule status)
+  function isPast(s: Schedule): boolean {
+    if (s.status === 'completed' || s.status === 'cancelled') return true;
+    if (s.dutyDate && s.dutyDate < todayStr) return true;
+    const rec = attendanceMap.get(s.id);
+    if (rec && rec.timeOut) return true;
+    return false;
+  }
+
+  const upcoming = all.filter((s: Schedule) => !isPast(s));
+  const past = all.filter((s: Schedule) => isPast(s));
 
   return (
     <div className="space-y-6">
